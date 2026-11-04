@@ -18,7 +18,10 @@ FORBIDDEN_PREFIXES = (LIVE_REL + "/", ".ai-logging/")
 
 
 def check_message(text: str) -> list[str]:
-    """`[서비스-작업ID] 제목` + 빈 줄 + 두 칸 들여쓴 작업 내용. 위반 사유 목록(빈 목록이면 통과)."""
+    """`[작업ID] 제목` + 빈 줄 + 두 칸 들여쓴 작업 내용. 위반 사유 목록(빈 목록이면 통과).
+
+    작업 ID는 `영문대문자로 시작하는 단어-단어...`(예: SETUP-001, AI-LOG-001). 브랜치와의 일치는 config.check_branch_task.
+    """
     lines = [ln for ln in text.replace("\r\n", "\n").split("\n") if not ln.startswith("#")]
     while lines and not lines[-1].strip():
         lines.pop()

@@ -212,6 +212,24 @@ class LogCommitTests(Base):
         self.assertTrue(blob.endswith(b"\r\n"))
         self.assertEqual(blob, engine.build_policy(self.ctx).mask(rb(p))[0])  # 개행 변환 없이 마스킹 결과 그대로
 
+    def test_held_session_is_left_out_and_others_are_committed(self):
+        e = self.env
+        self.claude("ok1", prompt_rec("x"), answer_rec("y"), END)
+        self.claude("held1", prompt_rec("mail " + OTHER_EMAIL), answer_rec("y"), END)
+        r = snapshot.commit_snapshots(self.ctx, "AI-LOG-009", "스냅샷")
+        self.assertTrue(r["ok"] and r["committed"], r)
+        self.assertEqual(r["held"], {"claude/held1": 1})
+        keys = {f"{m['tool']}/{m['session_id']}" for m in snapshot.tree_manifests(e.root, r["commit"]).values()}
+        self.assertEqual(keys, {"claude/ok1"})  # 보류 세션은 사본도 커밋하지 않는다
+        body = e.git("log", "-1", "--format=%B", r["commit"])
+        self.assertIn("claude/held1: 보류 1건으로 이번 커밋 제외", body)
+        self.assertNotIn(OTHER_EMAIL, body)
+        self.assertEqual(snapshot.scan_tree_secrets(self.ctx, r["commit"], engine.build_policy(self.ctx)), [])
+        # 보류만 남은 경우: 실패가 아니라 커밋할 것 없음
+        r2 = snapshot.commit_snapshots(self.ctx, "AI-LOG-009", "스냅샷")
+        self.assertTrue(r2["ok"] and not r2["committed"], r2)
+        self.assertEqual(r2["held"], {"claude/held1": 1})
+
     def test_refuses_when_staged_or_operation_in_progress(self):
         e = self.env
         self.claude("c3", prompt_rec("x"))

@@ -461,12 +461,15 @@ def _original_path(ctx: Context, key: str, rel: str):
 
 
 # ---------------------------------------------------------------- commit
-def _message(task: str, title: str, rows: list[dict], policy_version: str, added: list[str]) -> str:
+def _message(task: str, title: str, rows: list[dict], policy_version: str, added: list[str],
+             held: dict | None = None) -> str:
     body = [f"  스냅샷 {len(added)}개 추가 (정책 {policy_version}, 세션 {len(rows)}개 확인)"]
     for r in rows:
         if r["base"] in added:
             body.append(f"  - {r['key']}: {r['base'].rstrip('/').split('/')[-1]}, {r['main_lines']}줄, "
                         f"마지막 {r['last_timestamp']}")
+    for key, n in sorted((held or {}).items()):
+        body.append(f"  - {key}: 보류 {n}건으로 이번 커밋 제외 (해소 뒤 다음 스냅샷에 이어서 반영)")
     return f"[{task}] {title}\n\n" + "\n".join(body) + "\n"
 
 
@@ -476,7 +479,8 @@ def commit_snapshots(ctx: Context, task: str, title: str, *, branch: str | None 
     """브랜치에 로그 전용 커밋(부모 1개)을 만든다. 사용자 index·작업 폴더의 다른 항목은 바꾸지 않는다.
 
     branch를 주면 체크아웃하지 않은 브랜치에도 ref만 비교 후 교체(CAS)로 커밋한다(작업 폴더 전환 없음).
-    보류 조건: 분리된 HEAD, 진행 중인 Git 작업, 스테이징된 변경, 예상과 다른 브랜치·HEAD.
+    중단 조건: 분리된 HEAD, 진행 중인 Git 작업, 스테이징된 변경, 예상과 다른 브랜치·HEAD.
+    스냅샷 보류 세션은 중단 사유가 아니다: 그 세션만 빼고 커밋하고 결과의 held에 세션별 건수를 돌려준다.
     변경할 스냅샷이 없으면 커밋하지 않는다(빈 커밋 금지).
     """
     from . import gitops, rules
@@ -497,23 +501,35 @@ def commit_snapshots(ctx: Context, task: str, title: str, *, branch: str | None 
     if target == current and gitops.staged_changes(root):
         return {"ok": False, "reason": "staged_changes_present"}
     if not rules.TASK_ID_RE.match(task or ""):
-        return {"ok": False, "reason": "task_id_format", "detail": "예: AI-LOG-001"}
+        return {"ok": False, "reason": "task_id_format", "detail": "예: SETUP-001"}
+    from . import config
+
+    mm = config.check_branch_task(ctx, task, target)
+    if mm:
+        return {"ok": False, "reason": "task_branch_mismatch", "detail": mm.split(":", 1)[1]}
     refs = tuple(r for r in ((head,) if head else ()) + tuple(extra_refs) if r)
     rep = snapshot_all(ctx, refs=refs, states=states)
-    if rep["result"] != "ok":
+    if rep["result"] not in ("ok", "hold"):
         return {"ok": False, "reason": f"snapshot_{rep['result']}", "snapshot": rep}
+    # 보류(민감정보 후보·원본 이상) 세션은 이번 커밋에서 통째로 뺀다. 값은 게시되지 않는다.
+    # 나머지 세션은 그대로 커밋한다. 보류 세션은 해소 뒤 다음 스냅샷(전체본)에 순서대로 이어서 쌓인다.
+    held: dict[str, int] = {}
+    for h in rep["holds"]:
+        held[h["session"]] = held.get(h["session"], 0) + 1
     in_head = tree_manifests(root, head) if head else {}
     wt = worktree_manifests(ctx)
     current_bases = {r["base"] for r in rep["sessions"]}
     # 이번 실행의 최신 스냅샷 + 이전 실행에서 커밋하지 못한 온전한 폴더(같은 정책)를 함께 올린다.
     added = sorted(b for b, m in wt.items() if m is not None and b not in in_head
+                   and f"{m.get('tool')}/{m.get('session_id')}" not in held
                    and (b in current_bases or m.get("policy_version") == rep["policy_version"]))
     if require_complete:
         comp = completeness(ctx, None)
         if not comp["complete"]:
             return {"ok": False, "reason": "not_complete", "completeness": comp}
     if not added:
-        return {"ok": True, "committed": False, "reason": "nothing_to_commit", "commit": head, "snapshot": rep}
+        return {"ok": True, "committed": False, "reason": "nothing_to_commit", "commit": head, "snapshot": rep,
+                "held": held}
     paths = []
     for b in added:
         base_abs = os.path.join(root, *b.rstrip("/").split("/"))
@@ -521,7 +537,7 @@ def commit_snapshots(ctx: Context, task: str, title: str, *, branch: str | None 
             for fn in fns:
                 paths.append(os.path.relpath(os.path.join(dirpath, fn), root).replace(os.sep, "/"))
     oids = gitops.hash_files(root, sorted(paths))
-    msg = _message(task, title, rep["sessions"], rep["policy_version"], added)
+    msg = _message(task, title, rep["sessions"], rep["policy_version"], added, held)
     problems = rules.check_message(msg)
     if problems:
         return {"ok": False, "reason": "message_format", "detail": ",".join(problems)}
@@ -548,8 +564,11 @@ def commit_snapshots(ctx: Context, task: str, title: str, *, branch: str | None 
         return {"ok": False, "reason": "head_changed_during_commit"}
     if target == current:
         gitops.sync_index_paths(root, commit, sorted(paths))
-    return {"ok": True, "committed": True, "commit": commit, "branch": target, "snapshots": len(added),
-            "sessions": len(rep["sessions"]), "files": len(paths), "missing": rep["missing"]}
+    out = {"ok": True, "committed": True, "commit": commit, "branch": target, "snapshots": len(added),
+           "sessions": len(rep["sessions"]), "files": len(paths), "missing": rep["missing"], "held": held}
+    if held:
+        out["snapshot"] = rep  # 보류 형태(값 없음)를 출력하기 위해
+    return out
 
 
 def submit_snapshots(ctx: Context, task: str | None = None, title: str = "세션 로그 제출") -> dict:

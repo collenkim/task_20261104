@@ -147,6 +147,23 @@ class PolicyRegressionTests(unittest.TestCase):
         self.assertEqual(self.policy.detect(full.encode()), [])
         self.assertEqual([h.rule for h in self.policy.detect(partial.encode())], ["keyword:password"])
 
+    # j. JSON 개행 이스케이프(\n)의 n이 뒤 경로에 붙어 허용 규칙을 벗어남 → 스냅샷 경로가 보류됨
+    def test_j_escape_letter_not_glued_and_snapshot_path_allowed(self):
+        sid = "29f7d66a-3d57-4f2b-abfc-" + "f8eb69f2ccc0"
+        path = (f"ai-logs/snapshots/claude/{sid}/7bbef877469d/L{'0' * 12}14450150-00a35e7a6826732d"
+                f"/files/{sid}/tool-results/toolu_{RANDOM_40[:24]}")
+        listing = json.dumps({"content": "create mode 100644 x.txt\n" + path + ".txt"}) + "\n"
+        self.assertEqual(self.policy.detect(listing.encode()), [])
+        # 허용 규칙은 정확한 경로 형태만: 다른 저장소 위치면 그대로 후보
+        other = json.dumps({"content": "\n" + path.replace("ai-logs/snapshots", "tmp/copies")}) + "\n"
+        self.assertEqual([h.rule for h in self.policy.detect(other.encode())], ["random_string"])
+        # 이스케이프 글자는 값에 포함하지 않는다(mask-held가 정확한 값을 치환하도록)
+        after_newline = json.dumps({"c": "x\n" + RANDOM_40}) + "\n"
+        self.assertEqual([h.value for h in self.policy.detect(after_newline.encode())], [RANDOM_40.encode()])
+        # 역슬래시 자체(\\)에 이어진 n은 실제 글자다
+        after_backslash = json.dumps({"c": "C:\\" + "n" + RANDOM_40}) + "\n"
+        self.assertEqual([h.value for h in self.policy.detect(after_backslash.encode())], [b"n" + RANDOM_40.encode()])
+
 
 class LockRegressionTests(unittest.TestCase):
     def setUp(self):

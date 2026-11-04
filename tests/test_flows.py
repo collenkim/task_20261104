@@ -13,9 +13,9 @@ import subprocess
 import unittest
 from unittest import mock
 
-from test_ai_logging import REPO, Env, claude_records, jl  # noqa: E402
+from test_ai_logging import OTHER_EMAIL, REPO, Env, claude_records, jl  # noqa: E402
 
-from ailog import engine, flows, githooks, gitops, snapshot, turns  # noqa: E402
+from ailog import config, engine, flows, githooks, gitops, snapshot, tasks, turns  # noqa: E402
 
 PROMPT_N = [0]
 
@@ -37,7 +37,7 @@ MSG = "[{task}] {title}\n\n  {body}\n"
 
 
 class FlowEnv(Env):
-    def __init__(self, with_config=True):
+    def __init__(self, with_config=True, config_data=None):
         super().__init__(git_repo=False)
         r = self.root
         self.remote = os.path.join(self.tmp, "remote.git")
@@ -53,7 +53,7 @@ class FlowEnv(Env):
             f.write("app\n")
         if with_config:
             with open(os.path.join(r, "config", "ai-logging.json"), "w") as f:
-                json.dump({"service": "AI", "main": "master", "develop": "develop", "remote": "origin"}, f)
+                json.dump(config_data or {"service": "AI", "main": "master", "develop": "develop", "remote": "origin"}, f)
             self.git("add", "config")
         else:
             shutil.rmtree(os.path.join(r, "config"))
@@ -363,6 +363,99 @@ class BootstrapTests(unittest.TestCase):
                              capture_output=True)
         self.assertNotEqual(bad.returncode, 0)
         self.assertIn("title_format", bad.stderr.decode("utf-8"))
+
+class TaskIdHistoryTests(unittest.TestCase):
+    """작업 ID 매핑: feature/SETUP-001의 모든 커밋(직접·예약·로그·병합)은 [SETUP-001], LOG-xxx는 [AI-LOG-xxx]."""
+
+    CFG = {"service": "", "task_prefixes": {"LOG-": "AI"}, "main": "master", "develop": "develop", "remote": "origin"}
+
+    def setUp(self):
+        self.env = FlowEnv(config_data=self.CFG)
+        self.addCleanup(self.env.cleanup)
+        p = mock.patch.dict(os.environ, {"AI_LOGGING_CLAUDE_HOME": self.env.claude,
+                                         "AI_LOGGING_CODEX_HOME": self.env.codex})
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_task_id_mapping(self):
+        cfg = config.load(self.env.ctx)
+        self.assertEqual(config.task_id(cfg, "SETUP-001"), "SETUP-001")
+        self.assertEqual(config.task_id(cfg, "LOG-002"), "AI-LOG-002")
+        self.assertEqual(config.task_id(dict(cfg, task_prefixes={"LOG-": "AI", "LOG-UI-": "WEB"}), "LOG-UI-1"), "WEB-LOG-UI-1")
+        self.assertEqual(config.task_id(dict(cfg, service="AI", task_prefixes={}), "SETUP-001"), "AI-SETUP-001")  # 이전 설정 호환
+        self.assertIsNone(config.check_branch_task(self.env.ctx, "SETUP-001", "develop"))  # feature 아닌 브랜치 제외
+
+    def titles(self, rng):
+        return self.env.git("log", "--format=%s", rng).splitlines()
+
+    def test_setup_feature_history_uses_setup_task_id(self):
+        e, ctx = self.env, self.env.ctx
+        self.assertTrue(flows.new_feature(ctx, "SETUP-001")["ok"])
+        master0 = e.rev("master")
+        e.edit("src/app.kt", "fun main() {}\n")
+        # 브랜치와 다른 작업 ID는 commit-msg가 거부(AI 접두어·다른 작업)
+        for bad in ("AI-SETUP-001", "AI-LOG-001"):
+            r = e.commit_msg(bad, "구성", "내용", allow_fail=True)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("task_branch_mismatch", r.stderr.decode("utf-8"))
+        e.commit_msg("SETUP-001", "프로젝트 구성", "골격")
+        # 예약 작업·로그 커밋도 같은 규칙
+        self.assertEqual(tasks.reserve(ctx, "stage-log", {"task": "AI-SETUP-001", "stage": "1단계"})["reason"],
+                         "task_branch_mismatch")
+        self.assertEqual(tasks.reserve(ctx, "commit", {"message": "[AI-LOG-001] x\n\n  y\n", "paths": ["README.md"]})
+                         ["reason"], "task_branch_mismatch")
+        self.assertEqual(snapshot.commit_snapshots(ctx, "AI-LOG-001", "스냅샷")["reason"], "task_branch_mismatch")
+        self.assertTrue(tasks.reserve(ctx, "stage-log", {"task": "SETUP-001", "stage": "1단계"})["ok"])
+        tasks.cancel(ctx, tasks.listing(ctx)[-1]["id"])
+        # develop 검증 → 로그 게시 → 최종 병합: 도구가 만드는 커밋도 [SETUP-001]
+        e.merge_into_develop("feature/SETUP-001", "SETUP-001")
+        e.talk(("develop 검토", "통과"))
+        r = flows.push_develop(ctx, "SETUP-001")
+        self.assertTrue(r["ok"] and r["pushed"], r)
+        self.assertTrue(e.git("log", "-1", "--format=%s", "develop").startswith("[SETUP-001] 세션 로그 스냅샷"))
+        self.assertTrue(e.git("log", "-1", "--format=%s", "master").startswith("[SETUP-001] 세션 로그 스냅샷"))
+        e.talk(("마무리", "네"))
+        r = flows.merge_feature(ctx, "SETUP-001")
+        self.assertTrue(r["ok"] and r["merged"], r)
+        m = e.rev("master")
+        self.assertEqual(e.git("log", "-1", "--format=%s", m).split(" ", 1)[0], "[SETUP-001]")
+        self.assertIn("feature/SETUP-001 master 병합", e.git("log", "-1", "--format=%s", m))
+        feature_titles = self.titles(f"{master0}..feature/SETUP-001")
+        self.assertTrue(feature_titles)
+        self.assertTrue(all(t.startswith("[SETUP-001] ") for t in feature_titles), feature_titles)
+        self.assertTrue(all(t.startswith("[SETUP-001] ") for t in self.titles(f"{master0}..{m}")))
+        p = subprocess.run(["git", "-C", e.root, "push", "-q", "origin", "master"], capture_output=True)
+        self.assertEqual(p.returncode, 0, p.stderr.decode("utf-8", "replace"))
+
+    def test_held_session_does_not_block_push_develop_and_joins_later(self):
+        """한 세션이 보류여도 push-develop은 진행(경고). 보류를 해소하면 다음 게시에 그 세션이 이어서 쌓인다."""
+        e, ctx = self.env, self.env.ctx
+        self.assertTrue(flows.new_feature(ctx, "SETUP-001")["ok"])
+        e.edit("src/app.kt", "fun main() {}\n")
+        e.commit_msg("SETUP-001", "프로젝트 구성", "골격")
+        e.merge_into_develop("feature/SETUP-001", "SETUP-001")
+        e.claude_session("proj", "held-sess", claude_records(e.root) + jl(prompt("mail " + OTHER_EMAIL), answer("네"), END))
+        r = flows.push_develop(ctx, "SETUP-001")
+        self.assertTrue(r["ok"] and r["pushed"], r)
+        self.assertIn("logs:snapshot_hold claude/held-sess 1건", " ".join(r["warnings"]))
+
+        def keys(rev):
+            return {f"{m['tool']}/{m['session_id']}" for m in snapshot.tree_manifests(e.root, rev).values()}
+
+        self.assertNotIn("claude/held-sess", keys("master"))
+        self.assertIn("claude/flow-sess", keys("master"))
+        first = set(snapshot.tree_manifests(e.root, "master"))
+        # 사용자가 검토 후 치환 목록에 추가(mask-held와 같은 효과) → 다음 게시에 이어서 반영
+        with open(ctx.mask_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps({"kind": "literal", "value": OTHER_EMAIL}) + "\n")
+        e.talk(("보류 해소 뒤", "네"))
+        r = flows.push_develop(ctx, "SETUP-001")
+        self.assertTrue(r["ok"] and r["pushed"], r)
+        self.assertFalse([w for w in r["warnings"] if "snapshot_hold" in w], r["warnings"])
+        self.assertIn("claude/held-sess", keys("master"))
+        self.assertTrue(first < set(snapshot.tree_manifests(e.root, "master")))  # 이전 스냅샷은 그대로, 새것 추가
+        self.assertEqual(snapshot.scan_tree_secrets(ctx, "master", engine.build_policy(ctx)), [])
+
 
 if __name__ == "__main__":
     unittest.main()

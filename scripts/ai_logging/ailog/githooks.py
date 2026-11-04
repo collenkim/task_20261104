@@ -60,6 +60,10 @@ def check_commit_msg(ctx: Context, msg_path: str) -> list[str]:
     with open(msg_path, "rb") as f:
         text = f.read().decode("utf-8", "replace")
     problems = [f"message:{p}" for p in rules.check_message(text)]
+    if not problems:
+        mm = config.check_branch_task(ctx, rules.task_from_title(text), gitops.current_branch(ctx.root))
+        if mm:
+            problems.append(f"message:{mm}")
     busy = turns.busy_sessions(ctx)
     if busy:
         problems.append("ai_turn_not_idle:" + ",".join(f"{k.split('/')[0]}={v['state']}" for k, v in sorted(busy.items())))
@@ -72,7 +76,8 @@ def commit_msg(ctx: Context, msg_path: str) -> int:
     problems = check_commit_msg(ctx, msg_path)
     if problems:
         _err(["커밋을 막았습니다: " + "; ".join(problems),
-              "메시지 형식: [서비스-작업ID] 제목 / 빈 줄 / 두 칸 들여쓴 작업 내용",
+              "메시지 형식: [작업ID] 제목 / 빈 줄 / 두 칸 들여쓴 작업 내용. feature 브랜치에서는 그 브랜치의 작업 ID만 쓴다"
+              "(feature/SETUP-001 → [SETUP-001], feature/LOG-xxx → [AI-LOG-xxx]).",
               "AI 턴 진행 중이면 예약 작업(cli.py task reserve ...)으로 요청하세요."])
         return 1
     return 0
@@ -148,7 +153,7 @@ ADVICE = (
     ("master_direct_source_commit", "병합 커밋 없이 master에 들어온 소스 커밋입니다(IDE·git merge의 fast-forward 등). "
                                     "이력 구분을 위해 다음부터는 --no-ff 병합(또는 merge-feature)을 권장합니다."),
     ("ai_turn_not_idle", "AI 턴이 진행 중입니다. 그 턴의 대화는 다음 push에 담깁니다."),
-    ("message:", "커밋 메시지 형식: [서비스-작업ID] 제목 / 빈 줄 / 두 칸 들여쓴 작업 내용"),
+    ("message:", "커밋 메시지 형식: [작업ID] 제목 / 빈 줄 / 두 칸 들여쓴 작업 내용"),
     ("secret:", "이미 커밋된 값이 현재 치환 목록·검출 규칙에 걸립니다. 새 마스킹 커밋으로 지워지지 않으므로 게시를 멈추고 "
                 "이력 정리를 결정하세요."),
 )

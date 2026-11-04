@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 
 SCHEMA_VERSION = 2
 # 정규식 밖의 검증 로직(임계값·판정 순서 등)이 바뀌면 올린다. 정규식 원문·허용 목록·치환 목록 digest는 자동 포함된다.
-POLICY_CODE_VERSION = "5"
+POLICY_CODE_VERSION = "6"
 LIVE_REL = "ai-logs/live"
 SNAPSHOTS_REL = "ai-logs/snapshots"
 LARGE_FILE_BYTES = 50_000_000
