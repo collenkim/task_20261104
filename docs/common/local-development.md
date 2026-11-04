@@ -21,7 +21,7 @@ docker compose ps
 - 그룹 앱은 호스트 포트가 없다. `docker compose ps`와 컨테이너 healthcheck로 상태를 확인한다.
 - 그룹 명세: http://127.0.0.1:8081/internal-docs/group (멤버가 내부 키를 추가해 조회)
 - 호스트에 공개하는 DB 포트: 멤버 127.0.0.1:13306, 그룹 127.0.0.1:23306. IDE 개발용이다.
-- Swagger에서 멤버 명세는 실행 가능하고 그룹 명세는 읽기 전용이다. 업무 API는 아직 없다.
+- Swagger에서 멤버 명세는 실행 가능하고 그룹 명세는 읽기 전용이다. 멤버 목록·상세 API는 구현됐으며 실제 업무 Swagger 실행 검증은 M-11에서 수행한다.
 - 종료: `docker compose down`. 볼륨은 유지한다. 소스 변경 후 같은 `up -d --build --wait`를 실행한다.
 
 ## 통합 네트워크
@@ -105,13 +105,14 @@ IntelliJ에서 Application 클래스를 직접 실행할 때는 다음 환경변
 
 ## MEMBER-001 선행 개발 실행 상태
 
-source 선택·소속 fixture는 구현됐다(M-04). 공개 멤버 API·local 시드·업무 Swagger 실행은 아직 후속 단계(M-05·M-06·M-11)다. fixture만으로 멤버 DB 행이 생기지는 않는다.
+source 선택·소속 fixture, 공개 멤버 API와 local 시드를 구현했다(M-04·M-05·M-06). API·프로필·실제 MariaDB 검증은 [3단계 기록](member-query-stage-3-verification.md)을 따른다. 실제 Compose/Swagger 업무 실행은 M-11에서 검증한다.
 
 - local 프로필은 `task.group-membership.source=fixture`로 멤버 내부 합성 소속 데이터를 사용한다. 기본 프로필은 http다. fixture는 local 외에서 선택할 수 없다.
 - 루트 Compose와 멤버 단독 Compose 모두 `TASK_GROUP_MEMBERSHIP_SOURCE`를 컨테이너에 전달한다. 생략 시 fixture이고 http 지정 시 HTTP로 전환한다. 프로필·설정 바인딩은 테스트했고 실제 컨테이너 업무 API 검증은 후속이다.
-- M-05·M-06 구현 뒤 기존 `docker compose up -d --build --wait`로 local 시드와 fixture를 적용한 멤버 API를 실행하고 Swagger에서 성공 응답을 확인한다. 그룹 서비스가 아직 업무 API를 제공하지 않아도 fixture 기반 조회는 200이어야 한다.
+- 기존 `docker compose up -d --build --wait`로 local 시드와 fixture를 적용한 멤버 API를 실행한다. 목록은 `/api/members?page=0&size=20&sort=name,asc`, 상세 예시는 `/api/member/tu3fgxd45k`다. Swagger 실행 검증은 M-11에서 기록한다. 그룹 서비스가 아직 업무 API를 제공하지 않아도 fixture 기반 조회는 200이어야 한다.
 - http 선택 시 실제 그룹 주소·키를 사용한다. 실패하면 500/503을 반환하며 fixture로 대체하지 않는다. 실제 그룹 업무 API가 없는 현재 구성에서는 http의 정상 업무 연동을 완료로 표시하지 않는다.
 - 기존 그룹 명세 전달은 실제 HTTP를 유지한다. 그룹 정지 시 명세 드롭다운 조회 실패와 fixture 멤버 API 성공을 별도로 확인한다.
-- M-06에서 local Flyway 경로를 기존 `db/migration/mariadb` + `db/seed/local`로 확장한다. 현재는 시드 경로를 추가하지 않았다. 시드 재실행 조건·보호 규칙은 [POL-DATA-004](data-conventions.md#pol-data-004-local-시드), ID·소속 예시는 [멤버 엔티티](../../services/member-service/docs/entities.md#local-시드-계획-m-06)를 따른다.
+- local Flyway 경로는 `db/migration/mariadb` + `db/seed/local`이다. 기본 프로필은 migration 경로만 적용한다. 시드 재실행 조건·보호 규칙은 [POL-DATA-004](data-conventions.md#pol-data-004-local-시드), ID·소속 예시는 [멤버 엔티티](../../services/member-service/docs/entities.md#local-시드-m-06-적용)를 따른다.
+- 기존 시드 ID의 상세 `createdBy`가 정확히 `seed`가 아니면 데이터 충돌이다. 시드가 해당 행을 보존하므로 데모 데이터 검증 통과로 간주하지 않는다. 실제 데이터의 이름·이메일·주소를 로그에 출력하지 말고 충돌 여부만 기록한다.
 - R__ 내용이 그대로이면 단순 재시작으로 행이 다시 생성되지 않는다. 시드 재적용을 위해 전체 DB를 삭제하지 않는다. 내용 변경 후 재적용이나 별도 검증용 새 DB를 사용한다. 사용자 데이터 초기화가 필요할 때만 사용자가 대상 Compose 프로젝트·볼륨과 삭제 영향을 확인한다.
-- fixture는 합성 정보이고 jar에 포함된다. 기본 프로필에서 선택되지 않는다는 의미이며 산출물에서 제거했다고 기록하지 않는다. 시드도 구현 시 같은 격리 원칙을 따른다.
+- fixture는 합성 정보이고 jar에 포함된다. 기본 프로필에서 선택되지 않는다는 의미이며 산출물에서 제거했다고 기록하지 않는다. 시드도 같은 격리 원칙을 따른다.

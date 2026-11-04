@@ -12,11 +12,11 @@
 - 그룹 클라이언트가 서버 내부 키를 첨부한다. 사용자 헤더를 그룹으로 그대로 전달하지 않는다.
 - 그룹 장애가 멤버 기동·readiness·자기 명세를 막지 않는다. 현재 그룹 명세 요청은 장애 시 503으로 실패한다.
 - [보안](../../../docs/common/security.md), [통신](../../../docs/common/service-communication.md), [API](../../../docs/common/api-conventions.md), [CQRS](../../../docs/common/cqrs.md)를 따른다.
-- 업무 식별자·조회 조건·공개 필드는 [API 정의](api.md)와 [엔티티](entities.md)에 기록한다. MEMBER-001은 저장소와 소속 공급자 경계를 구현했으며 공개 API 결합은 M-05에서 진행한다.
+- 업무 식별자·조회 조건·공개 필드는 [API 정의](api.md)와 [엔티티](entities.md)에 기록한다. MEMBER-001은 저장소·소속 공급자·공개 조회 API 결합을 구현했다.
 
 ## POL-MEMBER-001 조회와 다중 소속
 
-저장소 M-02와 소속 공급자의 계약 검사는 구현했다. 공개 응답 결합 M-05·전체 유스케이스 트랜잭션 검증은 후속 단계다.
+저장소·소속 계약·공개 응답 결합을 구현했다. fixture와 테스트 HTTP 공급자로 같은 공개 API를 실행하고 실제 호출 스레드의 트랜잭션 종료를 검증한다([3단계 기록](../../../docs/common/member-query-stage-3-verification.md)).
 
 - 멤버는 0~N개 그룹에 소속될 수 있으며 권한은 소속별로 다르다. 공개 계약은 항상 `groups[]`다.
 - 멤버 DB에서 정렬·페이지를 먼저 결정하고, 해당 ID만 그룹 포트로 일괄 조회한다. 전체 건수는 멤버 수, 멤버 순서는 DB 결과를 유지한다.
@@ -27,14 +27,14 @@
 
 ## POL-MEMBER-002 임시 그룹 공급자
 
-source 설정·HTTP/fixture 구현과 local 격리를 적용했다. 공개 멤버 API의 실제 200 응답은 M-05·M-11에서 확인한다.
+source 설정·HTTP/fixture 구현과 local 격리를 적용했다. 공개 멤버 API의 200 응답은 MockMvc + 실제 MariaDB에서 확인했다. 실제 Compose·Swagger 실행은 M-11에서 확인한다.
 
 - `GroupMembershipReader`의 `FixtureGroupMembershipReader`와 `HttpGroupMembershipReader` 구현을 둔다. application·Controller에는 공급자 종류 분기나 특정 멤버 ID 하드코딩을 넣지 않는다.
 - 설정 키는 `task.group-membership.source`(`fixture`/`http`)다. 기본 프로필은 http, local 프로필은 선행 작업 동안 fixture를 기본값으로 사용한다. 환경변수 `TASK_GROUP_MEMBERSHIP_SOURCE`로 명시적으로 선택할 수 있다.
 - fixture는 활성 프로필이 local을 포함할 때만 허용한다. 기본 프로필에서 fixture 지정, 알 수 없는 값, 공급자 중복/누락은 기동 실패다. 같은 포트에는 정확히 한 구현만 등록한다.
-- fixture 파일은 [시드 계획](entities.md#local-시드-계획-m-06)의 다섯 ID를 모두 포함한다. 파일 존재·필수 값·ID/소속 중복은 기동 시 검사한다. 미소속 ID도 빈 배열 항목을 명시한다.
+- fixture 파일은 [시드 계획](entities.md#local-시드-m-06-적용)의 다섯 ID를 모두 포함한다. 파일 존재·필수 값·ID/소속 중복은 기동 시 검사한다. 미소속 ID도 빈 배열 항목을 명시한다.
 - fixture에 없는 ID는 자동으로 미소속을 추정하지 않고 설정 오류로 처리한다. 개발 데이터를 추가하면 대응 fixture 항목도 추가한다.
 - fixture와 HTTP는 동일한 내부 소속 모델과 순수 계약 검증 규칙을 사용한다. fixture 모드는 업무 그룹 HTTP 호출을 하지 않는다.
 - HTTP 실패 시 fixture로 대체하지 않는다. 실제 그룹 API가 준비되면 설정만 http로 전환하고 실제 제공자 검증을 추가한다.
 - 기존 `/internal-docs/group`은 실제 그룹 명세 HTTP 조회를 유지한다. fixture로 가짜 그룹 업무 명세를 생성하거나 그룹 내부 API가 구현된 것처럼 표시하지 않는다.
-- source 설정·fixture를 읽는 기능은 있으며 local 시드·공개 API는 아직 없다. 현재 실행 방법과 후속 확인 항목은 [로컬 실행](../../../docs/common/local-development.md)에 있다.
+- local 시드·공개 API를 구현했으며 시드는 local 프로필에서만 적용한다. 현재 실행 방법과 후속 확인 항목은 [로컬 실행](../../../docs/common/local-development.md)에 있다.

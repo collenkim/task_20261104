@@ -9,6 +9,7 @@ spring-boot = "4.1.2"
 springdoc = "3.2.0"
 spotless = "8.9.0"
 ktfmt = "0.64"
+archunit = "1.4.2"
 
 [libraries]
 # build-logic 플러그인 의존성
@@ -38,4 +39,5 @@ testcontainers-junit-jupiter = { module = "org.testcontainers:testcontainers-jun
 testcontainers-mariadb = { module = "org.testcontainers:testcontainers-mariadb" }
 kotlin-test-junit5 = { module = "org.jetbrains.kotlin:kotlin-test-junit5" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+archunit = { module = "com.tngtech.archunit:archunit", version.ref = "archunit" }
 springdoc-openapi-webmvc-api = { module = "org.springdoc:springdoc-openapi-starter-webmvc-api", version.ref = "springdoc" }

@@ -1,4 +1,9 @@
 # IDE·bootRun 기본 그룹 주소. 컨테이너는 Compose가 내부 IP를 지정한다.
+spring:
+  flyway:
+    locations:
+      - classpath:db/migration/mariadb
+      - classpath:db/seed/local
 task:
   group-membership:
     source: ${TASK_GROUP_MEMBERSHIP_SOURCE:fixture}

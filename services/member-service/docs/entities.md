@@ -9,7 +9,7 @@
 | 대상 | 현재 상태 |
 | --- | --- |
 | 업무 JPA 엔티티·Repository | MemberEntity·MemberJpaRepository·JpaMemberReader 구현, `ef03e16`에서 검증 |
-| 업무 테이블 | Flyway V2의 member. local 시드는 아직 미적용 |
+| 업무 테이블 | Flyway V2의 member와 local 전용 R__seed_member.sql |
 | `flyway_schema_history` | Flyway가 생성·관리하는 이력 테이블. 업무 엔티티로 매핑하지 않음 |
 | `jpa_probe` / `JpaProbe` | 테스트 전용. 운영 스키마·jar에 포함하지 않음 |
 
@@ -36,9 +36,9 @@ Spring Data JPA 스타터, Hibernate, Kotlin JPA 기본 생성자·프록시 지
 - 그룹명·권한·과금·소속 관계는 저장하지 않는다. 그룹 서비스 DB와 외래 키·JPA 연관 관계를 만들지 않는다.
 - 등록·생성 필드는 서로 다른 의미이며 임의로 같은 값으로 추론하지 않는다. 시드에서는 명시적으로 고정값을 지정할 수 있다.
 
-## local 시드 계획 (M-06)
+## local 시드 (M-06 적용)
 
-상태: 시드 M-06 미적용. `src/main/resources/db/seed/local/R__seed_member.sql`은 후속 단계다. 소속 fixture `src/main/resources/fixtures/local/group-memberships.json`은 M-04에 추가했다. fixture만으로 멤버 DB 행이 생성되지는 않는다. 위치·재실행·기존 데이터 보호는 [POL-DATA-004](../../../docs/common/data-conventions.md#pol-data-004-local-시드)를 따른다.
+상태: 시드 M-06 구현. `src/main/resources/db/seed/local/R__seed_member.sql`을 local Flyway 위치에 연결했다. 기본 프로필에는 적용하지 않는다. 소속 fixture `src/main/resources/fixtures/local/group-memberships.json`은 M-04에 추가했다. fixture만으로 멤버 DB 행이 생성되지는 않는다. 위치·재실행·기존 데이터 보호는 [POL-DATA-004](../../../docs/common/data-conventions.md#pol-data-004-local-시드)를 따른다.
 
 | 멤버 ID | 이름 | fixture 소속 | 목적 |
 | --- | --- | --- | --- |

@@ -16,12 +16,14 @@
 | GET `/v3/api-docs` | 사용자 인증 없음 | 멤버 OpenAPI JSON |
 | GET `/swagger-ui.html`, `/swagger-ui/index.html` | 사용자 인증 없음 | 두 명세 선택 화면 |
 | GET `/internal-docs/group` | 사용자 인증 없음 | 서버 키로 받은 그룹 참고 명세. no-store |
+| GET `/api/members` | 사용자 인증 없음 | 멤버 요약 페이지 + 다중 소속 |
+| GET `/api/member/{id}` | 사용자 인증 없음 | 기본 정보·감사 정보 + 소속. no-store |
 
 그룹 명세 전달은 모든 프로필에 제공한다. 내부 서버 주소·브라우저 인증 요구를 제거하고 공개 업무 명세에서는 전달 컨트롤러를 제외한다. 그룹 연결 실패·시간 초과·5xx는 503 GROUP_SERVICE_UNAVAILABLE, 내부 키 거부·명세 계약 오류는 500 INTERNAL_ERROR다.
 
-## MEMBER-001 공개 계약 (미적용 M-05)
+## MEMBER-001 공개 계약
 
-2026-11-05 목표 계약이다. 위 현재 제공 경로와 구분한다. 업무 API는 아직 구현되지 않았다. 전체 범위는 [통합 계획](../../../docs/common/member-query-plan.md), 공통 규칙은 [API 정책](../../../docs/common/api-conventions.md)을 따른다.
+2026-11-05 공개 API와 local 자동 시드를 구현하고 실제 MariaDB + fixture/테스트 HTTP 서버로 검증한다. 2단계 커밋 `e5a8c6b`를 확인했으며 3단계 커밋 완료 여부는 예약 실행 뒤 확인한다. [3단계 검증](../../../docs/common/member-query-stage-3-verification.md)을 기준으로 완료 범위를 구분한다. 전체 범위는 [통합 계획](../../../docs/common/member-query-plan.md), 공통 규칙은 [API 정책](../../../docs/common/api-conventions.md)을 따른다.
 
 ### GET /api/members
 
@@ -119,12 +121,12 @@ operationId는 `getMemberDetail`, 스키마는 `MemberDetailResponse`다. 요청
   "type": "about:blank",
   "title": "입력값 검증 실패",
   "status": 400,
-  "detail": "페이지 요청 값이 허용된 범위를 벗어났습니다.",
+  "detail": "요청 값이 허용된 조건을 충족하지 않습니다.",
   "instance": "/api/members",
   "code": "VALIDATION_FAILED"
 }
 ```
 
-404·500·503도 ProblemDetail + `code`이며 각 코드의 고정 문구를 따른다. 구현 시 네 오류의 OpenAPI 예시와 실제 응답 스키마 검증을 추가한다. 그룹 주소·본문·키·이메일·주소를 오류에 포함하지 않는다. 장애를 빈 그룹 배열로 바꾸지 않는다.
+404·500·503도 ProblemDetail + `code`이며 각 코드의 고정 문구를 따른다. 네 오류의 OpenAPI 예시는 코드에 반영했다. 실제 응답의 상태·코드 검사는 수행했으며, 공유 스냅샷 기준 전체 스키마 검증은 M-07에서 추가한다. 그룹 주소·본문·키·이메일·주소를 오류에 포함하지 않는다. 장애를 빈 그룹 배열로 바꾸지 않는다.
 
 local fixture 모드의 성공은 실제 그룹 연동 성공을 뜻하지 않는다. 외부 공개 DTO에 개발용 모드 플래그를 추가하지 않고 실행 모드·검증 기록으로 구분한다. HTTP 모드는 [통신 정책](../../../docs/common/service-communication.md)의 지수 백오프·Full Jitter를 따르며 전체 API의 최대 지연을 고정 수치로 약속하지 않는다.

@@ -19,5 +19,6 @@ dependencies {
   testImplementation(libs.testcontainers.junit.jupiter)
   testImplementation(libs.testcontainers.mariadb)
   testImplementation(libs.kotlin.test.junit5)
+  testImplementation(libs.archunit)
   testRuntimeOnly(libs.junit.platform.launcher)
 }

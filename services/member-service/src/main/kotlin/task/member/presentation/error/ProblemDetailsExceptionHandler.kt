@@ -14,6 +14,8 @@ import org.springframework.web.method.annotation.HandlerMethodValidationExceptio
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler
 import task.member.application.exception.GroupServiceConfigurationException
 import task.member.application.exception.GroupServiceUnavailableException
+import task.member.application.exception.InvalidMemberQueryException
+import task.member.application.exception.MemberNotFoundException
 
 /**
  * 모든 오류 응답을 RFC 9457 ProblemDetail + `code`로 만든다(POL-API-002).
@@ -24,6 +26,18 @@ import task.member.application.exception.GroupServiceUnavailableException
 @RestControllerAdvice
 class ProblemDetailsExceptionHandler : ResponseEntityExceptionHandler() {
   private val log = LoggerFactory.getLogger(javaClass)
+
+  @ExceptionHandler(InvalidMemberQueryException::class)
+  fun handleInvalidMemberQuery(): ProblemDetail = memberProblem(ErrorCode.VALIDATION_FAILED)
+
+  @ExceptionHandler(MemberNotFoundException::class)
+  fun handleMemberNotFound(): ProblemDetail = memberProblem(ErrorCode.NOT_FOUND)
+
+  private fun memberProblem(code: ErrorCode): ProblemDetail =
+    ProblemDetail.forStatusAndDetail(HttpStatusCode.valueOf(code.status), code.description).apply {
+      title = code.codeName
+      setProperty(CODE, code.code)
+    }
 
   override fun handleExceptionInternal(
     ex: Exception,

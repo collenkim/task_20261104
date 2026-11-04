@@ -14,7 +14,7 @@
 | --- | --- | --- | --- |
 | 1 | [project-setup-plan](project-setup-plan.md) | - | SETUP-001 범위·확정 사항·완료 기준과 결과 |
 | 1-1 | [structure-change-plan](structure-change-plan.md) | G-xx | 멤버 공개 진입점·그룹 내부 전용 전환의 보완 항목과 완료 기준 |
-| 1-2 | [member-query-plan](member-query-plan.md)·[구현 요청](requests/MEMBER-001.md) | M-xx | 저장소·소속 공급자 구현, 공개 API·시드·재시도·명세 검증은 후속 단계 |
+| 1-2 | [member-query-plan](member-query-plan.md)·[구현 요청](requests/MEMBER-001.md) | M-xx | 공개 목록/상세·local 시드·계층 경계 구현, 재시도·공유 명세·실행 검증은 후속 단계 |
 | 2 | [architecture](architecture.md) | POL-ARCH | 서비스 경계, 직접 참조 금지, 인프라 소유, 공개 범위와 호출 방향 |
 | 3 | [cqrs](cqrs.md) | POL-CQRS | 서비스 내부 계층과 조회·변경 경로 |
 | 4 | [code-conventions](code-conventions.md) | POL-CODE | Kotlin·Spring·JPA·enum 코드명/설명 규칙 |
@@ -55,5 +55,5 @@ AI 세션 로깅 도구는 [../ai-logging-plan.md](../ai-logging-plan.md)와 저
 
 ## 현재 구현과 검증
 
-- [요구사항 재검증](setup-verification.md): 충족·미구현·과거 검증을 구분한다.
+- [요구사항 재검증](setup-verification.md): 충족·미구현·과거 검증을 구분한다. MEMBER-001 공개 조회·시드·계층 검사는 [3단계 기록](member-query-stage-3-verification.md)을 따른다.
 - [멤버 서비스](../../services/member-service/docs/README.md)·[그룹 서비스](../../services/group-service/docs/README.md)의 정책·엔티티·API 정의서를 함께 읽는다.

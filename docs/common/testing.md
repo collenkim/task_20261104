@@ -45,12 +45,12 @@
 
 - `python scripts/verification/runtime-smoke.py`: 실제 Compose 네트워크·키 거부·명세 전달·호스트 포트를 검사한다.
 - `python scripts/verification/runtime-smoke.py --independence`: 서비스별 앱·DB를 단독 실행으로 전환한 뒤 루트 모드로 복구한다. 볼륨을 삭제하지 않는다. 단독 모드가 이미 실행 중이면 중단한다.
-- `node scripts/verification/swagger-browser.mjs`: Windows Edge headless에서 실제 명세를 읽고 선택·읽기 전용·외부 직접 요청 없음을 확인한다. 업무 API가 아직 없어 실행 버튼 검사는 브라우저 메모리에 테스트 명세를 넣어 수행한다. 실제 업무 API 호출 증거로 사용하지 않는다.
+- `node scripts/verification/swagger-browser.mjs`: Windows Edge headless에서 실제 명세를 읽고 선택·읽기 전용·외부 직접 요청 없음을 확인한다. 이 스크립트의 실행 버튼 검사는 아직 브라우저 메모리의 테스트 명세를 사용한다. 실제 멤버 업무 API를 검사하도록 변경하는 작업은 M-11에 남아 있으며 기존 결과를 업무 API 호출 증거로 사용하지 않는다.
 - 브라우저 검사에는 Node.js 24와 로컬 Edge를 사용한다. 다른 설치 경로는 TASK_BROWSER_EXECUTABLE, 멤버 주소는 TASK_VERIFY_ORIGIN으로 지정한다. 검사 프로필은 Git 제외 build/verification/에 남는다.
 
-## POL-TEST-005 계층과 트랜잭션 (미적용 M-09)
+## POL-TEST-005 계층과 트랜잭션
 
-현재 MemberPersistenceTests는 저장소 프록시의 읽기 트랜잭션과 반환 후 종료를 검증한다. 아래 전체 유스케이스·계층 검사는 아직 남아 있다.
+MemberPersistenceTests의 저장소 경계 검사에 MemberQueryApiTests·MemberQueryHttpIntegrationTests의 동일 호출 스레드 검사와 MemberArchitectureTests의 바이트코드 검사를 추가했다. 아래 기준을 [3단계](member-query-stage-3-verification.md)에서 검증한다.
 
 - application에서 infrastructure·presentation·JPA·Spring Data·RestClient·HTTP/Servlet·Jackson·OpenAPI 타입을 참조하지 않는지 검사한다. 입력/출력 포트의 인자·반환 타입도 검사 대상이다.
 - presentation은 입력 포트와 Query/View에만 의존하고 JPA·외부 HTTP DTO를 사용하지 않는다. 다른 서비스 코드·공유 런타임 모듈 참조도 금지한다. 계층 검사 도구가 실제 금지 예제를 검출하는지 최소 위반 fixture로 확인한다.
@@ -60,7 +60,7 @@
 
 ## POL-TEST-006 MEMBER-001 기능 검증
 
-필수 완료 매트릭스다. 현재 저장소(M-01·M-02), HTTP/fixture 포트·설정(M-03·M-04)은 [1단계](member-query-stage-1-verification.md)·[2단계](member-query-stage-2-verification.md)에서 검증했다. 원시 HTTP 입력·공개 API·시드·백오프/지터는 후속 단계다.
+필수 완료 매트릭스다. 현재 저장소(M-01·M-02), HTTP/fixture 포트·설정(M-03·M-04)은 [1단계](member-query-stage-1-verification.md)·[2단계](member-query-stage-2-verification.md)에서 검증했다. 원시 HTTP 입력·공개 API·시드·계층/트랜잭션은 [3단계](member-query-stage-3-verification.md)에서 검증한다. 백오프/지터와 공유 스냅샷·실제 Compose/Swagger 업무 검사는 후속 단계다.
 
 | 영역 | 필수 사례 |
 | --- | --- |
