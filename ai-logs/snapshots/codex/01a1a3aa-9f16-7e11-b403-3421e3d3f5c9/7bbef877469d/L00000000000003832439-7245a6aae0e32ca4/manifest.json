@@ -1,0 +1,32 @@
+{
+  "files": [
+    {
+      "copy_bytes": 3832242,
+      "copy_sha256": "f6fbd951d63d8ebbfd2e5c0ab06c6ac27f7feda6c1706fc60f12943cde329a72",
+      "ends_without_newline": false,
+      "lines": 617,
+      "masked": {
+        "home_user": 175,
+        "listed_value": 29
+      },
+      "original_bytes": 3832439,
+      "original_sha256": "bdabde8599621f556b6d3ac4ccfb97868084c7f3d21c0b9a43e596c2af71b669",
+      "path": "rollout-2026-11-04T08-07-10-01a1a3aa-9f16-7e11-b403-3421e3d3f5c9.jsonl",
+      "role": "main"
+    }
+  ],
+  "first_timestamp": "2026-11-03T23:18:53.931Z",
+  "kind": "snapshot",
+  "last_timestamp": "2026-11-04T01:33:07.724Z",
+  "main_lines": 617,
+  "order_basis": "파일 안의 줄 순서 (타임스탬프로 재정렬하지 않음)",
+  "original_bytes_total": 3832439,
+  "policy_version": "7bbef877469d",
+  "schema": 2,
+  "session_id": "01a1a3aa-9f16-7e11-b403-3421e3d3f5c9",
+  "snapshot_id": "L00000000000003832439-7245a6aae0e32ca4",
+  "snapshot_sha256": "7245a6aae0e32ca44312f3ce278dad9d9f4fb874dd7f0ce396f3cfe848d5bc20",
+  "time_basis": "UTC - 도구가 기록한 ISO 8601 timestamp 값을 그대로 사용",
+  "tool": "codex",
+  "warnings": []
+}
