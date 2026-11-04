@@ -99,8 +99,14 @@ def _print_commit_result(r, label):
         return 1
     if r.get("committed"):
         print(f"{label} 완료: {r['commit'][:12]} ({r.get('branch')}, 스냅샷 {r.get('snapshots')}개, 파일 {r.get('files')}개)")
+    elif r.get("held"):
+        print("새로 커밋할 스냅샷 없음: 보류가 아닌 세션은 이미 최신입니다.")
     else:
         print("변경 없음: 이미 최신 스냅샷이 커밋되어 있습니다.")
+    for k, n in sorted((r.get("held") or {}).items()):
+        print(f"  보류로 제외: {k} {n}건 (값은 커밋하지 않음)")
+    if r.get("held"):
+        print("  해소: python -I scripts/ai_logging/cli.py holds → mask-held 또는 허용 목록. 해소 뒤 다음 커밋에 이어서 쌓입니다.")
     return 0
 
 

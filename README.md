@@ -106,6 +106,9 @@ ai-logs/snapshots/<claude|codex>/<세션 ID>/<정책 버전 12자>/L<원본 바�
   - 무작위 문자열 면제는 키 이름만으로 하지 않는다. 검토한 URL 문맥(호스트·경로·쿼리 조건)으로만 허용한다.
 - **보류**
   - 후보가 하나라도 있으면 그 세션은 보류한다(사본·스냅샷 갱신 없음).
+  - 보류는 게시를 막지 않는다. 로그 커밋(`push-develop`·`merge-feature`·`submit`·`stage-log`)은 보류 세션만 빼고 진행하고, 결과에 `logs:snapshot_hold <세션> N건` 경고와 커밋 본문의 제외 표시를 남긴다. 해소하면 그 세션의 다음 스냅샷(전체본)이 이어서 쌓인다.
+  - JSON 이스케이프(`
+` 등)의 글자는 뒤 문자열에 붙여 검사하지 않는다.
   - 진단에는 값 없이 규칙·줄 번호·길이·형태만 남긴다.
   - 보류 해소:
     - `holds`로 형태를 확인한다.
@@ -177,6 +180,7 @@ master ──new-feature──> feature/<ID> ──(사용자 git merge)──> 
      - 커밋된 비밀값(마스킹 실패), master 삭제
    - **경고만 하고 push는 진행**
      - 스냅샷이 원본보다 뒤처짐·없음: 담기지 않은 대화는 다음 스냅샷 커밋·push에 이어서 쌓인다.
+     - 민감정보 후보로 보류된 세션: 그 세션은 커밋되지 않고, 해소 뒤 이어서 쌓인다.
      - 병합 커밋 없이 master에 들어온 소스 커밋(fast-forward, `master_direct_source_commit`)
      - AI 턴 진행 중
    - 출력은 한국어 UTF-8이다(IDE Git 콘솔에서 읽을 수 있음).
@@ -261,7 +265,7 @@ python -I scripts/ai_logging/cli.py status    # hook 설정·실행 기록·Git 
   - 실제 저장소 master(`e2f753e`)로 pre-push 검사를 읽기 전용으로 돌려 막는 문제 0건(경고 3건)을 확인했다.
 - 작업 ID 매핑: 이 저장소 설정으로 `feature/LOG-001` → `AI-LOG-001`, `SETUP-001` → `SETUP-001`, 다른 브랜치 ID 거부, develop 제외를 확인했다.
 
-**가짜 원본·임시 저장소로만 확인함** (`tests/`, 87개 통과)
+**가짜 원본·임시 저장소로만 확인함** (`tests/`, 90개 통과)
 
 - 회귀 a~j(13개): 수정 전 실패(11 failures, 2 errors), 수정 후 통과
 - 스냅샷 규칙
@@ -269,6 +273,9 @@ python -I scripts/ai_logging/cli.py status    # hook 설정·실행 기록·Git 
   - 같은 길이 재작성 보류, 꼬리 처리
   - 50MB 경고, 부속 파일 삭제 보류
   - autocrlf에서 CRLF 바이트 보존
+  - 보류 세션만 빼고 로그 커밋(본문에 제외 표시, 값 미포함), 보류만 남으면 실패가 아니라 커밋할 것 없음
+  - `
+` 뒤 스냅샷 부속 파일 경로는 허용, 다른 위치는 후보 유지, 역슬래시(`\`) 뒤 `n`은 실제 글자로 검사
 - 턴 보호
   - 늦은 Codex Stop, Claude Stop 일치 확인
   - 중단 기록, SessionEnd 무시
@@ -288,6 +295,7 @@ python -I scripts/ai_logging/cli.py status    # hook 설정·실행 기록·Git 
   - 최초 도입: develop 병합 없이 `merge-feature` 성공(생략 문구 기록, 경고 없이 push)
   - `feature/SETUP-001` 전체 흐름(직접 커밋 → develop → push-develop → merge-feature → push)의 모든 커밋이 `[SETUP-001]`, `[AI-SETUP-001]`·`[AI-LOG-001]`은 commit-msg·예약·로그 커밋에서 거부
   - fast-forward·스냅샷 뒤 대화가 있어도 push 진행(UTF-8 경고), 다음 스냅샷이 더 긴 전체본으로 추가되고 기존 스냅샷은 유지, `git merge --no-ff` 후 push 통과, 형식이 틀린 병합 메시지는 거부
+  - 한 세션이 보류여도 `push-develop` 진행(`logs:snapshot_hold` 경고, 그 세션 제외), 치환 목록 추가 뒤 다음 `push-develop`에 그 세션이 이어서 반영, 커밋 트리에 비밀값 없음
 
 **확인하지 못함** (사용자 확인 필요)
 

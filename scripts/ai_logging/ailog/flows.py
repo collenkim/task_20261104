@@ -187,6 +187,12 @@ def _final_log_checks(ctx: Context, commit: str) -> list[str]:
     return warnings
 
 
+def _hold_warnings(r: dict) -> list[str]:
+    """로그 커밋에서 빠진 보류 세션(값은 게시하지 않음). 해소하면 다음 스냅샷 커밋·push에 이어서 쌓인다."""
+    return [f"logs:snapshot_hold {k} {n}건 - holds로 형태 확인 후 mask-held 또는 허용 목록으로 해소"
+            for k, n in sorted((r.get("held") or {}).items())]
+
+
 def _result(fn):
     def wrapper(ctx, feature, guard_held=False, **kw):
         try:
@@ -292,7 +298,7 @@ def push_develop(ctx: Context, feature: str, guard_held: bool = False, push: boo
         missing = dev_bases - _bases(root, new_main)
         if missing:
             raise FlowStop("master_missing_develop_snapshots", f"{len(missing)}개")
-        warnings = _final_log_checks(ctx, new_main)
+        warnings = _hold_warnings(r) + _final_log_checks(ctx, new_main)
         if new_main != main_before:
             gitops.cas_update_branch(root, main, new_main, main_before, "sync develop log commits")
         run["steps"]["master_logs"] = {"from": main_before, "to": new_main, "applied": applied}
@@ -433,6 +439,7 @@ def merge_feature(ctx: Context, feature: str, guard_held: bool = False) -> dict:
                                       extra_refs=(main_before,))
         if not r.get("ok"):
             raise FlowStop("tail_log_commit_failed", r.get("reason", ""), snapshot=r.get("snapshot"))
+        warnings += _hold_warnings(r)
         head2 = gitops.rev(root, f"refs/heads/{name}")
         run["steps"]["tail_log_commit"] = head2
         _save_run(ctx, run)

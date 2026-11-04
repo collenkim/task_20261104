@@ -32,6 +32,10 @@
       {
         "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/tool-results/toolu_[A-Za-z0-9]{20,40}",
         "reason": "Claude Code 부속 파일 경로(세션 UUID/tool-results/도구 호출 ID). 도구 호출 ID는 대화 기록 식별자이며 비밀값이 아님. 단독 ID는 32자 미만이라 검사 대상이 아니고 경로로 이어질 때만 검출됨"
+      },
+      {
+        "pattern": "ai-logs/snapshots/claude/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[0-9a-f]{12}/L[0-9]{20}-[0-9a-f]{16}/files/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/tool-results/toolu_[A-Za-z0-9]{20,40}",
+        "reason": "저장소에 커밋된 Claude 스냅샷의 부속 파일 경로(ai-logs/snapshots/claude/<세션>/<정책>/<스냅샷>/files/<세션>/tool-results/<도구 호출 ID>). git 출력(stat·커밋 결과 등)에 나오는 저장소 파일 경로이며 비밀값이 아님. 앞 항목과 같은 ID에 저장소 경로가 붙은 형태만 허용"
       }
     ],
     "url_contexts": [

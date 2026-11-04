@@ -139,6 +139,26 @@ def _entropy(b: bytes) -> float:
 _SEGMENT_SPLIT_RE = re.compile(rb"[/._-]+")
 
 
+_UNICODE_ESCAPE_RE = re.compile(rb"u[0-9a-fA-F]{4}")
+
+
+def _drop_json_escape(line: bytes, start: int, tok: bytes) -> bytes:
+    """JSON 이스케이프(\\n, \\t, \\u0027 등)의 글자가 뒤 문자열에 붙어 잡힌 경우 그 글자를 뗀다.
+
+    바로 앞의 역슬래시가 홀수 개일 때만 이스케이프다(짝수면 역슬래시 자체가 이스케이프된 실제 문자).
+    """
+    n = 0
+    while start - n - 1 >= 0 and line[start - n - 1:start - n] == b"\\":
+        n += 1
+    if n % 2 == 0:
+        return tok
+    if tok[:1] in _JSON_ESCAPE_LETTERS:
+        return tok[1:]
+    if _UNICODE_ESCAPE_RE.match(tok):
+        return tok[5:]
+    return tok
+
+
 def _has_random_segment(tok: bytes) -> bool:
     """경로·식별자처럼 짧은 조각의 연결이 아니라, 20자 이상의 무작위 조각이 있는지.
 
@@ -358,8 +378,8 @@ class Policy:
             if sha256(m.group(1)) not in self.allow.image_hashes:
                 out.append(Hit("embedded_image", lineno, f"sha256={sha256(m.group(1))}"))
         for m in _RANDOM_RE.finditer(line):
-            tok = m.group(0)
-            if _inside(struct, starts, m.start()) or MASK in tok:
+            tok = _drop_json_escape(line, m.start(), m.group(0))
+            if len(tok) < 32 or _inside(struct, starts, m.start()) or MASK in tok:
                 continue
             if _HEXISH_RE.fullmatch(tok) or not _has_random_segment(tok):
                 continue
