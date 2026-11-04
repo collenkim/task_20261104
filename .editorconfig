@@ -1,0 +1,32 @@
+# 편집기 공통 설정. Kotlin 포맷의 기준은 Spotless+ktfmt(Google 스타일)이다: docs/common/formatting.md
+root = true
+
+[*]
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.{kt,kts}]
+max_line_length = 100
+
+[*.py]
+indent_size = 4
+
+[*.md]
+trim_trailing_whitespace = false
+
+[{gradlew,*.sh,*.sql}]
+end_of_line = lf
+
+[*.bat]
+end_of_line = crlf
+
+# AI 세션 로그 사본은 원본 바이트 그대로 둔다(편집 대상 아님)
+[ai-logs/**]
+charset = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset
+indent_style = unset
+indent_size = unset

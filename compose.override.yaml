@@ -1,0 +1,19 @@
+# 루트 통합 실행만 소유하는 앱 통신 네트워크. 서비스 단독 Compose에는 필요하지 않다.
+services:
+  member-service:
+    environment:
+      TASK_GROUP_CLIENT_BASE_URL: http://172.30.104.3:8082
+    networks:
+      service-internal:
+        ipv4_address: 172.30.104.2
+  group-service:
+    networks:
+      service-internal:
+        ipv4_address: 172.30.104.3
+
+networks:
+  service-internal:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.104.0/24

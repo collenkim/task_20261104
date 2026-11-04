@@ -1,0 +1,83 @@
+# 멤버 서비스 단독 실행 구성(Compose 프로젝트 task-member). 그룹 서비스와 리소스를 공유하지 않는다.
+# 명령은 서비스 폴더(services/member-service) 기준이다. 저장소 루트에서는 -f services/member-service/infra/compose.yaml 로 바꾼다.
+#   앱 + DB:  docker compose -f infra/compose.yaml up -d --build --wait
+#   DB만:     docker compose -f infra/compose.yaml up -d member-db (앱은 ../../gradlew.bat bootRun)
+#   종료:     docker compose -f infra/compose.yaml down (볼륨 유지)
+# 파일 안의 상대 경로(build context, secrets)는 이 파일 위치(infra/) 기준이다.
+# 비밀값은 저장소 secrets/ 의 파일을 Compose secrets 로 마운트한다(값을 환경변수·이 파일에 쓰지 않음).
+# 먼저 ../../gradlew :generateLocalSecrets (루트에서는 ./gradlew generateLocalSecrets)를 실행한다.
+name: task-member
+
+services:
+  member-db:
+    image: mariadb:11.8.9
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--default-time-zone=+00:00"]
+    environment:
+      MARIADB_DATABASE: member_service
+      MARIADB_USER: member_app
+      MARIADB_PASSWORD_FILE: /run/secrets/member_db_app_password
+      MARIADB_ROOT_HOST: localhost
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/member_db_admin_password
+    secrets:
+      - member_db_admin_password
+      - member_db_app_password
+    volumes:
+      - member-mariadb-data:/var/lib/mysql
+    ports:
+      - "127.0.0.1:13306:3306"
+    networks:
+      - member-db-net
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+  member-service:
+    build:
+      context: ../../..
+      dockerfile: services/member-service/Dockerfile
+    image: task/member-service:local
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      SERVER_ADDRESS: 0.0.0.0
+      MEMBER_DB_HOST: member-db
+      MEMBER_DB_PORT: "3306"
+      TASK_SECRETS_DIR: /run/secrets
+      TASK_GROUP_CLIENT_BASE_URL: ${TASK_GROUP_CLIENT_BASE_URL:-http://127.0.0.1:9}
+    secrets:
+      - source: member_db_app_password
+        target: spring.datasource.password
+      - source: member_internal_key
+        target: task.internal-service.key
+    ports:
+      - "127.0.0.1:8081:8081"
+    networks:
+      - member-db-net
+    depends_on:
+      member-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8081/actuator/health/readiness"]
+      interval: 10s
+      timeout: 3s
+      start_period: 60s
+      retries: 6
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+volumes:
+  member-mariadb-data:
+
+networks:
+  member-db-net:
+
+secrets:
+  member_db_admin_password:
+    file: ../../../secrets/member-service/db-admin-password
+  member_db_app_password:
+    file: ../../../secrets/member-service/config/spring.datasource.password
+  member_internal_key:
+    file: ../../../secrets/internal/task.internal-service.key
