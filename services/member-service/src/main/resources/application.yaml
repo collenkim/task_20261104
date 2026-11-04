@@ -1,0 +1,63 @@
+# 멤버 서비스 기본 설정. 비밀값은 파일(configtree)로만 받는다: docs/common/security.md, docs/common/local-development.md
+# 비밀값 위치는 환경변수로 받는다(없으면 기동하지 않는다).
+# - TASK_SECRETS_DIR: 설정 파일 폴더(파일 이름 = 속성 이름). 절대 경로로 준다(configtree는 '..'이 든 경로를 읽지 못한다).
+# - TASK_JWT_PUBLIC_KEY: JWT 검증 공개키 파일.
+# bootRun은 저장소 secrets/ 의 절대 경로를, 컨테이너는 Compose secrets 의 /run/secrets 를 넣는다.
+spring:
+  application:
+    name: member-service
+  config:
+    import: "optional:configtree:${TASK_SECRETS_DIR}/"
+  datasource:
+    url: jdbc:postgresql://${MEMBER_DB_HOST:localhost}:${MEMBER_DB_PORT:15432}/member_service
+    username: member_app
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: member_service
+  flyway:
+    schemas: member_service
+    default-schema: member_service
+    create-schemas: true
+  data:
+    web:
+      pageable:
+        default-page-size: 20
+        max-page-size: 100
+        # Page 응답 JSON 형식 고정(Spring Data PagedModel)
+        serialization-mode: via-dto
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          public-key-location: "file:${TASK_JWT_PUBLIC_KEY}"
+          jws-algorithms: RS256
+          audiences: member-service
+
+server:
+  port: 8081
+  shutdown: graceful
+  error:
+    include-message: never
+    include-stacktrace: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        # 준비 상태는 자기 DB만 본다. 다른 서비스의 상태는 넣지 않는다.
+        readiness:
+          include: readinessState,db
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
