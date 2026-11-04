@@ -13,7 +13,7 @@ import subprocess
 import unittest
 from unittest import mock
 
-from test_ai_logging import REPO, Env, claude_records, jl  # noqa: E402
+from test_ai_logging import OTHER_EMAIL, REPO, Env, claude_records, jl  # noqa: E402
 
 from ailog import config, engine, flows, githooks, gitops, snapshot, tasks, turns  # noqa: E402
 
@@ -426,6 +426,35 @@ class TaskIdHistoryTests(unittest.TestCase):
         self.assertTrue(all(t.startswith("[SETUP-001] ") for t in self.titles(f"{master0}..{m}")))
         p = subprocess.run(["git", "-C", e.root, "push", "-q", "origin", "master"], capture_output=True)
         self.assertEqual(p.returncode, 0, p.stderr.decode("utf-8", "replace"))
+
+    def test_held_session_does_not_block_push_develop_and_joins_later(self):
+        """한 세션이 보류여도 push-develop은 진행(경고). 보류를 해소하면 다음 게시에 그 세션이 이어서 쌓인다."""
+        e, ctx = self.env, self.env.ctx
+        self.assertTrue(flows.new_feature(ctx, "SETUP-001")["ok"])
+        e.edit("src/app.kt", "fun main() {}\n")
+        e.commit_msg("SETUP-001", "프로젝트 구성", "골격")
+        e.merge_into_develop("feature/SETUP-001", "SETUP-001")
+        e.claude_session("proj", "held-sess", claude_records(e.root) + jl(prompt("mail " + OTHER_EMAIL), answer("네"), END))
+        r = flows.push_develop(ctx, "SETUP-001")
+        self.assertTrue(r["ok"] and r["pushed"], r)
+        self.assertIn("logs:snapshot_hold claude/held-sess 1건", " ".join(r["warnings"]))
+
+        def keys(rev):
+            return {f"{m['tool']}/{m['session_id']}" for m in snapshot.tree_manifests(e.root, rev).values()}
+
+        self.assertNotIn("claude/held-sess", keys("master"))
+        self.assertIn("claude/flow-sess", keys("master"))
+        first = set(snapshot.tree_manifests(e.root, "master"))
+        # 사용자가 검토 후 치환 목록에 추가(mask-held와 같은 효과) → 다음 게시에 이어서 반영
+        with open(ctx.mask_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps({"kind": "literal", "value": OTHER_EMAIL}) + "\n")
+        e.talk(("보류 해소 뒤", "네"))
+        r = flows.push_develop(ctx, "SETUP-001")
+        self.assertTrue(r["ok"] and r["pushed"], r)
+        self.assertFalse([w for w in r["warnings"] if "snapshot_hold" in w], r["warnings"])
+        self.assertIn("claude/held-sess", keys("master"))
+        self.assertTrue(first < set(snapshot.tree_manifests(e.root, "master")))  # 이전 스냅샷은 그대로, 새것 추가
+        self.assertEqual(snapshot.scan_tree_secrets(ctx, "master", engine.build_policy(ctx)), [])
 
 
 if __name__ == "__main__":
