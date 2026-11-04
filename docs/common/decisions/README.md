@@ -10,7 +10,9 @@
 | --- | --- | --- |
 | [ADR-001](ADR-001-jdk-21.md) | JDK 21 사용 | 확정 |
 | [ADR-002](ADR-002-no-shared-module.md) | 서비스 공유 런타임 모듈을 두지 않음 | 확정 |
-| [ADR-003](ADR-003-fixed-jwt-keys.md) | 미리 생성한 고정 JWT 키·토큰 사용 | 확정 |
+| [ADR-003](ADR-003-fixed-jwt-keys.md) | 미리 생성한 고정 JWT 키·토큰 사용 | 대체됨(ADR-005) |
+| [ADR-004](ADR-004-mariadb.md) | 서비스별 MariaDB 사용 | 확정 |
+| [ADR-005](ADR-005-member-edge-group-internal.md) | 멤버 진입점·그룹 내부 키·두 서비스 명세 제공 | 확정. 코드 적용 전 |
 
 - 형식: 상태·날짜 → 배경 → 결정 → 검토한 대안 → 결과.
 - 결정을 바꿀 때는 기존 문서를 고치지 않고 새 ADR을 쓴 뒤, 기존 문서 상태를 `대체됨(ADR-xxx)`으로 바꾼다.

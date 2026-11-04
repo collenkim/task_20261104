@@ -8,23 +8,27 @@ import io.swagger.v3.oas.models.security.SecurityScheme
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 
-/** Swagger(OpenAPI) 문서와 Bearer 보안 스킴. API 경로·헤더에는 버전을 두지 않는다(POL-API-001). */
+/** 그룹 서비스 소유 OpenAPI 계약(POL-API-004). 업무 API는 구현 시 이 명세에 추가된다. */
 @Configuration(proxyBeanMethods = false)
 class OpenApiConfiguration {
   @Bean
   fun openApi(): OpenAPI =
     OpenAPI()
-      .info(Info().title("그룹 서비스 API").description("그룹 조회 서비스. 인증: JWT Bearer(aud=group-service)."))
+      .info(
+        Info()
+          .version("0.1.0")
+          .title("그룹 서비스 API")
+          .description("내부 전용 그룹 API. 멤버 서버가 공유 시크릿 헤더를 추가해 호출합니다.")
+      )
       .components(
         Components()
           .addSecuritySchemes(
-            BEARER_SCHEME,
-            SecurityScheme().type(SecurityScheme.Type.HTTP).scheme("bearer").bearerFormat("JWT"),
+            "internalServiceKey",
+            SecurityScheme()
+              .type(SecurityScheme.Type.APIKEY)
+              .`in`(SecurityScheme.In.HEADER)
+              .name("X-Internal-Service-Key"),
           )
       )
-      .addSecurityItem(SecurityRequirement().addList(BEARER_SCHEME))
-
-  companion object {
-    const val BEARER_SCHEME = "bearerAuth"
-  }
+      .addSecurityItem(SecurityRequirement().addList("internalServiceKey"))
 }

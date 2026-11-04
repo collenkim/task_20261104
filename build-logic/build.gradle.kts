@@ -6,5 +6,4 @@ dependencies {
   implementation(libs.kotlin.noarg)
   implementation(libs.spring.boot.gradle.plugin)
   implementation(libs.spotless.gradle.plugin)
-  implementation(libs.nimbus.jose.jwt)
 }

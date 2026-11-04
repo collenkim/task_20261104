@@ -1,6 +1,5 @@
 package task.member
 
-import java.time.Duration
 import kotlin.test.assertEquals
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -17,19 +16,16 @@ import org.springframework.test.web.servlet.ResultActionsDsl
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 import org.springframework.test.web.servlet.put
-import task.member.support.TestJwt
 import task.member.support.TestProperties
 import task.member.support.TestcontainersConfiguration
 
-/** 공통 정책이 멤버 서비스에 적용됐는지 확인한다: 인증(JWT)·오류 응답·페이지네이션·상태 확인·API 문서·DB 마이그레이션. */
+/** 공통 정책이 멤버 서비스에 적용됐는지 확인한다: 사용자 무인증·오류 응답·페이지네이션·상태 확인·API 문서·DB 마이그레이션. */
 @SpringBootTest(properties = [TestProperties.NO_LOCAL_SECRETS])
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class)
 class CommonPolicyTests {
   @Autowired lateinit var mockMvc: MockMvc
   @Autowired lateinit var jdbcTemplate: JdbcTemplate
-
-  private fun bearer(token: String = TestJwt.token()) = "Bearer $token"
 
   private fun ResultActionsDsl.problem(status: Int, code: String) = andExpect {
     status { isEqualTo(status) }
@@ -49,75 +45,68 @@ class CommonPolicyTests {
   }
 
   @Test
-  fun `토큰이 없으면 401 ProblemDetail과 WWW-Authenticate를 돌려준다`() {
-    mockMvc.get("/test-probe/page").problem(401, "UNAUTHORIZED").andExpect {
-      header { string(HttpHeaders.WWW_AUTHENTICATE, org.hamcrest.Matchers.startsWith("Bearer")) }
-    }
-  }
-
-  @Test
-  fun `대상이 다르거나 만료됐거나 다른 키로 서명한 토큰은 401이다`() {
-    val invalid =
-      listOf(
-        TestJwt.token(audience = listOf("group-service")),
-        TestJwt.token(expiresIn = Duration.ofMinutes(-5)),
-        TestJwt.token(signer = TestJwt.otherKeyPair),
-      )
-    for (token in invalid) {
-      mockMvc
-        .get("/test-probe/page") { header(HttpHeaders.AUTHORIZATION, bearer(token)) }
-        .problem(401, "UNAUTHORIZED")
-    }
-  }
-
-  @Test
-  fun `유효한 토큰이면 통과하고 페이지 크기는 기본 20, 최대 100이다`() {
+  fun `사용자 인증 없이 요청하며 기존 Bearer 헤더도 인증에 사용하지 않는다`() {
+    mockMvc.get("/test-probe/page").andExpect { status { isOk() } }
     mockMvc
-      .get("/test-probe/page") { header(HttpHeaders.AUTHORIZATION, bearer()) }
+      .get("/test-probe/page") {
+        header(HttpHeaders.AUTHORIZATION, listOf("Bearer", "unused").joinToString(" "))
+      }
+      .andExpect { status { isOk() } }
+  }
+
+  @Test
+  fun `요청이 통과하고 페이지 크기는 기본 20, 최대 100이다`() {
+    mockMvc
+      .get("/test-probe/page") {}
       .andExpect {
         status { isOk() }
         jsonPath("$.page") { value(0) }
         jsonPath("$.size") { value(20) }
       }
-    mockMvc
-      .get("/test-probe/page?size=1000") { header(HttpHeaders.AUTHORIZATION, bearer()) }
-      .andExpect { jsonPath("$.size") { value(100) } }
+    mockMvc.get("/test-probe/page?size=1000") {}.andExpect { jsonPath("$.size") { value(100) } }
   }
 
   @Test
   fun `오류 응답은 ProblemDetail과 code를 갖고 내부 정보를 넣지 않는다`() {
-    mockMvc
-      .get("/test-probe/none") { header(HttpHeaders.AUTHORIZATION, bearer()) }
-      .problem(404, "NOT_FOUND")
-    mockMvc
-      .put("/test-probe/page") { header(HttpHeaders.AUTHORIZATION, bearer()) }
-      .problem(405, "METHOD_NOT_ALLOWED")
-    mockMvc
-      .get("/test-probe/number?value=abc") { header(HttpHeaders.AUTHORIZATION, bearer()) }
-      .problem(400, "BAD_REQUEST")
+    mockMvc.get("/test-probe/none") {}.problem(404, "NOT_FOUND")
+    mockMvc.put("/test-probe/page") {}.problem(405, "METHOD_NOT_ALLOWED")
+    mockMvc.get("/test-probe/number?value=abc") {}.problem(400, "BAD_REQUEST")
     mockMvc
       .post("/test-probe/validated") {
-        header(HttpHeaders.AUTHORIZATION, bearer())
         contentType = MediaType.APPLICATION_JSON
         content = """{"name": ""}"""
       }
       .problem(400, "VALIDATION_FAILED")
     mockMvc
-      .get("/test-probe/boom") { header(HttpHeaders.AUTHORIZATION, bearer()) }
+      .get("/test-probe/boom") {}
       .problem(500, "INTERNAL_ERROR")
       .andExpect {
         content { string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("내부 상세"))) }
+        jsonPath("$.title") { value("내부 처리 오류") }
+        jsonPath("$.detail") { value("요청을 처리하지 못했습니다.") }
       }
   }
 
   @Test
-  fun `API 문서는 인증 없이 열리고 Bearer 보안 스킴을 선언한다`() {
+  fun `멤버 명세와 Swagger는 키 없이 열리고 내부 문서 전달 경로는 명세에서 제외한다`() {
     mockMvc.get("/v3/api-docs").andExpect {
       status { isOk() }
-      jsonPath("$.components.securitySchemes.bearerAuth.scheme") { value("bearer") }
-      jsonPath("$.security[0].bearerAuth") { exists() }
+      jsonPath("$.info.version") { value("0.1.0") }
+      jsonPath("$.security") { doesNotExist() }
+      jsonPath("$.paths['/internal-docs/group']") { doesNotExist() }
     }
     mockMvc.get("/swagger-ui/index.html").andExpect { status { isOk() } }
+    mockMvc.get("/swagger-ui/swagger-initializer.js").andExpect {
+      status { isOk() }
+      content { string(org.hamcrest.Matchers.containsString("supportedSubmitMethods")) }
+      content {
+        string(
+          org.hamcrest.Matchers.not(
+            org.hamcrest.Matchers.containsString(TestProperties.internalKey)
+          )
+        )
+      }
+    }
   }
 
   @Test

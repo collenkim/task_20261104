@@ -1,4 +1,0 @@
-# local 프로필: bootRun·로컬 컨테이너 실행. 멤버 서비스 기본 주소는 같은 PC의 멤버 서비스 포트.
-task:
-  member-client:
-    base-url: ${TASK_MEMBER_CLIENT_BASE_URL:http://localhost:8081}

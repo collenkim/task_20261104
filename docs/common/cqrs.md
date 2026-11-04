@@ -4,7 +4,7 @@
 | --- | --- |
 | 목적 | 서비스 내부 계층과 조회·변경 경로를 나누는 규칙을 정한다 |
 | 범위 | 각 서비스의 `src/main/kotlin/task/<서비스>/` |
-| 관련 코드 | `services/*/src/main/kotlin/task/*/` (현재는 `presentation/error`, `infrastructure/configuration`, `infrastructure/client`) |
+| 관련 코드 | `services/*/src/main/kotlin/task/*/` (현재는 `presentation/error`, `infrastructure/configuration`, 멤버의 `infrastructure/client`) |
 
 CQRS는 서비스 내부에서만 적용한다. 서비스마다 DB는 하나이고, 조회 모델과 변경 모델은 코드 경로로 나눈다(별도 조회 DB·이벤트 저장소 없음).
 
@@ -29,6 +29,7 @@ task.<서비스>
 - 의존 방향: `presentation → application → domain`.
   - `infrastructure`는 `application/port`를 구현한다.
   - `application`은 `infrastructure`를 직접 참조하지 않는다.
+- OpenAPI 전달·Swagger 초기화는 업무 조회가 아닌 기술 기능으로 `infrastructure/configuration`에서 처리한다.
 - 패키지는 필요한 시점에 만든다. 빈 패키지를 미리 두지 않는다.
 
 ## POL-CQRS-002 조회 경로
@@ -54,5 +55,5 @@ task.<서비스>
 | 조회 조건 | `<대상><동작>Query` | `MemberDetailQuery` |
 | 조회 처리기 | `<대상><동작>QueryHandler` | `MemberDetailQueryHandler` |
 | 조회 결과 | `<대상>View`, `<대상>SummaryView` | `MemberView` |
-| 외부 서비스 계약 | `<서비스>Port` 또는 `<대상>Reader` | `MemberReader` |
+| 외부 서비스 계약 | `<서비스>Port` 또는 `<대상>Reader` | `GroupMembershipReader`(멤버 서비스가 그룹 데이터를 읽는 계약) |
 | 엔티티 | `<대상>Entity` | `GroupEntity` |

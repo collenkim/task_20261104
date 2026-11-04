@@ -2,49 +2,49 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 목적 | 서비스가 다른 서비스 API를 호출하는 방식(주소·제한 시간·재시도·인증·실패 처리)을 정한다 |
-| 범위 | 그룹 서비스 → 멤버 서비스 호출(현재 유일한 방향) |
-| 관련 코드 | `services/group-service/src/main/kotlin/task/group/infrastructure/client/`, `services/group-service/src/main/resources/application*.yaml`(`task.member-client`) |
+| 목적 | 멤버 → 그룹 호출의 주소·키·제한 시간·실패 처리 |
+| 범위 | 유일한 호출 방향은 멤버 → 그룹. 그룹은 다른 서비스를 호출하지 않음 |
+| 관련 코드 | 멤버 `infrastructure/client/`, `application/exception/` |
 
-## POL-COMM-001 호출 방식
+## POL-COMM-001 호출 방식과 방향
 
-- HTTP API 호출만 한다([POL-ARCH-003](architecture.md#pol-arch-003-통신)). 메시지 브로커·DB 공유·코드 공유를 쓰지 않는다.
-- 클라이언트는 Spring `RestClient`(JDK `HttpClient` 기반)다.
-  - 빈 이름은 `memberRestClient`(`MemberClientConfiguration`)다.
-  - 조회 API별 HTTP 인터페이스(`@HttpExchange`)는 기능 개발 때 이 클라이언트 위에 만든다.
-- 응답 형식은 호출하는 서비스가 자기 코드로 정의한다. 다른 서비스의 클래스를 가져다 쓰지 않는다([POL-ARCH-002](architecture.md#pol-arch-002-직접-참조-금지)).
+- HTTP API와 Spring RestClient(JDK HttpClient)만 사용한다. 다른 서비스 코드·DTO·DB를 직접 참조하지 않는다.
+- 빈 이름은 `groupRestClient`다. 업무별 HTTP 인터페이스와 application port는 기능 개발 때 추가한다.
+- 현재 실제 연동은 그룹 OpenAPI 명세 조회다. 업무 조회 연동은 아직 없다.
 
 ## POL-COMM-002 주소와 기동
 
-| 실행 방식 | 멤버 서비스 주소 | 설정 위치 |
-| --- | --- | --- |
-| bootRun(local 프로필) | `http://localhost:8081` | `application-local.yaml` 기본값 |
-| 그룹 컨테이너(Compose `task-group`) | `http://host.docker.internal:8081` | `compose.yaml` 기본값 |
-| 그 밖(별도 서버 등) | 직접 지정 | 환경변수 `TASK_MEMBER_CLIENT_BASE_URL` |
+| 실행 방식 | 그룹 주소 |
+| --- | --- |
+| 루트 일괄 Compose | `http://172.30.104.3:8082` (루트 덮어쓰기에서 지정) |
+| 멤버 단독 Compose | 기본 `http://127.0.0.1:9` (그룹 없음). 별도 그룹이 있으면 `TASK_GROUP_CLIENT_BASE_URL` 지정 |
+| IDE·bootRun local | `http://127.0.0.1:8082` |
+| 기본 프로필·별도 배포 | `TASK_GROUP_CLIENT_BASE_URL` 필수 |
 
-- 기본 프로필은 주소 기본값이 없다. 비어 있거나 http(s) URL이 아니면 기동하지 않는다.
-- 두 서비스는 서로 다른 Compose 프로젝트라 서로의 네트워크에 붙지 않는다. 컨테이너에서는 호스트 포트로 호출한다.
-- 기동할 때 다른 서비스를 호출하지 않는다. 멤버 서비스가 꺼져 있어도 그룹 서비스는 기동하고 health·readiness가 UP이다.
-  - readiness에는 자기 DB만 넣는다(`readinessState,db`).
+- 주소는 http(s)://숫자IP:명시적포트다. 도메인·사용자 정보·쿼리·프래그먼트·추가 경로는 거부한다. IPv4·IPv6를 지원한다.
+- 기동 시 그룹을 호출하지 않는다. readiness는 자기 DB만 확인한다.
+- 내부 주소·키·그룹 오류 본문을 사용자 오류 응답에 넣지 않는다. 브라우저용 그룹 명세에서도 내부 서버 주소를 제거한다.
 
 ## POL-COMM-003 제한 시간과 재시도
 
-| 항목 | 값 | 설정 키 |
-| --- | --- | --- |
-| 연결 제한 | 2초 | `task.member-client.connect-timeout` |
-| 응답 제한 | 3초 | `task.member-client.read-timeout` |
-| 재시도 | 최대 1회(0 또는 1만 허용) | `task.member-client.max-retries` |
+| 설정 | 기본값 |
+| --- | --- |
+| `task.group-client.connect-timeout` | 2초 |
+| `task.group-client.read-timeout` | 3초 |
+| `task.group-client.max-retries` | 1 (0 또는 1) |
 
-- 재시도 대상: **조회(GET·HEAD)이면서 연결 실패 또는 시간 초과**인 경우만.
-  - 원인 예외가 `ConnectException`, `HttpTimeoutException`, `SocketTimeoutException`일 때.
-- 재시도하지 않는 것: 응답을 받은 경우(4xx·5xx 포함), 변경 요청(POST 등).
-- 서킷 브레이커·대체 응답은 두지 않는다.
-- 재시도할 때 경고 로그에는 메서드·경로·예외 종류만 남긴다.
+- 양수 제한 시간을 요구한다. 위 시간은 각 시도 기준이며 재시도까지 포함한 전체 3초 제한이 아니다.
+- GET/HEAD의 연결 실패·시간 초과만 다시 시도한다. 응답을 받은 4xx·5xx와 변경 요청은 재시도하지 않는다.
+- 리다이렉트는 따라가지 않는다. 로그에는 방법·경로·예외 종류만 남긴다.
 
 ## POL-COMM-004 인증과 실패 처리
 
-- 서비스 간 고정 토큰(`aud=member-service`)을 모든 요청에 자동으로 붙인다([POL-SEC-003](security.md#pol-sec-003-토큰-종류)).
-  - 토큰 파일이 없으면 기동하지 않는다.
-- 호출 실패를 빈 결과나 기본값으로 숨기지 않는다. 호출한 API는 오류로 응답한다.
-  - 응답 코드·`code` 값(예: 다른 서비스 장애)은 서비스 간 조회를 만들 때 [POL-API-002](api-conventions.md#pol-api-002-오류-응답) 표에 추가한다.
-- 없는 식별자를 어떻게 보여 줄지는 기능 개발 때 정한다([project-setup-plan 8절](project-setup-plan.md#8-이후-작업에서-구체화할-항목-2026-11-04-확장안-검토-결과-이번에는-구현하지-않음)).
+- `X-Internal-Service-Key`를 서버 설정값으로 추가한다([보안](security.md#pol-sec-003-내부-호출-키)). 사용자 인증은 없다.
+- 명세 조회 연결 실패·시간 초과·그룹 5xx: 503 `GROUP_SERVICE_UNAVAILABLE`.
+- 그룹의 401·403, 리다이렉트·잘못된 명세·명세 404: 호출 설정/계약 오류이므로 500 `INTERNAL_ERROR`.
+- 그룹 업무 API의 404·업무 오류는 해당 업무 계약에서 매핑한다. 명세 조회의 404 규칙을 일괄 적용하지 않는다.
+- 실패를 빈 결과로 숨기지 않는다. 사용자 응답은 공통 ProblemDetail이며 내부 응답·주소·키를 공개하지 않는다.
+
+## POL-COMM-005 계약 소유
+
+그룹 내부 계약은 `services/group-service/docs/api.md`가 소유한다. 멤버는 자기 코드의 모델로 읽는다. 현재 명세 전달 테스트는 실제 HTTP를 사용하지만 업무 조회 계약의 증거는 아니다. 기능 개발 때 그룹 명세와 소비자 테스트로 호환성을 확인한다.

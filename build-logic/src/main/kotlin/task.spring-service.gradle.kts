@@ -74,5 +74,6 @@ tasks.named<BootRun>("bootRun") {
     providers.environmentVariable("SPRING_PROFILES_ACTIVE").getOrElse("local"),
   )
   environment("TASK_SECRETS_DIR", secrets.resolve("${project.name}/config").absolutePath)
-  environment("TASK_JWT_PUBLIC_KEY", secrets.resolve("jwt/public-key.pem").absolutePath)
+  environment("TASK_INTERNAL_SECRETS_DIR", secrets.resolve("internal").absolutePath)
+  systemProperty("server.address", "127.0.0.1")
 }

@@ -2,70 +2,29 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 목적 | 그룹 서비스의 책임·구성·실행 방법을 정리한다 |
-| 범위 | `services/group-service/` |
-| 관련 문서 | [공통 문서](../../../docs/common/README.md), [로컬 실행](../../../docs/common/local-development.md), [서비스 간 통신](../../../docs/common/service-communication.md) |
+| 목적 | 그룹 서비스의 구성·독립 실행 안내 |
+| 범위 | group-service |
+| 관련 문서 | [정책](policies.md), [엔티티](entities.md), [API](api.md), [공통 실행](../../../docs/common/local-development.md) |
 
-## 책임
-
-- 그룹 정보와 소속 관계(그룹 ↔ 멤버 식별자)를 소유하고 조회 API를 제공한다.
-- 멤버 정보가 필요하면 멤버 서비스 API를 호출한다. 멤버 데이터는 식별자만 저장한다.
-
-## 구성
-
-| 항목 | 값 |
+| 구성 | 값 |
 | --- | --- |
-| Gradle 프로젝트 | `:group-service` → `build/libs/group-service.jar` |
-| 패키지 | `task.group` |
-| 앱 포트 | 8082 |
-| DB | `group-db`(PostgreSQL 18.6), DB·스키마 `group_service`, 앱 계정 `group_app`, 호스트 포트 127.0.0.1:25432 |
-| Compose | `infra/compose.yaml`, 프로젝트 `task-group`, 볼륨 `group-db-data`, 네트워크 `group-db-net` |
-| 이미지 | `task/group-service:local` (`Dockerfile`, 실행 사용자 `app`) |
-| JWT `aud` | `group-service` |
-| DB 접속 환경변수 | `GROUP_DB_HOST`(기본 `localhost`), `GROUP_DB_PORT`(기본 `25432`) |
-| 멤버 서비스 주소 | `TASK_MEMBER_CLIENT_BASE_URL` (local 기본 `http://localhost:8081`, 컨테이너 기본 `http://host.docker.internal:8081`) |
+| 앱 포트 | 8082 (호스트 미공개) |
+| MariaDB | 11.8.9, DB/스키마 group_service, 계정 group_app |
+| IDE용 DB 포트 | 127.0.0.1:23306 |
+| Compose 프로젝트 | task-group |
+| 내부 호출 확인 | X-Internal-Service-Key, 파일 주입 |
 
-현재 코드(SETUP-001): 공통 정책 구현과 멤버 서비스 클라이언트 설정만 있다.
+다른 서비스를 호출하지 않는다. 그룹 API와 OpenAPI는 내부 키가 필요하고 별도 Swagger UI는 없다. 명세는 멤버 Swagger에서 읽는다.
 
-| 경로 | 내용 |
-| --- | --- |
-| `presentation/error/` | ProblemDetail + `code` 오류 응답 |
-| `infrastructure/configuration/` | JWT 인증, 401·403 응답, OpenAPI, local Swagger 자동 인증 |
-| `infrastructure/client/` | 멤버 서비스 `RestClient`(연결 2초·응답 3초, 조회의 연결 실패·시간 초과만 1회 재시도, 서비스 간 토큰 자동 첨부) |
-| `src/main/resources/db/migration/V1__init_schema.sql` | 스키마 설명만 있는 첫 마이그레이션 |
-
-- 멤버 서비스가 꺼져 있어도 기동한다. readiness는 자기 DB만 본다.
-
-## 실행
-
-아래 명령은 **이 서비스 폴더(`services/group-service`)에서** 실행한다.
-
-- Gradle Wrapper는 저장소 루트에 있으므로 `../../gradlew`로 부른다. 서비스 폴더에서 부르면 이 서비스의 작업만 실행된다.
-- `generateLocalSecrets`는 루트 프로젝트 작업이라 앞에 `:`를 붙인다.
-- Compose 파일은 `infra/compose.yaml`이다.
-- 저장소 루트에서 실행하는 명령은 [로컬 실행](../../../docs/common/local-development.md)을 본다.
+명령은 서비스 폴더(`services/group-service`) 기준이다.
 
 ```powershell
-cd services/group-service                                 # 저장소 루트에서 이동
-
-../../gradlew :generateLocalSecrets                        # 처음 한 번(값은 출력하지 않음)
-
-# 방식 1: DB는 Docker, 앱은 bootRun
-docker compose -f infra/compose.yaml up -d
-../../gradlew bootRun
-
-# 방식 2: 앱과 DB 모두 Docker
-../../gradlew bootJar
-docker compose -f infra/compose.yaml --profile app up -d --build
-
-# 종료(볼륨 유지)
-docker compose -f infra/compose.yaml --profile app down
+../../gradlew.bat generateLocalSecrets
+docker compose -f infra/compose.yaml up -d --build --wait
+docker compose -f infra/compose.yaml ps
+docker compose -f infra/compose.yaml down
 ```
 
-- 확인: http://localhost:8082/actuator/health, http://localhost:8082/swagger-ui.html
-- 테스트: `../../gradlew test` (Docker 필요)
+루트 일괄 실행과 단독 실행은 볼륨이 다르다. 통합 호출은 저장소 루트의 `docker compose up -d --build --wait`를 사용한다. IDE 바인딩과 비밀 파일 위치는 공통 실행 문서를 따른다.
 
-## 이후 작업에서 쓸 문서
-
-- `policies.md`(서비스 정책), `entities.md`(엔티티·테이블), `api.md`(API 정의서): 조회 기능을 만들 때 쓴다.
-- 멤버 서비스 호출 실패·없는 식별자 처리 방식은 서비스 간 조회를 만들 때 정한다.
+현재는 실행 골격이다. 업무 엔티티·조회 API는 후속 작업이며 테스트 전용 경로와 테이블은 운영 산출물에 포함하지 않는다.

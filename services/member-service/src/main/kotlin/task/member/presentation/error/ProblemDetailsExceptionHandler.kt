@@ -6,14 +6,14 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.HttpStatusCode
 import org.springframework.http.ProblemDetail
 import org.springframework.http.ResponseEntity
-import org.springframework.security.access.AccessDeniedException
-import org.springframework.security.core.AuthenticationException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.context.request.WebRequest
 import org.springframework.web.method.annotation.HandlerMethodValidationException
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler
+import task.member.application.exception.GroupServiceConfigurationException
+import task.member.application.exception.GroupServiceUnavailableException
 
 /**
  * 모든 오류 응답을 RFC 9457 ProblemDetail + `code`로 만든다(POL-API-002).
@@ -41,23 +41,39 @@ class ProblemDetailsExceptionHandler : ResponseEntityExceptionHandler() {
           is HandlerMethodValidationException -> ErrorCode.VALIDATION_FAILED
           else -> ErrorCode.of(statusCode)
         }
-      problem.setProperty(CODE, code.name)
+      problem.setProperty(CODE, code.code)
+      problem.title = code.codeName
+      if (problem.detail == null) problem.detail = code.description
     }
     return response
   }
 
-  /** 보안 예외는 Spring Security(인증 진입점·접근 거부 처리기)가 401·403 ProblemDetail로 만들도록 그대로 넘긴다. */
-  @ExceptionHandler(AccessDeniedException::class, AuthenticationException::class)
-  fun rethrowSecurity(ex: RuntimeException): Nothing = throw ex
+  @ExceptionHandler(GroupServiceUnavailableException::class)
+  fun handleGroupUnavailable(): ProblemDetail = groupProblem(ErrorCode.GROUP_SERVICE_UNAVAILABLE)
+
+  @ExceptionHandler(GroupServiceConfigurationException::class)
+  fun handleGroupConfiguration(): ProblemDetail = groupProblem(ErrorCode.INTERNAL_ERROR)
+
+  private fun groupProblem(code: ErrorCode): ProblemDetail {
+    log.warn("그룹 호출 실패: {}", code.code)
+    return ProblemDetail.forStatusAndDetail(HttpStatusCode.valueOf(code.status), code.description)
+      .apply {
+        title = code.codeName
+        setProperty(CODE, code.code)
+      }
+  }
 
   @ExceptionHandler(Exception::class)
   fun handleUnexpected(ex: Exception): ProblemDetail {
     log.error("처리되지 않은 오류", ex)
     return ProblemDetail.forStatusAndDetail(
         HttpStatus.INTERNAL_SERVER_ERROR,
-        "요청을 처리하지 못했습니다.",
+        ErrorCode.INTERNAL_ERROR.description,
       )
-      .apply { setProperty(CODE, ErrorCode.INTERNAL_ERROR.name) }
+      .apply {
+        title = ErrorCode.INTERNAL_ERROR.codeName
+        setProperty(CODE, ErrorCode.INTERNAL_ERROR.code)
+      }
   }
 
   companion object {

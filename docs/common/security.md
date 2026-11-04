@@ -2,75 +2,65 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 목적 | 인증 방식, 인증 없이 여는 경로, 키·토큰·비밀번호 관리 규칙을 정한다 |
-| 범위 | 모든 서비스의 HTTP API, 서비스 간 호출, 로컬 실행 환경 |
-| 관련 코드 | `services/*/src/main/kotlin/task/*/infrastructure/configuration/`(`SecurityConfiguration`, `ProblemDetailSecurityHandler`, `SwaggerAutoAuthConfiguration`), `build-logic/src/main/kotlin/task/buildlogic/LocalSecretsTask.kt` |
+| 목적 | 사용자 무인증 범위와 그룹 내부 호출 키·비밀 파일 관리 기준 |
+| 범위 | 멤버·그룹 HTTP 요청, 로컬 실행 |
+| 관련 코드 | 그룹 InternalServiceConfiguration, 멤버 GroupClientConfiguration, LocalSecretsTask |
 
 ## POL-SEC-001 인증 방식
 
-- 모든 API는 JWT Bearer(`Authorization: Bearer <토큰>`)로 인증한다. 세션·쿠키·Basic·폼 로그인을 쓰지 않는다(무상태, CSRF 비활성).
-- 서비스는 **공개키로 검증만** 한다. 토큰을 발급하지 않는다.
-
-| 검증 항목 | 값 | 설정 |
-| --- | --- | --- |
-| 서명 | RS256, 공개키 파일 | `spring.security.oauth2.resourceserver.jwt.public-key-location`, `jws-algorithms` |
-| 만료 | `exp` 확인(기본 허용 오차 60초) | Spring Security 기본 |
-| 대상 | `aud`에 자기 서비스 이름이 있어야 함 | `...jwt.audiences`(`member-service` / `group-service`) |
-
-- 실패하면 401 ProblemDetail(`UNAUTHORIZED`)과 `WWW-Authenticate: Bearer ...`를 돌려준다([POL-API-002](api-conventions.md#pol-api-002-오류-응답)).
-- 권한(역할·범위)별 인가는 기능 개발 때 정한다. 지금은 유효한 토큰이면 모든 API를 허용한다.
+- 사용자 로그인·JWT·역할·권한은 이번 범위에서 제외한다. 멤버 API는 사용자 토큰 없이 호출한다.
+- 멤버 → 그룹 요청에 `X-Internal-Service-Key`를 추가한다. 그룹은 설정한 키와 비교한다.
+- 누락·불일치·중복 헤더는 403 `INTERNAL_ACCESS_DENIED` ProblemDetail이다. 키 값은 응답·로그에 쓰지 않는다.
+- 두 앱은 필수 키 설정이 없으면 기동하지 않는다. 값 비교는 SHA-256 고정 길이 해시를 `MessageDigest.isEqual`로 수행한다.
+- 이 방식은 공유 키 소유를 확인한다. 특정 프로세스의 신원을 증명하는 방식은 아니다.
+- 키가 평문 HTTP를 암호화하지는 않는다. 로컬 컨테이너 통신 외의 호스트 간 배포에는 HTTPS를 사용한다.
 
 ## POL-SEC-002 인증 없이 여는 경로
 
-| 경로 | 용도 |
+| 경로 | 멤버 | 그룹 |
+| --- | --- | --- |
+| 업무 API | 사용자 인증 없음 | 내부 키 필요 |
+| GET/HEAD `/actuator/health`, `/actuator/health/**` | 키 없음 | 키 없음 |
+| `/v3/api-docs`, `/v3/api-docs/**` | 키 없음 | 내부 키 필요 |
+| `/swagger-ui.html`, `/swagger-ui/**` | 키 없음 | 제공하지 않음 |
+| GET `/internal-docs/group` | 키 없음. 멤버 서버가 그룹 호출에 키 추가 | 제공하지 않음 |
+| `/error`, 오류 디스패치 | 키 없음 | 키 없음 |
+
+그룹에서 존재하지 않는 경로도 필터를 먼저 거친다. 키 검사 제외 여부는 컨테이너가 해석한 경로로 판단하며 점 경로를 health 예외로 허용하지 않는다. 키 없는 Swagger 요청은 403, 정상 키를 보낸 Swagger 요청은 404다. health의 응답에는 상세 정보를 공개하지 않는다.
+
+## POL-SEC-003 내부 호출 키
+
+- 헤더: `X-Internal-Service-Key`, 설정: `task.internal-service.key`.
+- 파일: `secrets/internal/task.internal-service.key`. 생성 도구가 32바이트 난수의 Base64URL 값을 만든다.
+- 두 서버만 파일로 읽는다. 브라우저·Swagger·이미지·소스·Git에 값을 넣지 않는다.
+- 멤버 클라이언트는 설정한 키로 헤더를 덮어쓴다. 사용자 요청 헤더를 그룹에 전달하지 않는다.
+- 리다이렉트를 따라 키를 다른 주소로 보내지 않는다.
+
+## POL-SEC-004 키·비밀번호
+
+| 명령·파일 | 동작 |
 | --- | --- |
-| `/actuator/health`, `/actuator/health/**` | 상태 확인(liveness·readiness). 노출하는 actuator 엔드포인트는 `health`뿐 |
-| `/v3/api-docs`, `/v3/api-docs/**` | OpenAPI 명세 |
-| `/swagger-ui.html`, `/swagger-ui/**` | Swagger UI |
-| `/error` | Spring 오류 처리 경로 |
+| `./gradlew generateLocalSecrets` | 없는 내부 키·DB 비밀번호만 생성. 기존 값 유지 |
+| `./gradlew rotateInternalServiceKey` | 내부 키만 교체. 두 앱을 재시작해야 적용 |
+| `secrets/<서비스>/db-admin-password` | DB root 전용. 앱에 전달하지 않음 |
+| `secrets/<서비스>/config/spring.datasource.password` | 해당 DB 앱 계정 비밀번호 |
+| `secrets/internal/task.internal-service.key` | 두 앱의 내부 호출 키 |
 
-- 목록은 `SecurityConfiguration.PUBLIC_PATHS` 한곳에서 관리한다. 늘릴 때는 이 표도 함께 고친다.
-
-## POL-SEC-003 토큰 종류
-
-| 토큰 | `sub` | `aud` | 쓰는 곳 | 파일 |
-| --- | --- | --- | --- | --- |
-| Swagger·로컬 호출용 | `local-swagger` | `member-service`, `group-service` | Swagger UI 자동 인증, 로컬 수동 호출 | `secrets/<서비스>/config/task.security.swagger-token` |
-| 서비스 간 호출용 | `group-service` | `member-service` | 그룹 → 멤버 호출 | `secrets/group-service/config/task.member-client.token` |
-
-- 공통: 발급자 `iss=task-local`, 유효 기간 365일, `jti` 포함, 헤더 `kid`는 공개키 지문.
-- 서비스 간 토큰은 `aud`가 멤버 서비스뿐이라 그룹 서비스 자신에게 보내면 401이다(실행 확인).
-- 사용자 로그인·토큰 발급 서버는 이번 범위가 아니다([ADR-003](decisions/ADR-003-fixed-jwt-keys.md)).
-
-## POL-SEC-004 키·토큰·비밀번호
-
-- **생성**: `./gradlew generateLocalSecrets`가 저장소 `secrets/`에 만든다. 값은 출력하지 않는다.
-
-  | 파일 | 내용 | 다시 실행할 때 |
-  | --- | --- | --- |
-  | `jwt/private-key.pem`, `jwt/public-key.pem` | RSA 2048 키 쌍(PKCS#8 / X.509) | 유지 |
-  | `<서비스>/db-admin-password` | DB 관리자(`postgres`) 비밀번호. DB 컨테이너만 읽음 | 유지 |
-  | `<서비스>/config/spring.datasource.password` | 앱 DB 계정 비밀번호 | 유지 |
-  | `<서비스>/config/task.security.swagger-token` | Swagger·로컬 호출용 토큰 | 유지 |
-  | `group-service/config/task.member-client.token` | 서비스 간 호출용 토큰 | 유지 |
-
-  - 키 쌍과 토큰 교체: `./gradlew rotateLocalJwt`. 실행 중인 서비스는 재시작해야 새 공개키를 읽는다.
-  - DB 비밀번호는 DB 볼륨을 처음 만들 때만 적용되므로 자동으로 교체하지 않는다([local-development](local-development.md)).
-- **전달은 파일로만** 한다.
-  - Spring: configtree(`spring.config.import: optional:configtree:${TASK_SECRETS_DIR}/`). 파일 이름이 속성 이름이다.
-  - Compose: `secrets:`로 `/run/secrets/<속성 이름>`에 마운트한다. PostgreSQL은 `POSTGRES_PASSWORD_FILE`을 쓴다.
-  - 비밀값을 환경변수·설정 파일·명령줄 인수·이미지에 넣지 않는다. 환경변수에는 파일 위치만 둔다.
-- **보관**
-  - `secrets/`는 `.gitignore`로 Git에서 제외한다.
-  - Docker 빌드 컨텍스트에는 jar만 들어간다(`.dockerignore`).
-  - AI 에이전트는 `secrets/`를 읽지 않는다(`AGENTS.md`, `.claude/settings.json` deny).
-- 개인 PC 로컬 실행 전용 값이다. 다른 환경은 그 환경의 비밀 저장소에서 같은 파일 이름으로 주입한다.
+- IDE·bootRun은 서비스 configtree와 내부 키 configtree를 읽는다. Compose는 파일을 `/run/secrets`에 마운트한다.
+- 생성 도구는 값 대신 파일 이름만 출력한다. 환경변수에는 비밀값 대신 위치를 넣는다.
+- AI는 `secrets/`를 열지 않는다(AGENTS.md). 생성 도구·실행 앱이 파일을 사용한다.
+- JWT 파일은 생성·사용하지 않는다. 기존 로컬 JWT 파일을 자동으로 삭제하거나 읽지 않는다. 사용자가 필요에 따라 정리한다.
+- DB 비밀번호는 기존 데이터 볼륨 초기화 이후 자동 교체하지 않는다.
+- Docker 빌드 허용 목록에서 secrets·AI 로그·Git·테스트·캐시를 제외한다.
 
 ## POL-SEC-005 Swagger 자동 인증 (local 프로필)
 
-- local 프로필에서만 켜진다(`SwaggerAutoAuthConfiguration`, `@Profile("local")`).
-- `/swagger-ui/swagger-initializer.js` 응답에 Swagger·로컬 호출용 토큰을 `preauthorizeApiKey("bearerAuth", …)`로 넣는다.
-  - 화면을 열면 바로 인증된 상태로 API를 호출할 수 있다.
-  - 응답은 `Cache-Control: no-store`로 캐시하지 않는다.
-- local 프로필인데 토큰 파일이 없으면 기동하지 않고 `./gradlew generateLocalSecrets`를 안내한다.
-- 기본 프로필(운영 가정)에서는 토큰을 넣지 않는다. Swagger UI의 Authorize 버튼으로 직접 입력한다.
+**폐기**: 사용자 토큰 주입을 제거했다. 현재 Swagger는 키 입력 없이 명세를 조회하고 멤버 API를 실행한다. 그룹 명세는 읽기 전용이다([API 문서](api-conventions.md#pol-api-004-api-문서)).
+
+## POL-SEC-006 그룹 서비스 접근 통제
+
+- 그룹 앱의 호스트 포트는 공개하지 않는다. 루트 Compose의 앱 통신 네트워크에는 두 앱만 연결한다.
+- DB 네트워크는 각 서비스 소유이며 앱 통신 네트워크에 DB를 연결하지 않는다.
+- 네트워크는 추가 방어다. Docker 관리 권한·같은 호스트의 관리자 접근까지 차단한다고 보장하지 않는다.
+- IDE·bootRun은 앱을 127.0.0.1로 바인딩한다. 컨테이너는 0.0.0.0으로 바인딩하되 그룹 ports는 없다.
+- 그룹 업무 API와 명세에는 내부 키가 필요하다. 명세는 멤버가 받아 공개한다.

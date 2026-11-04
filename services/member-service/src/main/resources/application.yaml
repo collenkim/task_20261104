@@ -1,15 +1,15 @@
 # 멤버 서비스 기본 설정. 비밀값은 파일(configtree)로만 받는다: docs/common/security.md, docs/common/local-development.md
 # 비밀값 위치는 환경변수로 받는다(없으면 기동하지 않는다).
 # - TASK_SECRETS_DIR: 설정 파일 폴더(파일 이름 = 속성 이름). 절대 경로로 준다(configtree는 '..'이 든 경로를 읽지 못한다).
-# - TASK_JWT_PUBLIC_KEY: JWT 검증 공개키 파일.
+# - TASK_INTERNAL_SECRETS_DIR: 내부 호출 키 폴더(컨테이너는 TASK_SECRETS_DIR와 같음).
 # bootRun은 저장소 secrets/ 의 절대 경로를, 컨테이너는 Compose secrets 의 /run/secrets 를 넣는다.
 spring:
   application:
     name: member-service
   config:
-    import: "optional:configtree:${TASK_SECRETS_DIR}/"
+    import: "optional:configtree:${TASK_SECRETS_DIR}/,optional:configtree:${TASK_INTERNAL_SECRETS_DIR:${TASK_SECRETS_DIR}}/"
   datasource:
-    url: jdbc:postgresql://${MEMBER_DB_HOST:localhost}:${MEMBER_DB_PORT:15432}/member_service
+    url: jdbc:mariadb://${MEMBER_DB_HOST:localhost}:${MEMBER_DB_PORT:13306}/member_service
     username: member_app
   jpa:
     open-in-view: false
@@ -17,11 +17,13 @@ spring:
       ddl-auto: validate
     properties:
       hibernate:
-        default_schema: member_service
+        jdbc:
+          time_zone: UTC
   flyway:
+    locations: classpath:db/migration/mariadb
     schemas: member_service
     default-schema: member_service
-    create-schemas: true
+    create-schemas: false
   data:
     web:
       pageable:
@@ -29,14 +31,6 @@ spring:
         max-page-size: 100
         # Page 응답 JSON 형식 고정(Spring Data PagedModel)
         serialization-mode: via-dto
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          public-key-location: "file:${TASK_JWT_PUBLIC_KEY}"
-          jws-algorithms: RS256
-          audiences: member-service
-
 server:
   port: 8081
   shutdown: graceful
@@ -61,3 +55,10 @@ management:
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
+
+task:
+  group-client:
+    base-url: ${TASK_GROUP_CLIENT_BASE_URL:}
+    connect-timeout: 2s
+    read-timeout: 3s
+    max-retries: 1

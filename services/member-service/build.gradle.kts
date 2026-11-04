@@ -3,22 +3,21 @@ plugins { id("task.spring-service") }
 
 dependencies {
   implementation(libs.spring.boot.starter.webmvc)
+  implementation(libs.spring.boot.starter.restclient)
   implementation(libs.spring.boot.starter.validation)
   implementation(libs.spring.boot.starter.actuator)
   implementation(libs.spring.boot.starter.data.jpa)
   implementation(libs.spring.boot.starter.flyway)
-  implementation(libs.spring.boot.starter.security.oauth2.resource.server)
   implementation(libs.springdoc.openapi.webmvc.ui)
   implementation(libs.jackson.module.kotlin)
   implementation(libs.kotlin.reflect)
-  runtimeOnly(libs.flyway.database.postgresql)
-  runtimeOnly(libs.postgresql)
+  runtimeOnly(libs.flyway.mysql)
+  runtimeOnly(libs.mariadb)
 
   testImplementation(libs.spring.boot.starter.webmvc.test)
-  testImplementation(libs.spring.boot.starter.security.test)
   testImplementation(libs.spring.boot.testcontainers)
   testImplementation(libs.testcontainers.junit.jupiter)
-  testImplementation(libs.testcontainers.postgresql)
+  testImplementation(libs.testcontainers.mariadb)
   testImplementation(libs.kotlin.test.junit5)
   testRuntimeOnly(libs.junit.platform.launcher)
 }

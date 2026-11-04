@@ -1,0 +1,15 @@
+# 기본적으로 모두 제외하고 Gradle 빌드에 필요한 파일만 허용한다.
+**
+!gradlew
+!gradle.properties
+!settings.gradle.kts
+!build.gradle.kts
+!gradle/libs.versions.toml
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+!build-logic/build.gradle.kts
+!build-logic/settings.gradle.kts
+!build-logic/src/**
+!services/member-service/build.gradle.kts
+!services/group-service/build.gradle.kts
+!services/group-service/src/main/**

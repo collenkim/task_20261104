@@ -1,32 +1,20 @@
 package task.member.infrastructure.configuration
 
-import io.swagger.v3.oas.models.Components
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.info.Info
-import io.swagger.v3.oas.models.security.SecurityRequirement
-import io.swagger.v3.oas.models.security.SecurityScheme
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 
-/** Swagger(OpenAPI) 문서와 Bearer 보안 스킴. API 경로·헤더에는 버전을 두지 않는다(POL-API-001). */
+/** 멤버 서비스 소유 OpenAPI 계약(POL-API-004). 업무 API는 구현 시 이 명세에 추가된다. */
 @Configuration(proxyBeanMethods = false)
 class OpenApiConfiguration {
   @Bean
   fun openApi(): OpenAPI =
     OpenAPI()
       .info(
-        Info().title("멤버 서비스 API").description("멤버 조회 서비스. 인증: JWT Bearer(aud=member-service).")
+        Info()
+          .version("0.1.0")
+          .title("멤버 서비스 API")
+          .description("사용자 인증 없이 제공하는 멤버 API. 그룹 데이터는 서버 간 호출로 조회합니다.")
       )
-      .components(
-        Components()
-          .addSecuritySchemes(
-            BEARER_SCHEME,
-            SecurityScheme().type(SecurityScheme.Type.HTTP).scheme("bearer").bearerFormat("JWT"),
-          )
-      )
-      .addSecurityItem(SecurityRequirement().addList(BEARER_SCHEME))
-
-  companion object {
-    const val BEARER_SCHEME = "bearerAuth"
-  }
 }

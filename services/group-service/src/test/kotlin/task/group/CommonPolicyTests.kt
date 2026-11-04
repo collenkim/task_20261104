@@ -1,13 +1,11 @@
 package task.group
 
-import java.time.Duration
 import kotlin.test.assertEquals
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Import
-import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.DynamicPropertyRegistry
@@ -17,26 +15,16 @@ import org.springframework.test.web.servlet.ResultActionsDsl
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 import org.springframework.test.web.servlet.put
-import task.group.support.TestJwt
 import task.group.support.TestProperties
 import task.group.support.TestcontainersConfiguration
 
-/** 공통 정책이 그룹 서비스에 적용됐는지 확인한다: 인증(JWT)·오류 응답·페이지네이션·상태 확인·API 문서·DB 마이그레이션. */
-@SpringBootTest(
-  properties =
-    [
-      TestProperties.NO_LOCAL_SECRETS,
-      TestProperties.MEMBER_CLIENT_URL,
-      TestProperties.MEMBER_CLIENT_TOKEN,
-    ]
-)
+/** 공통 정책이 그룹 서비스에 적용됐는지 확인한다: 내부 호출 키·오류 응답·페이지네이션·상태 확인·API 문서·DB 마이그레이션. */
+@SpringBootTest(properties = [TestProperties.NO_LOCAL_SECRETS])
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class)
 class CommonPolicyTests {
   @Autowired lateinit var mockMvc: MockMvc
   @Autowired lateinit var jdbcTemplate: JdbcTemplate
-
-  private fun bearer(token: String = TestJwt.token()) = "Bearer $token"
 
   private fun ResultActionsDsl.problem(status: Int, code: String) = andExpect {
     status { isEqualTo(status) }
@@ -56,75 +44,80 @@ class CommonPolicyTests {
   }
 
   @Test
-  fun `토큰이 없으면 401 ProblemDetail과 WWW-Authenticate를 돌려준다`() {
-    mockMvc.get("/test-probe/page").problem(401, "UNAUTHORIZED").andExpect {
-      header { string(HttpHeaders.WWW_AUTHENTICATE, org.hamcrest.Matchers.startsWith("Bearer")) }
-    }
-  }
-
-  @Test
-  fun `대상이 다르거나 만료됐거나 다른 키로 서명한 토큰은 401이다`() {
-    val invalid =
-      listOf(
-        TestJwt.token(audience = listOf("member-service")),
-        TestJwt.token(expiresIn = Duration.ofMinutes(-5)),
-        TestJwt.token(signer = TestJwt.otherKeyPair),
-      )
-    for (token in invalid) {
-      mockMvc
-        .get("/test-probe/page") { header(HttpHeaders.AUTHORIZATION, bearer(token)) }
-        .problem(401, "UNAUTHORIZED")
-    }
-  }
-
-  @Test
-  fun `유효한 토큰이면 통과하고 페이지 크기는 기본 20, 최대 100이다`() {
+  fun `내부 키 누락 불일치 중복은 403이고 응답에 키가 없다`() {
+    mockMvc.get("/test-probe/page").problem(403, "INTERNAL_ACCESS_DENIED")
     mockMvc
-      .get("/test-probe/page") { header(HttpHeaders.AUTHORIZATION, bearer()) }
+      .get("/test-probe/page") { header(KEY_HEADER, "invalid") }
+      .problem(403, "INTERNAL_ACCESS_DENIED")
+    mockMvc
+      .get("/v3/api-docs") { header(KEY_HEADER, TestProperties.internalKey, "duplicate") }
+      .problem(403, "INTERNAL_ACCESS_DENIED")
+    mockMvc.get("/v3/api-docs").problem(403, "INTERNAL_ACCESS_DENIED").andExpect {
+      jsonPath("$.title") { value("내부 호출 거부") }
+      content {
+        string(
+          org.hamcrest.Matchers.not(
+            org.hamcrest.Matchers.containsString(TestProperties.internalKey)
+          )
+        )
+      }
+    }
+  }
+
+  @Test
+  fun `요청이 통과하고 페이지 크기는 기본 20, 최대 100이다`() {
+    mockMvc
+      .get("/test-probe/page") { header(KEY_HEADER, TestProperties.internalKey) }
       .andExpect {
         status { isOk() }
         jsonPath("$.page") { value(0) }
         jsonPath("$.size") { value(20) }
       }
     mockMvc
-      .get("/test-probe/page?size=1000") { header(HttpHeaders.AUTHORIZATION, bearer()) }
+      .get("/test-probe/page?size=1000") { header(KEY_HEADER, TestProperties.internalKey) }
       .andExpect { jsonPath("$.size") { value(100) } }
   }
 
   @Test
   fun `오류 응답은 ProblemDetail과 code를 갖고 내부 정보를 넣지 않는다`() {
     mockMvc
-      .get("/test-probe/none") { header(HttpHeaders.AUTHORIZATION, bearer()) }
+      .get("/test-probe/none") { header(KEY_HEADER, TestProperties.internalKey) }
       .problem(404, "NOT_FOUND")
     mockMvc
-      .put("/test-probe/page") { header(HttpHeaders.AUTHORIZATION, bearer()) }
+      .put("/test-probe/page") { header(KEY_HEADER, TestProperties.internalKey) }
       .problem(405, "METHOD_NOT_ALLOWED")
     mockMvc
-      .get("/test-probe/number?value=abc") { header(HttpHeaders.AUTHORIZATION, bearer()) }
+      .get("/test-probe/number?value=abc") { header(KEY_HEADER, TestProperties.internalKey) }
       .problem(400, "BAD_REQUEST")
     mockMvc
       .post("/test-probe/validated") {
-        header(HttpHeaders.AUTHORIZATION, bearer())
+        header(KEY_HEADER, TestProperties.internalKey)
         contentType = MediaType.APPLICATION_JSON
         content = """{"name": ""}"""
       }
       .problem(400, "VALIDATION_FAILED")
     mockMvc
-      .get("/test-probe/boom") { header(HttpHeaders.AUTHORIZATION, bearer()) }
+      .get("/test-probe/boom") { header(KEY_HEADER, TestProperties.internalKey) }
       .problem(500, "INTERNAL_ERROR")
       .andExpect {
         content { string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("내부 상세"))) }
+        jsonPath("$.title") { value("내부 처리 오류") }
+        jsonPath("$.detail") { value("요청을 처리하지 못했습니다.") }
       }
   }
 
   @Test
-  fun `API 문서는 인증 없이 열리고 Bearer 보안 스킴을 선언한다`() {
-    mockMvc.get("/v3/api-docs").andExpect {
-      status { isOk() }
-      jsonPath("$.components.securitySchemes.bearerAuth.scheme") { value("bearer") }
-      jsonPath("$.security[0].bearerAuth") { exists() }
-    }
-    mockMvc.get("/swagger-ui/index.html").andExpect { status { isOk() } }
+  fun `그룹 명세는 키가 필요하고 Swagger 화면은 제공하지 않는다`() {
+    mockMvc
+      .get("/v3/api-docs") { header(KEY_HEADER, TestProperties.internalKey) }
+      .andExpect {
+        status { isOk() }
+        jsonPath("$.info.version") { value("0.1.0") }
+        jsonPath("$.components.securitySchemes.internalServiceKey.name") { value(KEY_HEADER) }
+      }
+    mockMvc
+      .get("/swagger-ui/index.html") { header(KEY_HEADER, TestProperties.internalKey) }
+      .problem(404, "NOT_FOUND")
   }
 
   @Test
@@ -138,6 +131,8 @@ class CommonPolicyTests {
   }
 
   companion object {
+    const val KEY_HEADER = "X-Internal-Service-Key"
+
     @JvmStatic
     @DynamicPropertySource
     fun properties(registry: DynamicPropertyRegistry) = TestProperties.register(registry)

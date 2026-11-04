@@ -1,32 +1,34 @@
 # 그룹 서비스 단독 실행 구성(Compose 프로젝트 task-group). 멤버 서비스와 리소스를 공유하지 않는다.
 # 명령은 서비스 폴더(services/group-service) 기준이다. 저장소 루트에서는 -f services/group-service/infra/compose.yaml 로 바꾼다.
-#   DB만:     docker compose -f infra/compose.yaml up -d                        (앱은 ../../gradlew bootRun)
-#   앱 + DB:  ../../gradlew bootJar 후 docker compose -f infra/compose.yaml --profile app up -d --build
-#   종료:     docker compose -f infra/compose.yaml --profile app down          (볼륨은 지우지 않는다)
-# 파일 안의 상대 경로(build context, initdb, secrets)는 이 파일 위치(infra/) 기준이라 실행 폴더와 관계없다.
+#   앱 + DB:  docker compose -f infra/compose.yaml up -d --build --wait
+#   DB만:     docker compose -f infra/compose.yaml up -d group-db (앱은 ../../gradlew.bat bootRun)
+#   종료:     docker compose -f infra/compose.yaml down (볼륨 유지)
+# 파일 안의 상대 경로(build context, secrets)는 이 파일 위치(infra/) 기준이다.
 # 비밀값은 저장소 secrets/ 의 파일을 Compose secrets 로 마운트한다(값을 환경변수·이 파일에 쓰지 않음).
 # 먼저 ../../gradlew :generateLocalSecrets (루트에서는 ./gradlew generateLocalSecrets)를 실행한다.
 name: task-group
 
 services:
   group-db:
-    image: postgres:18.6
+    image: mariadb:11.8.9
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--default-time-zone=+00:00"]
     environment:
-      POSTGRES_DB: group_service
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD_FILE: /run/secrets/group_db_admin_password
+      MARIADB_DATABASE: group_service
+      MARIADB_USER: group_app
+      MARIADB_PASSWORD_FILE: /run/secrets/group_db_app_password
+      MARIADB_ROOT_HOST: localhost
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/group_db_admin_password
     secrets:
       - group_db_admin_password
       - group_db_app_password
     volumes:
-      - group-db-data:/var/lib/postgresql
-      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
+      - group-mariadb-data:/var/lib/mysql
     ports:
-      - "127.0.0.1:25432:5432"
+      - "127.0.0.1:23306:3306"
     networks:
       - group-db-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d group_service"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -34,31 +36,21 @@ services:
     restart: unless-stopped
 
   group-service:
-    profiles: ["app"]
     build:
-      context: ..
+      context: ../../..
+      dockerfile: services/group-service/Dockerfile
     image: task/group-service:local
     environment:
       SPRING_PROFILES_ACTIVE: local
+      SERVER_ADDRESS: 0.0.0.0
       GROUP_DB_HOST: group-db
-      GROUP_DB_PORT: "5432"
+      GROUP_DB_PORT: "3306"
       TASK_SECRETS_DIR: /run/secrets
-      TASK_JWT_PUBLIC_KEY: /run/secrets/jwt-public-key.pem
-      # 멤버 서비스는 별도 Compose 프로젝트(task-member)라 호스트 포트로 호출한다. 다른 주소는 환경변수로 바꾼다.
-      TASK_MEMBER_CLIENT_BASE_URL: ${TASK_MEMBER_CLIENT_BASE_URL:-http://host.docker.internal:8081}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     secrets:
       - source: group_db_app_password
         target: spring.datasource.password
-      - source: group_swagger_token
-        target: task.security.swagger-token
-      - source: jwt_public_key
-        target: jwt-public-key.pem
-      - source: group_member_client_token
-        target: task.member-client.token
-    ports:
-      - "127.0.0.1:8082:8082"
+      - source: group_internal_key
+        target: task.internal-service.key
     networks:
       - group-db-net
     depends_on:
@@ -74,7 +66,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  group-db-data:
+  group-mariadb-data:
 
 networks:
   group-db-net:
@@ -84,9 +76,5 @@ secrets:
     file: ../../../secrets/group-service/db-admin-password
   group_db_app_password:
     file: ../../../secrets/group-service/config/spring.datasource.password
-  group_swagger_token:
-    file: ../../../secrets/group-service/config/task.security.swagger-token
-  jwt_public_key:
-    file: ../../../secrets/jwt/public-key.pem
-  group_member_client_token:
-    file: ../../../secrets/group-service/config/task.member-client.token
+  group_internal_key:
+    file: ../../../secrets/internal/task.internal-service.key
