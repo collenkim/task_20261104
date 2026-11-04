@@ -37,7 +37,7 @@ CLO 플랫폼 과제
 | `.codex/hooks.json` | Codex hook 설정(같은 이벤트, Windows는 `commandWindows`) |
 | `scripts/ai_logging/` | 수집기. Python 3.11+ 표준 라이브러리만 사용하며 `python -I`로 실행한다. 상주 프로세스는 없다. |
 | `.githooks/commit-msg`, `.githooks/pre-push` | 읽기 전용 Git hook 원본. `install`이 `.git/ai-logging/runtime/`에 복사하고 `core.hooksPath`를 그곳으로 지정한다. |
-| `config/ai-logging.json` | 서비스 이름(`AI`), main·develop·원격 이름, feature 접두어, 최초 도입 feature |
+| `config/ai-logging.json` | 작업 ID 규칙(`service`, `task_prefixes`), main·develop·원격 이름, feature 접두어, 최초 도입 feature |
 | `config/ai-logs-allowlist.json` | 비밀값이 아닌 값의 좁은 허용 규칙(사유 포함) |
 | `.gitattributes` | `ai-logs/snapshots/** -text -merge`: 개행 변환과 텍스트 병합을 막는다. |
 | `.gitignore` | `.ai-logging/`(로컬 상태·치환 목록), `ai-logs/live/`(로컬 확인용 사본) |
@@ -129,7 +129,8 @@ ai-logs/snapshots/<claude|codex>/<세션 ID>/<정책 버전 12자>/L<원본 바�
   - 자동화 명령도 실행하지 않는다.
   - 프롬프트 시작과 자동화 Git 작업은 같은 잠금(`.ai-logging/guard.lock`)을 쓴다.
 - **AI 턴 중의 Git 요청은 예약한다.** 턴이 끝나 모든 세션이 idle이 된 Stop 시점에 순서대로 실행한다.
-  - 예: `task reserve commit --message-file F -- <경로>...`, `task reserve stage-log AI-LOG-001 1단계`
+  - 예: `task reserve commit --message-file F -- <경로>...`, `task reserve stage-log SETUP-001 1단계`
+  - 예약할 때와 실행할 때 모두, feature 브랜치와 작업 ID가 다르면 거부한다(`task_branch_mismatch`).
   - Claude는 `.claude/settings.json` deny 규칙으로 `git commit/merge/push/reset/checkout/switch/add/...` 실행이 막혀 있다.
   - 실행 조건: 스테이징된 변경 없음, 진행 중인 Git 작업 없음, 예약 때와 같은 브랜치·HEAD.
   - 실패하면 뒤 작업을 멈추고 `task list`에 사유를 남긴다. 재시도는 `task retry`, 취소는 `task cancel`.
@@ -258,8 +259,9 @@ python -I scripts/ai_logging/cli.py status    # hook 설정·실행 기록·Git 
   - 이때 한글 안내가 깨졌다(Python이 파이프에 CP949로 출력). 수집기 출력(stdout·stderr)을 UTF-8로 고정했다.
   - 스냅샷은 계속 쌓이는 구조이므로 뒤처짐으로 push를 막는 것은 설계 오류로 판단해 경고로 바꿨다.
   - 실제 저장소 master(`e2f753e`)로 pre-push 검사를 읽기 전용으로 돌려 막는 문제 0건(경고 3건)을 확인했다.
+- 작업 ID 매핑: 이 저장소 설정으로 `feature/LOG-001` → `AI-LOG-001`, `SETUP-001` → `SETUP-001`, 다른 브랜치 ID 거부, develop 제외를 확인했다.
 
-**가짜 원본·임시 저장소로만 확인함** (`tests/`, 85개 통과)
+**가짜 원본·임시 저장소로만 확인함** (`tests/`, 87개 통과)
 
 - 회귀 a~j(13개): 수정 전 실패(11 failures, 2 errors), 수정 후 통과
 - 스냅샷 규칙
@@ -284,6 +286,7 @@ python -I scripts/ai_logging/cli.py status    # hook 설정·실행 기록·Git 
   - master 로그 밖 변경 시 resume 거부
   - 다른 feature 미병합, 최초 도입 예외
   - 최초 도입: develop 병합 없이 `merge-feature` 성공(생략 문구 기록, 경고 없이 push)
+  - `feature/SETUP-001` 전체 흐름(직접 커밋 → develop → push-develop → merge-feature → push)의 모든 커밋이 `[SETUP-001]`, `[AI-SETUP-001]`·`[AI-LOG-001]`은 commit-msg·예약·로그 커밋에서 거부
   - fast-forward·스냅샷 뒤 대화가 있어도 push 진행(UTF-8 경고), 다음 스냅샷이 더 긴 전체본으로 추가되고 기존 스냅샷은 유지, `git merge --no-ff` 후 push 통과, 형식이 틀린 병합 메시지는 거부
 
 **확인하지 못함** (사용자 확인 필요)
@@ -312,4 +315,15 @@ python -I scripts/ai_logging/cli.py status    # hook 설정·실행 기록·Git 
 
 ### 커밋·브랜치 규칙
 
-`AGENTS.md` 참고. 모든 일반·로그·병합 커밋은 `[서비스-작업ID] 제목` + 빈 줄 + 두 칸 들여쓴 작업 내용 형식을 따른다. master 병합·push는 사용자가 직접 한다.
+`AGENTS.md` 참고. 모든 일반·로그·병합 커밋은 `[작업ID] 제목` + 빈 줄 + 두 칸 들여쓴 작업 내용 형식을 따른다. master 병합·push는 사용자가 직접 한다.
+
+- **작업 ID**: feature 브랜치 이름에서 정한다(`config/ai-logging.json`).
+
+  | 브랜치 | 작업 ID | 근거 |
+  | --- | --- | --- |
+  | `feature/SETUP-001` | `SETUP-001` | `service`가 비어 있으면 feature ID 그대로 |
+  | `feature/LOG-xxx` | `AI-LOG-xxx` | `task_prefixes`의 `"LOG-": "AI"` (AI 로깅 도구 작업) |
+
+- 직접 커밋, 예약 커밋, 로그 스냅샷 커밋(`stage-log`·`submit`·꼬리 로그), `resume`·`merge-feature`·`push-develop`이 만드는 커밋 모두 같은 작업 ID를 쓴다.
+- feature 브랜치에서 다른 작업 ID로 커밋하면 commit-msg hook·예약 작업·로그 커밋이 거부한다(`task_branch_mismatch`). develop·master는 여러 feature의 병합이 들어오므로 검사하지 않는다.
+- 이미 기록된 이력(`[AI-LOG-001]`)은 그대로 둔다.

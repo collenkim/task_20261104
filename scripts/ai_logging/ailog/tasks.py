@@ -16,7 +16,7 @@ import os
 import uuid
 
 from .common import Context, GitError, LockTimeout, append_jsonl, utc_now
-from . import gitops, rules
+from . import config, gitops, rules
 
 KINDS = ("commit", "squash", "stage-log", "push-develop", "resume", "merge-feature")
 
@@ -83,10 +83,22 @@ def _check_args(kind: str, args: dict) -> str | None:
     return None
 
 
+def _task_of(kind: str, args: dict) -> str | None:
+    if kind in ("commit", "squash"):
+        return rules.task_from_title(args.get("message") or "")
+    if kind == "stage-log":
+        return args.get("task")
+    return None
+
+
 def reserve(ctx: Context, kind: str, args: dict, by: str | None = None) -> dict:
     bad = _check_args(kind, args)
     if bad:
         return {"ok": False, "reason": bad}
+    if kind in ("commit", "squash", "stage-log"):
+        mm = config.check_branch_task(ctx, _task_of(kind, args), gitops.current_branch(ctx.root))
+        if mm:
+            return {"ok": False, "reason": "task_branch_mismatch", "detail": mm.split(":", 1)[1]}
     if kind == "squash":
         onto = gitops.rev(ctx.root, args["onto"])
         if not onto:
@@ -146,6 +158,11 @@ def _blob_reader(root: str, commit: str):
 
 def _do_commit(ctx: Context, t: dict, head: str, branch: str) -> dict:
     a = t["args"]
+    if rules.check_message(a["message"]):
+        return {"ok": False, "reason": "message_format"}
+    mm = config.check_branch_task(ctx, rules.task_from_title(a["message"]), branch)
+    if mm:
+        return {"ok": False, "reason": "task_branch_mismatch", "detail": mm.split(":", 1)[1]}
     commit, tree = gitops.build_commit(ctx.root, head, a["message"], add_worktree_paths=a["paths"],
                                        state_dir=ctx.state_dir)
     if head and tree == gitops.tree_of(ctx.root, head):
@@ -171,6 +188,9 @@ def is_log_only(root: str, commit: str) -> bool:
 
 def _do_squash(ctx: Context, t: dict, head: str, branch: str) -> dict:
     a = t["args"]
+    mm = config.check_branch_task(ctx, rules.task_from_title(a["message"]), branch)
+    if mm:
+        return {"ok": False, "reason": "task_branch_mismatch", "detail": mm.split(":", 1)[1]}
     onto = a["onto"]
     if not gitops.is_ancestor(ctx.root, onto, head) or onto == head:
         return {"ok": False, "reason": "onto_not_ancestor"}

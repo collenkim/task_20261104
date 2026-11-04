@@ -29,7 +29,7 @@ def _feature(cfg: dict, feature: str):
     fid = config.feature_id(cfg, name)
     if not fid:
         raise FlowStop("feature_name_format", f"예: {cfg['feature_prefix']}LOG-002")
-    return name, fid, f"{cfg['service']}-{fid}"
+    return name, fid, config.task_id(cfg, fid)
 
 
 @contextmanager

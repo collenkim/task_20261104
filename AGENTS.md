@@ -3,12 +3,16 @@
 ## 커밋 메시지
 
 ```text
-[서비스-작업ID] 제목
+[작업ID] 제목
 
   작업 내용
 ```
 
-- 본문은 두 칸 들여쓰기. 예: `[AI-LOG-001] AI 세션 자동 로깅 환경 구성`.
+- 본문은 두 칸 들여쓰기. 예: `[SETUP-001] 프로젝트 구성`.
+- 작업 ID는 feature 브랜치에서 정해진다(`config/ai-logging.json`).
+  - `feature/SETUP-001` → `[SETUP-001]` (일반 작업은 ID 그대로)
+  - `feature/LOG-xxx` → `[AI-LOG-xxx]` (AI 로깅 도구 작업만 `AI-` 접두어)
+- feature 브랜치에서는 그 브랜치의 작업 ID로만 커밋한다. 다른 ID는 commit-msg hook·예약 작업이 거부한다(`task_branch_mismatch`).
 - 일반·로그·병합 커밋 모두 같은 형식이다. commit-msg hook이 검사한다.
 - amend·`--no-verify`·서명 우회는 쓰지 않는다.
 

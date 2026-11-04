@@ -497,7 +497,12 @@ def commit_snapshots(ctx: Context, task: str, title: str, *, branch: str | None 
     if target == current and gitops.staged_changes(root):
         return {"ok": False, "reason": "staged_changes_present"}
     if not rules.TASK_ID_RE.match(task or ""):
-        return {"ok": False, "reason": "task_id_format", "detail": "예: AI-LOG-001"}
+        return {"ok": False, "reason": "task_id_format", "detail": "예: SETUP-001"}
+    from . import config
+
+    mm = config.check_branch_task(ctx, task, target)
+    if mm:
+        return {"ok": False, "reason": "task_branch_mismatch", "detail": mm.split(":", 1)[1]}
     refs = tuple(r for r in ((head,) if head else ()) + tuple(extra_refs) if r)
     rep = snapshot_all(ctx, refs=refs, states=states)
     if rep["result"] != "ok":
