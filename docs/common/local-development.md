@@ -6,6 +6,13 @@
 | 범위 | Windows·macOS·Linux 로컬 개발 환경(명령 예시는 PowerShell 기준, Git Bash에서도 같음) |
 | 관련 코드 | `services/*/infra/compose.yaml`, `build-logic/src/main/kotlin/task.spring-service.gradle.kts`(bootRun), `task.root.gradle.kts`(비밀값 생성) |
 
+이 문서의 명령은 **저장소 루트**에서 실행한다. 서비스 폴더에서 실행하는 명령은 각 서비스 README(`services/<서비스>/docs/README.md`)에 있다.
+
+| 실행 위치 | Gradle | 비밀값 생성 | Compose 파일 |
+| --- | --- | --- | --- |
+| 저장소 루트 | `./gradlew :member-service:bootRun` | `./gradlew generateLocalSecrets` | `-f services/member-service/infra/compose.yaml` |
+| 서비스 폴더(`services/member-service`) | `../../gradlew bootRun` | `../../gradlew :generateLocalSecrets` | `-f infra/compose.yaml` |
+
 ## 준비
 
 | 항목 | 조건 |

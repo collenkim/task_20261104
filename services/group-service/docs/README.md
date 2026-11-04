@@ -38,23 +38,32 @@
 
 ## 실행
 
+아래 명령은 **이 서비스 폴더(`services/group-service`)에서** 실행한다.
+
+- Gradle Wrapper는 저장소 루트에 있으므로 `../../gradlew`로 부른다. 서비스 폴더에서 부르면 이 서비스의 작업만 실행된다.
+- `generateLocalSecrets`는 루트 프로젝트 작업이라 앞에 `:`를 붙인다.
+- Compose 파일은 `infra/compose.yaml`이다.
+- 저장소 루트에서 실행하는 명령은 [로컬 실행](../../../docs/common/local-development.md)을 본다.
+
 ```powershell
-./gradlew generateLocalSecrets                                     # 처음 한 번
+cd services/group-service                                 # 저장소 루트에서 이동
+
+../../gradlew :generateLocalSecrets                        # 처음 한 번(값은 출력하지 않음)
 
 # 방식 1: DB는 Docker, 앱은 bootRun
-docker compose -f services/group-service/infra/compose.yaml up -d
-./gradlew :group-service:bootRun
+docker compose -f infra/compose.yaml up -d
+../../gradlew bootRun
 
 # 방식 2: 앱과 DB 모두 Docker
-./gradlew :group-service:bootJar
-docker compose -f services/group-service/infra/compose.yaml --profile app up -d --build
+../../gradlew bootJar
+docker compose -f infra/compose.yaml --profile app up -d --build
 
 # 종료(볼륨 유지)
-docker compose -f services/group-service/infra/compose.yaml --profile app down
+docker compose -f infra/compose.yaml --profile app down
 ```
 
 - 확인: http://localhost:8082/actuator/health, http://localhost:8082/swagger-ui.html
-- 테스트: `./gradlew :group-service:test` (Docker 필요)
+- 테스트: `../../gradlew test` (Docker 필요)
 
 ## 이후 작업에서 쓸 문서
 

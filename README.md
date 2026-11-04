@@ -14,6 +14,8 @@ CLO 플랫폼 과제
 - 공통 정책·컨벤션: [docs/common/README.md](docs/common/README.md) (아키텍처, CQRS, 코드 컨벤션, 포맷, API, 보안, 서비스 간 통신, 데이터, 테스트)
 - 구성 계획과 확인 결과: [docs/common/project-setup-plan.md](docs/common/project-setup-plan.md)
 
+저장소 루트에서 실행한다(서비스 폴더 기준 명령은 각 서비스 README).
+
 ```powershell
 ./gradlew generateLocalSecrets                                   # 로컬 키·토큰·DB 비밀번호 생성(처음 한 번, 값은 출력하지 않음)
 ./gradlew build                                                  # 포맷 검사 + 테스트(Docker 필요)
