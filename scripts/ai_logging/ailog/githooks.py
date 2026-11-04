@@ -117,6 +117,12 @@ def check_pre_push(ctx: Context, remote: str, lines: list[str]) -> list[str]:
                 for p in rules.check_changes(ch, _commit_blob_reader(root, c), allow_source=True):
                     problems.append(f"commit {c[:12]} {p}")
         if remote_ref == main_ref:
+            from .flows import direct_source_commits
+
+            # master를 처음 만드는 push(원격에 master 없음)는 도입 전 이력이므로 검사하지 않는다.
+            if remote_oid != gitops.ZERO:
+                for c in direct_source_commits(root, base, local_oid, remote):
+                    problems.append(f"commit {c[:12]} master_direct_source_commit")
             busy = turns.busy_sessions(ctx)
             if busy:
                 problems.append("ai_turn_not_idle")
@@ -129,13 +135,25 @@ def check_pre_push(ctx: Context, remote: str, lines: list[str]) -> list[str]:
     return problems
 
 
+ADVICE = (
+    ("logs:snapshot_behind_original", "스냅샷이 원본보다 뒤처졌습니다(마지막 스냅샷 이후 대화가 있음). 모든 AI 대화를 끝낸 뒤 "
+                                      "merge-feature(또는 push-develop)를 다시 실행하고 곧바로 push하세요."),
+    ("logs:snapshot_missing", "현재 정책의 스냅샷이 없습니다. merge-feature(또는 push-develop)를 실행하세요."),
+    ("master_direct_source_commit", "병합 커밋 없이 master에 들어온 소스 커밋이 있습니다(IDE·git merge의 fast-forward 등). "
+                                    "push 전이라면 확인 후 'git branch -f master origin/master'로 되돌리고 merge-feature로 "
+                                    "병합하세요."),
+    ("message:", "커밋 메시지 형식: [서비스-작업ID] 제목 / 빈 줄 / 두 칸 들여쓴 작업 내용"),
+    ("ai_turn_not_idle", "AI 턴이 진행 중입니다. 대화가 끝난 뒤 다시 push하세요."),
+    ("secret:", "이미 커밋된 값이 현재 치환 목록·검출 규칙에 걸립니다. 새 마스킹 커밋으로 지워지지 않으므로 게시를 멈추고 "
+                "이력 정리를 결정하세요."),
+)
+
+
 def pre_push(ctx: Context, remote: str, stdin_text: str) -> int:
     problems = check_pre_push(ctx, remote, [x for x in stdin_text.splitlines() if x.strip()])
     if problems:
-        _err(["push를 막았습니다:"] + ["  - " + p for p in problems[:40]] + [
-            "로그가 원본보다 뒤처졌으면 merge-feature(또는 push-develop)를 다시 실행하세요.",
-            "secret:* 는 이미 커밋된 값입니다. 새 마스킹 커밋으로 지워지지 않으므로 게시를 멈추고 이력 정리를 결정하세요.",
-        ])
+        advice = [text for key, text in ADVICE if any(key in p for p in problems)]
+        _err(["push를 막았습니다:"] + ["  - " + p for p in problems[:40]] + advice)
         return 1
     return 0
 

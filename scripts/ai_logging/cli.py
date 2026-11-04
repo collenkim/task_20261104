@@ -44,10 +44,17 @@ from ailog.common import default_context  # noqa: E402
 
 
 def _utf8_stdout():
-    if not sys.stdout.isatty():
+    """파이프·파일로 나가는 출력은 UTF-8로 고정한다.
+
+    Windows의 Python은 파이프 출력에 시스템 코드 페이지(CP949)를 쓴다. 그러면 Git·IDE·Claude/Codex처럼
+    UTF-8로 읽는 쪽에서 한글이 깨진다(Git hook·프롬프트 차단 사유 포함). 콘솔(tty)은 Python이 유니코드로
+    직접 쓰므로 그대로 둔다.
+    """
+    for stream in (sys.stdout, sys.stderr):
         try:
-            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-        except (AttributeError, ValueError):
+            if stream is not None and not stream.isatty():
+                stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError, OSError):
             pass
 
 
@@ -176,6 +183,7 @@ def _task_cmd(ctx, args):
 
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    _utf8_stdout()  # hook·githook 포함 모든 명령의 출력(stdout·stderr)을 UTF-8로
     ctx = default_context()
     cmd = argv[0] if argv else "status"
     if cmd == "hook":

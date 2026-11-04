@@ -164,32 +164,41 @@ master ──new-feature──> feature/<ID> ──(사용자 git merge)──> 
    - 최신 master를 feature에 일반 merge한다. master의 새 변경이 로그 전용일 때만 진행한다.
    - 보완한 뒤 다시 develop에 병합하고 `push-develop`을 실행한다.
 5. **최종 병합**: `merge-feature <feature>` (사용자 실행)
-   - feature의 마지막 코드 커밋이 develop에 들어 있는지 확인한다(테스트 통과는 자동 검증하지 않는다).
+   - feature의 마지막 코드 커밋이 develop에 들어 있는지 확인한다(develop 최종 테스트를 거친 코드만 master로 간다. 테스트 통과 자체는 자동 검증하지 않는다).
+   - 로컬 master에 병합 커밋 없이 들어온 소스 커밋(IDE·`git merge`의 fast-forward, 직접 커밋)이 있으면 거부한다(`master_direct_source_commit`).
    - 꼬리 로그 스냅샷 커밋을 만든다.
    - 로컬 master에 `--no-ff` 병합한다.
    - 코드(feature와 같은 로그 밖 트리)와 로그를 검증한다. **push는 하지 않는다.**
 6. **master push**: 사용자가 `git push origin master`를 실행한다. pre-push가 실제로 보내는 master 커밋을 읽기 전용으로 다시 검사한다.
    - 메시지 형식
    - 금지 경로
+   - master 첫 부모 경로의 새 커밋이 병합 커밋 또는 로그 전용 커밋인지(`master_direct_source_commit`)
    - 로그 완전성(원본 끝까지)
    - 커밋된 비밀값
+   - 막히면 문제 항목과 해당 항목의 안내만 한국어로 출력한다(UTF-8, IDE Git 콘솔에서 읽을 수 있음).
 
 **금지 사항**
 
 - develop 전체를 master에 병합하지 않는다.
 - `develop:master`로 push하지 않는다.
 - GitHub PR 등 로컬 명령 밖에서 master에 병합하지 않는다.
+- **IDE의 Merge 메뉴나 `git merge`로 feature를 master에 병합하지 않는다.** fast-forward가 되면 꼬리 로그 스냅샷이 빠지고 병합 커밋도 남지 않는다. 반드시 `merge-feature`를 쓴다.
+  - 이미 했다면(push 전): 확인 후 `git branch -f master origin/master`로 로컬 master를 되돌리고 `merge-feature`를 실행한다.
 - force push, `--no-verify`, amend를 쓰지 않는다.
 
 #### 최초 도입(LOG-001) 절차
 
 도입 전 master(`26b4ccd`)에는 로깅 설정이 없다. 그래서 `new-feature`와 `push-develop`은 거부되고, 아래 절차가 유일한 예외다.
 
-1. `feature/LOG-001`에서 구성한다. 결과는 소스 커밋 1개와 로그 전용 커밋 1개다.
-2. (선택) 사용자가 develop에 병합해 검토한다.
-3. `python -I scripts/ai_logging/cli.py merge-feature feature/LOG-001`로 꼬리 로그를 포함해 로컬 master에 `--no-ff` 병합한다.
-4. 사용자가 `git push origin master`를 실행한다.
-5. 이후 master에 설정이 생기면 일반 흐름을 쓴다.
+1. `feature/LOG-001`에서 구성하고 feature에서 검증한다.
+2. **develop 검증은 생략한다.** 도입 전에는 develop 검증 절차 자체가 없기 때문이다.
+   - `merge-feature`는 원격 master에 로깅 설정이 없고 feature가 `feature/LOG-001`일 때만 develop 확인을 건너뛴다.
+   - 병합 커밋 본문과 결과(`develop_check: skipped_bootstrap`)에 "develop 검증 생략(최초 도입: master에 검증 절차 없음)"을 남긴다.
+   - develop에 병합해 두었다면 일반 확인(`included`)을 한다.
+3. 모든 Claude·Codex 대화를 끝낸다(꼬리 로그가 원본 끝까지 담기도록).
+4. 일반 터미널에서 `python -I scripts/ai_logging/cli.py merge-feature feature/LOG-001`로 꼬리 로그를 포함해 로컬 master에 `--no-ff` 병합한다.
+5. 곧바로 `git push origin master`를 실행한다. 4와 5 사이에 AI 대화를 하면 pre-push가 `snapshot_behind_original`로 막는다(4부터 다시).
+6. 이후 master에 설정이 생기면 일반 흐름을 쓴다. 일반 feature는 develop 확인을 생략할 수 없다(`feature_code_not_in_develop`).
 
 ### 설치
 
@@ -244,8 +253,11 @@ python -I scripts/ai_logging/cli.py status    # hook 설정·실행 기록·Git 
   - Codex 세션: `task_complete`로 idle
   - 진행 중인 Claude 턴: 열린 턴으로 판정
 - 기존 Claude SessionStart·Stop hook 실행 기록(`.ai-logging/registry.jsonl`)을 확인했다.
+- 실제 pre-push 차단: IDE에서 feature를 master에 fast-forward 병합하고 GitHub로 push하자 pre-push가 `snapshot_behind_original`로 막았다(원격 master 변경 없음).
+  - 이때 한글 안내가 깨졌다(Python이 파이프에 CP949로 출력). 이후 수집기 출력(stdout·stderr)을 UTF-8로 고정했다.
+  - fast-forward 자체를 잡도록 `master_direct_source_commit` 검사를 추가했고, 실제 저장소에서 `271d843`을 감지하는 것을 읽기 전용으로 확인했다.
 
-**가짜 원본·임시 저장소로만 확인함** (`tests/`, 83개 통과)
+**가짜 원본·임시 저장소로만 확인함** (`tests/`, 84개 통과)
 
 - 회귀 a~j(13개): 수정 전 실패(11 failures, 2 errors), 수정 후 통과
 - 스냅샷 규칙
@@ -269,6 +281,7 @@ python -I scripts/ai_logging/cli.py status    # hook 설정·실행 기록·Git 
   - atomic push 거부 후 이어서 진행
   - master 로그 밖 변경 시 resume 거부
   - 다른 feature 미병합, 최초 도입 예외
+  - 최초 도입: develop 병합 없이 `merge-feature` 성공(생략 문구 기록), fast-forward된 master는 `merge-feature`·pre-push 모두 거부, pre-push 안내가 UTF-8로 나옴
 
 **확인하지 못함** (사용자 확인 필요)
 
@@ -276,7 +289,8 @@ python -I scripts/ai_logging/cli.py status    # hook 설정·실행 기록·Git 
 - Codex hook이 실행 자체에 실패할 때 프롬프트가 막히는지(fail-closed 여부는 문서에 없다).
 - Claude 안에서 UserPromptSubmit hook이 시간 초과·비정상 종료될 때 `onFailure: block`이 동작하는지. exit 2 경로만 하위 프로세스로 시험했다.
 - GitHub 원격의 `--atomic` push. 로컬 bare 저장소로만 시험했다.
-- 실제 저장소에서의 develop 병합·`push-develop`·`merge-feature`·master push. 이번 작업 범위에서 제외했다.
+- 실제 저장소에서의 develop 병합·`push-develop`. 이번 작업 범위에서 제외했다.
+- 실제 저장소에서의 `merge-feature`·master push 성공. 사용자가 최초 도입 절차로 실행한다.
 - PowerShell 도구용 deny 규칙(`PowerShell(git commit *)`)이 실제로 막는지.
 - `git -C <경로> <명령>` 같은 다른 형태는 deny 규칙이 모두 막지 못할 수 있다. 최종 방어는 commit-msg·pre-push hook이다.
 

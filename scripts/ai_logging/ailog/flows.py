@@ -362,6 +362,19 @@ def _is_feature_merge(root: str, c: str, name: str) -> bool:
     return len(ps) == 2 and f"] {name} " in title
 
 
+def direct_source_commits(root: str, base: str | None, tip: str, remote: str) -> list[str]:
+    """master 첫 부모 경로에 병합 커밋 없이 들어온 소스 커밋(fast-forward·직접 커밋).
+
+    master의 새 커밋은 feature --no-ff 병합 커밋(부모 2개)이나 로그 전용 커밋이어야 한다.
+    """
+    rng = [f"{base}..{tip}"] if base else [tip, "--not", f"--remotes={remote}"]
+    out = []
+    for c in (gitops.git(root, "rev-list", "--first-parent", *rng, timeout=60) or "").split():
+        if len(gitops.parents(root, c)) == 1 and not _is_log_commit(root, c):
+            out.append(c)
+    return out
+
+
 def _last_source_commit(root: str, head: str) -> str | None:
     for c in (gitops.git(root, "rev-list", "--first-parent", head) or "").split():
         if not _is_log_commit(root, c):
@@ -384,6 +397,12 @@ def merge_feature(ctx: Context, feature: str, guard_held: bool = False) -> dict:
         _fetch(ctx, remote, main, dev)
         om = gitops.remote_ref(root, remote, main)
         head0 = gitops.rev(root, f"refs/heads/{name}")
+        local_main = gitops.rev(root, f"refs/heads/{main}")
+        direct = direct_source_commits(root, om, local_main, remote) if (om and local_main) else []
+        if direct:
+            raise FlowStop("master_direct_source_commit",
+                           f"병합 커밋 없이 로컬 {main}에 들어온 소스 커밋 {len(direct)}개(IDE·git merge의 fast-forward 등). "
+                           f"push 전이라면 확인 후 'git branch -f {main} {remote}/{main}'로 되돌린 뒤 다시 실행")
         if om:
             # 다시 실행하는 경우: 앞선 실행이 만든(아직 push 전) 이 feature의 병합·로그 커밋은 허용
             _align(ctx, main, om, cur, allow_ahead_log_only=True,
@@ -392,7 +411,8 @@ def merge_feature(ctx: Context, feature: str, guard_held: bool = False) -> dict:
         main_before = gitops.rev(root, f"refs/heads/{main}")
         if not main_before:
             raise FlowStop("master_missing")
-        bootstrap = not config.has_config_in(root, main_before)
+        # 최초 도입 여부는 원격 master 기준(앞선 실행이 로컬 master에 병합한 뒤 다시 실행해도 같게 판단)
+        bootstrap = not config.has_config_in(root, om or main_before)
         if bootstrap and name != cfg["bootstrap_feature"]:
             raise FlowStop("master_without_logging_config")
         head = gitops.rev(root, f"refs/heads/{name}")
@@ -404,8 +424,13 @@ def merge_feature(ctx: Context, feature: str, guard_held: bool = False) -> dict:
             raise FlowStop("run_resume_first", f"master의 로그 밖 변경 {len(master_src)}개가 feature에 없음")
         code = _last_source_commit(root, head)
         dev_rev = gitops.rev(root, f"refs/heads/{dev}") or gitops.remote_ref(root, remote, dev)
-        if not code or not dev_rev or not gitops.is_ancestor(root, code, dev_rev):
+        if not code:
+            raise FlowStop("feature_has_no_source_commit")
+        in_develop = bool(dev_rev and gitops.is_ancestor(root, code, dev_rev))
+        # 일반 feature는 develop 최종 테스트를 거쳐야 한다. 최초 도입은 master에 검증 절차가 없으므로 예외.
+        if not in_develop and not bootstrap:
             raise FlowStop("feature_code_not_in_develop", "feature의 마지막 코드 커밋이 develop에 병합되어 있어야 한다")
+        develop_check = "included" if in_develop else "skipped_bootstrap"
         states = turns.effective_states(ctx)
         r = snapshot.commit_snapshots(ctx, task, "세션 로그 스냅샷 (최종 병합 전)", branch=name, states=states,
                                       extra_refs=(main_before,))
@@ -416,9 +441,12 @@ def merge_feature(ctx: Context, feature: str, guard_held: bool = False) -> dict:
         _save_run(ctx, run)
         if gitops.is_ancestor(root, head2, main_before):
             return {"ok": True, "merged": False, "reason": "already_merged", "master": main_before}
-        msg = (f"[{task}] {name} {main} 병합\n\n"
-               f"  develop 검토 대상 코드 커밋 {code[:12]} 포함 확인 (테스트는 자동 검증하지 않음)\n"
-               f"  feature의 세션 로그 스냅샷 포함, --no-ff 병합\n")
+        if develop_check == "included":
+            check_line = f"  develop 검토 대상 코드 커밋 {code[:12]} 포함 확인 (테스트는 자동 검증하지 않음)\n"
+        else:
+            check_line = f"  develop 검증 생략(최초 도입: master에 검증 절차 없음), 코드 커밋 {code[:12]}\n"
+        msg = (f"[{task}] {name} {main} 병합\n\n" + check_line
+               + "  feature의 세션 로그 스냅샷 포함, --no-ff 병합\n")
         new = _plumb_merge(ctx, main_before, head2, msg)
         if _nonlog(root, new) != _nonlog(root, head2):
             raise FlowStop("merged_code_differs_from_feature")
@@ -431,4 +459,4 @@ def merge_feature(ctx: Context, feature: str, guard_held: bool = False) -> dict:
         run["finished"] = utc_now()
         _save_run(ctx, run)
         return {"ok": True, "merged": True, "commit": new, "master_before": main_before, "bootstrap": bootstrap,
-                "next": f"git push {remote} {main}  (사용자 실행, pre-push가 로그 완전성을 다시 검사)"}
+                "develop_check": develop_check, "next": f"git push {remote} {main}  (사용자 실행, pre-push가 로그 완전성을 다시 검사)"}

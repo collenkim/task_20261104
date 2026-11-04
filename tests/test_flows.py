@@ -15,7 +15,7 @@ from unittest import mock
 
 from test_ai_logging import REPO, Env, claude_records, jl  # noqa: E402
 
-from ailog import engine, flows, githooks, gitops, snapshot  # noqa: E402
+from ailog import engine, flows, githooks, gitops, snapshot, turns  # noqa: E402
 
 PROMPT_N = [0]
 
@@ -285,11 +285,51 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(flows.push_develop(ctx, "LOG-001")["reason"], "master_without_logging_config")
         r = flows.merge_feature(ctx, "LOG-001")
         self.assertTrue(r["ok"] and r["bootstrap"], r)
+        self.assertEqual(r["develop_check"], "included")
         p = subprocess.run(["git", "-C", e.root, "push", "-q", "origin", "master"], capture_output=True)
         self.assertEqual(p.returncode, 0, p.stderr.decode("utf-8", "replace"))
         e.git("switch", "-q", "master")  # 수집기·설정이 없던 브랜치로 바꿔도 hook 유지
         r = subprocess.run(["git", "-C", e.root, "commit", "--allow-empty", "-q", "-m", "bad"], capture_output=True)
         self.assertNotEqual(r.returncode, 0)
+
+    def test_bootstrap_without_develop_and_fast_forward_refused(self):
+        """최초 도입은 develop 검증을 생략하고, IDE·git merge의 fast-forward master는 merge-feature·pre-push가 거부."""
+        e, ctx = self.env, self.env.ctx
+        e.git("switch", "-q", "-c", "feature/LOG-001")
+        e.edit("config/ai-logging.json", json.dumps({"main": "master"}))
+        e.git("add", "config/ai-logs-allowlist.json")
+        e.commit_msg("AI-LOG-001", "로깅 도입", "설정")
+        e.talk(("구성 완료", "네"))
+        snap = snapshot.commit_snapshots(ctx, "AI-LOG-001", "세션 로그 스냅샷 (구성 완료)",
+                                         states=turns.effective_states(ctx))
+        self.assertTrue(snap["ok"], snap)
+        origin_master = e.rev("refs/remotes/origin/master")
+        # 사용자가 IDE에서 master로 바꿔 feature를 병합(fast-forward)한 상황
+        e.git("switch", "-q", "master")
+        e.git("merge", "-q", "--ff-only", "feature/LOG-001")
+        e.git("switch", "-q", "feature/LOG-001")
+        ff_master = e.rev("master")
+        r = flows.merge_feature(ctx, "LOG-001")
+        self.assertEqual(r["reason"], "master_direct_source_commit", r)
+        self.assertEqual(e.rev("master"), ff_master)  # 거부 시 ref 그대로
+        p = subprocess.run(["git", "-C", e.root, "push", "-q", "origin", "master"], capture_output=True)
+        self.assertNotEqual(p.returncode, 0)
+        err = p.stderr.decode("utf-8")  # 한글 안내가 UTF-8로 나와야 IDE에서 깨지지 않는다
+        self.assertIn("push를 막았습니다", err)
+        self.assertIn("master_direct_source_commit", err)
+        self.assertIn("git branch -f master origin/master", err)
+        self.assertEqual(e.remote_rev("refs/heads/master"), origin_master)
+        # 안내대로 로컬 master를 되돌리고(사용자 역할) merge-feature → develop 병합 없이 성공
+        e.git("branch", "-f", "master", "origin/master")
+        r = flows.merge_feature(ctx, "LOG-001")
+        self.assertTrue(r["ok"] and r["merged"] and r["bootstrap"], r)
+        self.assertEqual(r["develop_check"], "skipped_bootstrap")
+        m = e.rev("master")
+        self.assertEqual(len(gitops.parents(e.root, m)), 2)
+        self.assertIn("develop 검증 생략(최초 도입: master에 검증 절차 없음)", e.git("log", "-1", "--format=%B", m))
+        p = subprocess.run(["git", "-C", e.root, "push", "-q", "origin", "master"], capture_output=True)
+        self.assertEqual(p.returncode, 0, p.stderr.decode("utf-8", "replace"))
+        self.assertEqual(e.remote_rev("refs/heads/master"), m)
 
 
 if __name__ == "__main__":
