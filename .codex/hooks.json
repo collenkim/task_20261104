@@ -1,0 +1,55 @@
+{
+  "description": "AI 세션 로그 자동 수집(AI-LOG-001). 세션 시작·턴 종료 시 두 도구의 원본을 마스킹·검증해 ai-logs/live/에 반영한다. 자세한 내용은 README.md.",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I \"$(git rev-parse --show-toplevel)/scripts/ai_logging/cli.py\" hook codex UserPromptSubmit",
+            "commandWindows": "python -I -c \"import runpy,subprocess,sys;r=subprocess.run(['git','rev-parse','--show-toplevel'],capture_output=True,text=True).stdout.strip() or '.';sys.argv=['cli.py','hook','codex','UserPromptSubmit'];runpy.run_path(r+'/scripts/ai_logging/cli.py',run_name='__main__')\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/ai_logging/cli.py\" hook codex SessionStart",
+            "commandWindows": "python -I -c \"import runpy,subprocess,sys;r=subprocess.run(['git','rev-parse','--show-toplevel'],capture_output=True,text=True).stdout.strip() or '.';sys.argv=['cli.py','hook','codex','SessionStart'];runpy.run_path(r+'/scripts/ai_logging/cli.py',run_name='__main__')\"",
+            "timeout": 120,
+            "statusMessage": "AI 세션 로그 등록"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/ai_logging/cli.py\" hook codex Stop",
+            "commandWindows": "python -I -c \"import runpy,subprocess,sys;r=subprocess.run(['git','rev-parse','--show-toplevel'],capture_output=True,text=True).stdout.strip() or '.';sys.argv=['cli.py','hook','codex','Stop'];runpy.run_path(r+'/scripts/ai_logging/cli.py',run_name='__main__')\"",
+            "timeout": 120,
+            "statusMessage": "AI 세션 로그 동기화"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/ai_logging/cli.py\" hook codex SessionEnd",
+            "commandWindows": "python -I -c \"import runpy,subprocess,sys;r=subprocess.run(['git','rev-parse','--show-toplevel'],capture_output=True,text=True).stdout.strip() or '.';sys.argv=['cli.py','hook','codex','SessionEnd'];runpy.run_path(r+'/scripts/ai_logging/cli.py',run_name='__main__')\"",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}

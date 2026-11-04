@@ -1,0 +1,14 @@
+#!/bin/sh
+# AI 세션 로깅 commit-msg hook: 메시지 형식, AI 턴 진행 여부, 스테이징된 로그 경로를 검사한다(읽기 전용).
+# 설치: python -I scripts/ai_logging/cli.py install  (core.hooksPath = .git/ai-logging/runtime/hooks)
+ROOT=$(git rev-parse --show-toplevel) || exit 1
+HOOKDIR=$(cd "$(dirname "$0")" && pwd)
+CLI="$ROOT/scripts/ai_logging/cli.py"
+[ -f "$CLI" ] || CLI="$HOOKDIR/../ai_logging/cli.py"
+for PY in python3 python py; do
+  if command -v "$PY" >/dev/null 2>&1 && "$PY" -I -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" >/dev/null 2>&1; then
+    AI_LOGGING_ROOT="$ROOT" exec "$PY" -I "$CLI" githook commit-msg "$@"
+  fi
+done
+echo "[AI 세션 로깅] Python 3.11 이상을 찾지 못해 커밋을 막았습니다." >&2
+exit 1

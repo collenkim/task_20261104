@@ -1,0 +1,5 @@
+# AI 세션 로그 사본: 원본 바이트 보존. 개행 변환(core.autocrlf)과 텍스트 자동 병합을 막는다.
+ai-logs/live/** -text -merge
+ai-logs/snapshots/** -text -merge
+# Git hook 스크립트는 sh로 실행되므로 LF 유지
+.githooks/* text eol=lf
