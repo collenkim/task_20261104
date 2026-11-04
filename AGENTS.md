@@ -55,5 +55,6 @@
 ## 민감정보
 
 - 비밀값·개인정보를 명령줄 인수, 출력, 응답에 쓰지 않는다. 진단은 규칙·줄 번호·길이·형태만 출력한다.
-- 읽지 않는 파일: `.ai-logging/mask-values.jsonl`, `~/.codex/auth.json`, `~/.claude/.credentials.json`, `~/.claude.json`, `.env`, `.env.*`.
+- 읽지 않는 파일: `.ai-logging/mask-values.jsonl`, `~/.codex/auth.json`, `~/.claude/.credentials.json`, `~/.claude.json`, `.env`, `.env.*`, `secrets/`(로컬 키·토큰·DB 비밀번호).
+  - `secrets/`는 `./gradlew generateLocalSecrets`가 만든다. 존재·파일 이름만 확인하고 내용은 열지 않는다(`docs/common/security.md`).
 - 테스트의 가짜 비밀값은 실행 중에 조각을 이어 붙여 만든다(완성된 형태를 소스에 쓰지 않는다).

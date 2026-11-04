@@ -7,6 +7,7 @@
       "Read(./.env)",
       "Read(./.env.*)",
       "Read(./.ai-logging/mask-values.jsonl)",
+      "Read(./secrets/**)",
       "Bash(git commit:*)",
       "Bash(git -C * commit *)",
       "PowerShell(git commit *)",

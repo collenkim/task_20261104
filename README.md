@@ -1,6 +1,28 @@
 # task_20261104
 CLO 플랫폼 과제
 
+## 프로젝트 구성
+
+메시지 브로커 없이 HTTP API로만 통신하는 마이크로서비스 2개다. 서비스마다 전용 DB·Compose 프로젝트를 갖고 각자 독립 host로 기동한다.
+
+| 서비스 | 위치 | 앱 포트 | DB 호스트 포트 | 문서 |
+| --- | --- | --- | --- | --- |
+| 멤버 서비스 | `services/member-service/` | 8081 | 127.0.0.1:15432 | [README](services/member-service/docs/README.md) |
+| 그룹 서비스 | `services/group-service/` | 8082 | 127.0.0.1:25432 | [README](services/group-service/docs/README.md) |
+
+- 기술: JDK 21, Kotlin 2.3.21, Spring Boot 4.1.2, Gradle 9.3.0, PostgreSQL 18.6, springdoc-openapi 3.2.0 ([기술 스택](docs/common/technology-stack.md))
+- 공통 정책·컨벤션: [docs/common/README.md](docs/common/README.md) (아키텍처, CQRS, 코드 컨벤션, 포맷, API, 보안, 서비스 간 통신, 데이터, 테스트)
+- 구성 계획과 확인 결과: [docs/common/project-setup-plan.md](docs/common/project-setup-plan.md)
+
+```powershell
+./gradlew generateLocalSecrets                                   # 로컬 키·토큰·DB 비밀번호 생성(처음 한 번, 값은 출력하지 않음)
+./gradlew build                                                  # 포맷 검사 + 테스트(Docker 필요)
+docker compose -f services/member-service/infra/compose.yaml up -d
+./gradlew :member-service:bootRun                                # http://localhost:8081/swagger-ui.html
+```
+
+실행 방식·포트·종료 방법은 [로컬 실행](docs/common/local-development.md)을 본다.
+
 ## AI 세션 기록
 
 이 저장소는 과제 수행에 쓴 AI 에이전트 세션을 자동으로 수집해 `ai-logs/snapshots/`에 커밋한다. 수집 범위는 입력한 프롬프트, AI 응답, 에이전트가 실행한 명령과 결과, 파일 수정 내역이다.
