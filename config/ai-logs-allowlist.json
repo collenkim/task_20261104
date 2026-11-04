@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "description": "세션 로그 검증에서 '비밀이 아님'으로 검토한 값의 좁은 허용 규칙. 실제 비밀값·개인정보는 절대 넣지 않는다. 항목마다 reason을 적는다. 키 이름만으로 면제하지 않으며 URL은 url_contexts의 조건을 실제 값에 검사한다.",
+  "emails": {
+    "exact": [
+      {
+        "value": "noreply@anthropic.com",
+        "reason": "Claude 커밋 공동 작성자 표기용 공개 주소(개인정보 아님)"
+      }
+    ],
+    "domains": [
+      {
+        "value": "example.com",
+        "reason": "RFC 2606 예약 도메인(문서·테스트 예시)"
+      },
+      {
+        "value": "example.org",
+        "reason": "RFC 2606 예약 도메인(문서·테스트 예시)"
+      },
+      {
+        "value": "example.net",
+        "reason": "RFC 2606 예약 도메인(문서·테스트 예시)"
+      }
+    ]
+  },
+  "random_strings": {
+    "patterns": [
+      {
+        "pattern": "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8",
+        "reason": "tests/test_ai_logging.py 가짜 테스트 값(실행 시 조각을 이어 붙이는 픽스처)"
+      },
+      {
+        "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/tool-results/toolu_[A-Za-z0-9]{20,40}",
+        "reason": "Claude Code 부속 파일 경로(세션 UUID/tool-results/도구 호출 ID). 도구 호출 ID는 대화 기록 식별자이며 비밀값이 아님. 단독 ID는 32자 미만이라 검사 대상이 아니고 경로로 이어질 때만 검출됨"
+      }
+    ],
+    "url_contexts": [
+      {
+        "key": "thumbnail_url",
+        "scheme": "https",
+        "host": "images.openai.com",
+        "path_segments": 2,
+        "query": false,
+        "reason": "Codex 웹 검색 결과의 공개 썸네일 URL. 실제 값 15건이 모두 https://images.openai.com/<2단계 경로>이고 쿼리·인증 정보가 없음을 확인. 조건이 하나라도 다르면 보류"
+      }
+    ]
+  },
+  "keywords": {
+    "value_patterns": [
+      {
+        "pattern": "committed_[A-Za-z_*]*",
+        "reason": "pre-push 검사 결과 이름(secret:committed_ 접두어 규칙 이름). 수집기 코드·테스트·출력에 쓰는 이름이며 비밀값이 아님"
+      }
+    ]
+  },
+  "reviewed_binary": []
+}

@@ -1,0 +1,12 @@
+{
+  "description": "브랜치 규칙과 커밋 작업 ID. feature/<ID> 브랜치의 커밋 제목은 [작업ID]다. 작업 ID는 ID가 task_prefixes 접두어로 시작하면 그 서비스 이름을 붙이고(LOG-001 → AI-LOG-001), 아니면 service(비어 있으면 ID 그대로, SETUP-001 → SETUP-001)를 쓴다.",
+  "service": "",
+  "task_prefixes": {
+    "LOG-": "AI"
+  },
+  "main": "master",
+  "develop": "develop",
+  "remote": "origin",
+  "feature_prefix": "feature/",
+  "bootstrap_feature": "feature/LOG-001"
+}

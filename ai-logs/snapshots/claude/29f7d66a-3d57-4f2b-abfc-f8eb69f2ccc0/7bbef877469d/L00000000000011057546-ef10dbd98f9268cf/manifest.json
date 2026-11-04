@@ -1,0 +1,128 @@
+{
+  "files": [
+    {
+      "copy_bytes": 9412991,
+      "copy_sha256": "481cdf04558a6a67f2f0f8165a7352cfc8b11fed905904f16b76ca9bf4b245c0",
+      "ends_without_newline": false,
+      "lines": 2469,
+      "masked": {
+        "home_user": 520,
+        "listed_value": 324
+      },
+      "original_bytes": 9422542,
+      "original_sha256": "d2742e3723d0007a423393619624e2970bf194033aa6ca5ceed289e352e86e0b",
+      "path": "29f7d66a-3d57-4f2b-abfc-f8eb69f2ccc0.jsonl",
+      "role": "main"
+    },
+    {
+      "copy_bytes": 812085,
+      "copy_sha256": "3f4e78d224ec7b575be41bdad1aecd4dc727a444223dc1e0a357d8ecbd50e147",
+      "ends_without_newline": false,
+      "lines": 74,
+      "masked": {
+        "home_user": 24,
+        "listed_value": 1
+      },
+      "original_bytes": 812093,
+      "original_sha256": "0ed2baad57b419f011db27d7a0c29d935cde14bd9835b2b421395bdf981774a8",
+      "path": "29f7d66a-3d57-4f2b-abfc-f8eb69f2ccc0/subagents/agent-a39b2a63cb0e416a7.jsonl",
+      "role": "attachment"
+    },
+    {
+      "copy_bytes": 301,
+      "copy_sha256": "bbe8d3d499029a4cb04f97f8676538fb9ff0dc22b5a9b8ece17a88a88009883f",
+      "masked": {},
+      "original_bytes": 301,
+      "original_sha256": "bbe8d3d499029a4cb04f97f8676538fb9ff0dc22b5a9b8ece17a88a88009883f",
+      "path": "29f7d66a-3d57-4f2b-abfc-f8eb69f2ccc0/subagents/agent-a39b2a63cb0e416a7.meta.json",
+      "role": "attachment"
+    },
+    {
+      "copy_bytes": 269614,
+      "copy_sha256": "cd374bac0caaf9eb6c2e7c66afac859b806c42275270634f5a800bc400c09fd2",
+      "ends_without_newline": false,
+      "lines": 28,
+      "masked": {
+        "home_user": 3,
+        "listed_value": 1
+      },
+      "original_bytes": 269643,
+      "original_sha256": "313ff245b4d4442557a665c2290678d82345cb1592f608eb1fec100dced04b8b",
+      "path": "29f7d66a-3d57-4f2b-abfc-f8eb69f2ccc0/subagents/agent-a841c5b93d2d13f96.jsonl",
+      "role": "attachment"
+    },
+    {
+      "copy_bytes": 262,
+      "copy_sha256": "d4000e51f2b9d9721351f149175ef90ed33472622f1bef47a4cfcfa0530857d7",
+      "masked": {},
+      "original_bytes": 262,
+      "original_sha256": "d4000e51f2b9d9721351f149175ef90ed33472622f1bef47a4cfcfa0530857d7",
+      "path": "29f7d66a-3d57-4f2b-abfc-f8eb69f2ccc0/subagents/agent-a841c5b93d2d13f96.meta.json",
+      "role": "attachment"
+    },
+    {
+      "copy_bytes": 373960,
+      "copy_sha256": "0fb5751c09754e69d9effdd03babe993bc80331d48bd8b52ba6dac50552ea2a1",
+      "ends_without_newline": false,
+      "lines": 30,
+      "masked": {
+        "home_user": 3,
+        "listed_value": 1
+      },
+      "original_bytes": 373989,
+      "original_sha256": "d6b94e0e27038d63a98a4286fb6c0ad9eda77b9c2f313224f40009f73d574ee4",
+      "path": "29f7d66a-3d57-4f2b-abfc-f8eb69f2ccc0/subagents/agent-aae1388c111e75e45.jsonl",
+      "role": "attachment"
+    },
+    {
+      "copy_bytes": 268,
+      "copy_sha256": "6680ddf994fb6b0177dfff1c5058fc6d374b7433008c43c200af90bd5d82939f",
+      "masked": {},
+      "original_bytes": 268,
+      "original_sha256": "6680ddf994fb6b0177dfff1c5058fc6d374b7433008c43c200af90bd5d82939f",
+      "path": "29f7d66a-3d57-4f2b-abfc-f8eb69f2ccc0/subagents/agent-aae1388c111e75e45.meta.json",
+      "role": "attachment"
+    },
+    {
+      "copy_bytes": 20745,
+      "copy_sha256": "58f2ad58aca605a468b21e9fa0e98f49450cd7cfe4f6ff2aaade9b2948fed061",
+      "masked": {},
+      "original_bytes": 20745,
+      "original_sha256": "58f2ad58aca605a468b21e9fa0e98f49450cd7cfe4f6ff2aaade9b2948fed061",
+      "path": "29f7d66a-3d57-4f2b-abfc-f8eb69f2ccc0/tool-results/toolu_01UzVNrLYH5dwrepi8Lm4eDo.txt",
+      "role": "attachment"
+    },
+    {
+      "copy_bytes": 91290,
+      "copy_sha256": "56ae35be29f8ddd49e0b2a0e83bbeccc333a0766ca48fb6dc469501e190f27cb",
+      "masked": {},
+      "original_bytes": 91290,
+      "original_sha256": "56ae35be29f8ddd49e0b2a0e83bbeccc333a0766ca48fb6dc469501e190f27cb",
+      "path": "29f7d66a-3d57-4f2b-abfc-f8eb69f2ccc0/tool-results/toolu_01X6QCAW4XZ1xfrdcUvSQG3u.txt",
+      "role": "attachment"
+    },
+    {
+      "copy_bytes": 66413,
+      "copy_sha256": "22d4e4c5e593dd4d14f78f785691e9917d4eee811308c7197fa3aa8a18664fc4",
+      "masked": {},
+      "original_bytes": 66413,
+      "original_sha256": "22d4e4c5e593dd4d14f78f785691e9917d4eee811308c7197fa3aa8a18664fc4",
+      "path": "29f7d66a-3d57-4f2b-abfc-f8eb69f2ccc0/tool-results/toolu_01XxPLPgxVTWsy3yaTrFKmoZ.txt",
+      "role": "attachment"
+    }
+  ],
+  "first_timestamp": "2026-11-03T23:04:29.655Z",
+  "kind": "snapshot",
+  "last_timestamp": "2026-11-04T02:46:10.206Z",
+  "main_lines": 2469,
+  "order_basis": "파일 안의 줄 순서 (타임스탬프로 재정렬하지 않음)",
+  "original_bytes_total": 11057546,
+  "policy_version": "7bbef877469d",
+  "schema": 2,
+  "session_id": "29f7d66a-3d57-4f2b-abfc-f8eb69f2ccc0",
+  "snapshot_id": "L00000000000011057546-ef10dbd98f9268cf",
+  "snapshot_sha256": "ef10dbd98f9268cfe849e4c18f278038a8e8282bbedf68cbf363ca0411a722d4",
+  "time_basis": "UTC - 도구가 기록한 ISO 8601 timestamp 값을 그대로 사용",
+  "tool": "claude",
+  "warnings": []
+}

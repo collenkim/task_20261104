@@ -1,0 +1,14 @@
+# AI 세션 로깅 로컬 상태: 등록 기록, 턴 상태, 잠금, 치환 목록(민감값), 예약 작업, 진단. 커밋하지 않는다.
+.ai-logging/
+
+# AI 세션 로그 live 사본: 로컬 확인용. 제출본은 ai-logs/snapshots/ (live ⊆ snapshot 확인 후 제외로 전환)
+ai-logs/live/
+
+# 인증·개인 설정
+.env
+.env.*
+.claude/settings.local.json
+
+# Python
+__pycache__/
+*.py[cod]
