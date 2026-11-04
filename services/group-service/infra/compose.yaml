@@ -1,0 +1,90 @@
+# 그룹 서비스 단독 실행 구성(Compose 프로젝트 task-group). 멤버 서비스와 리소스를 공유하지 않는다.
+#   DB만:     docker compose -f services/group-service/infra/compose.yaml up -d      (앱은 ./gradlew :group-service:bootRun)
+#   앱 + DB:  docker compose -f services/group-service/infra/compose.yaml --profile app up -d --build
+#   종료:     docker compose -f services/group-service/infra/compose.yaml --profile app down   (볼륨은 지우지 않는다)
+# 비밀값은 저장소 secrets/ 의 파일을 Compose secrets 로 마운트한다(값을 환경변수·이 파일에 쓰지 않음).
+# 먼저 ./gradlew generateLocalSecrets 를 실행한다.
+name: task-group
+
+services:
+  group-db:
+    image: postgres:18.6
+    environment:
+      POSTGRES_DB: group_service
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/group_db_admin_password
+    secrets:
+      - group_db_admin_password
+      - group_db_app_password
+    volumes:
+      - group-db-data:/var/lib/postgresql
+      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:25432:5432"
+    networks:
+      - group-db-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d group_service"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+  group-service:
+    profiles: ["app"]
+    build:
+      context: ..
+    image: task/group-service:local
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      GROUP_DB_HOST: group-db
+      GROUP_DB_PORT: "5432"
+      TASK_SECRETS_DIR: /run/secrets
+      TASK_JWT_PUBLIC_KEY: /run/secrets/jwt-public-key.pem
+      # 멤버 서비스는 별도 Compose 프로젝트(task-member)라 호스트 포트로 호출한다. 다른 주소는 환경변수로 바꾼다.
+      TASK_MEMBER_CLIENT_BASE_URL: ${TASK_MEMBER_CLIENT_BASE_URL:-http://host.docker.internal:8081}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    secrets:
+      - source: group_db_app_password
+        target: spring.datasource.password
+      - source: group_swagger_token
+        target: task.security.swagger-token
+      - source: jwt_public_key
+        target: jwt-public-key.pem
+      - source: group_member_client_token
+        target: task.member-client.token
+    ports:
+      - "127.0.0.1:8082:8082"
+    networks:
+      - group-db-net
+    depends_on:
+      group-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8082/actuator/health/readiness"]
+      interval: 10s
+      timeout: 3s
+      start_period: 60s
+      retries: 6
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+volumes:
+  group-db-data:
+
+networks:
+  group-db-net:
+
+secrets:
+  group_db_admin_password:
+    file: ../../../secrets/group-service/db-admin-password
+  group_db_app_password:
+    file: ../../../secrets/group-service/config/spring.datasource.password
+  group_swagger_token:
+    file: ../../../secrets/group-service/config/task.security.swagger-token
+  jwt_public_key:
+    file: ../../../secrets/jwt/public-key.pem
+  group_member_client_token:
+    file: ../../../secrets/group-service/config/task.member-client.token
