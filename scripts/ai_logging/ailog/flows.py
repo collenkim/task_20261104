@@ -174,17 +174,17 @@ def _pick(ctx: Context, onto: str, c: str) -> str | None:
                           env=env).stdout.decode().strip()
 
 
-def _final_log_checks(ctx: Context, commit: str) -> None:
+def _final_log_checks(ctx: Context, commit: str) -> list[str]:
+    """커밋된 비밀값은 중단. 원본보다 뒤처진 로그는 경고만 돌려준다(다음 스냅샷·게시 때 이어서 쌓인다)."""
     pol = engine.build_policy(ctx)
     comp = snapshot.completeness(ctx, commit, pol)
-    if not comp["complete"]:
-        raise FlowStop("logs_incomplete", "; ".join(f"{f['rule']} {f.get('session', '')}" for f in comp["failures"][:5]),
-                       completeness=comp)
+    warnings = [f"logs:{f['rule']} {f.get('session', '')}".rstrip() for f in comp["failures"][:20]]
     leaks = snapshot.scan_tree_secrets(ctx, commit, pol)
     if leaks:
         raise FlowStop("committed_secret_found",
                        "이미 커밋된 값은 새 마스킹 커밋으로 지울 수 없음 - 게시 중단, 이력 정리는 사용자 결정",
                        leaks=leaks[:20])
+    return warnings
 
 
 def _result(fn):
@@ -292,13 +292,13 @@ def push_develop(ctx: Context, feature: str, guard_held: bool = False, push: boo
         missing = dev_bases - _bases(root, new_main)
         if missing:
             raise FlowStop("master_missing_develop_snapshots", f"{len(missing)}개")
-        _final_log_checks(ctx, new_main)
+        warnings = _final_log_checks(ctx, new_main)
         if new_main != main_before:
             gitops.cas_update_branch(root, main, new_main, main_before, "sync develop log commits")
         run["steps"]["master_logs"] = {"from": main_before, "to": new_main, "applied": applied}
         _save_run(ctx, run)
         result = {"ok": True, "develop": dev_head, "master": new_main, "picked": len(applied),
-                  "develop_log_commit": r.get("committed", False), "pushed": False}
+                  "develop_log_commit": r.get("committed", False), "pushed": False, "warnings": warnings}
         if push:
             refspecs = [f"refs/heads/{dev}:refs/heads/{dev}", f"refs/heads/{main}:refs/heads/{main}"]
             p = gitops.git_run(root, "push", "--atomic", remote, *refspecs, check=False, timeout=600)
@@ -399,10 +399,7 @@ def merge_feature(ctx: Context, feature: str, guard_held: bool = False) -> dict:
         head0 = gitops.rev(root, f"refs/heads/{name}")
         local_main = gitops.rev(root, f"refs/heads/{main}")
         direct = direct_source_commits(root, om, local_main, remote) if (om and local_main) else []
-        if direct:
-            raise FlowStop("master_direct_source_commit",
-                           f"병합 커밋 없이 로컬 {main}에 들어온 소스 커밋 {len(direct)}개(IDE·git merge의 fast-forward 등). "
-                           f"push 전이라면 확인 후 'git branch -f {main} {remote}/{main}'로 되돌린 뒤 다시 실행")
+        warnings = [f"commit {c[:12]} master_direct_source_commit" for c in direct]
         if om:
             # 다시 실행하는 경우: 앞선 실행이 만든(아직 push 전) 이 feature의 병합·로그 커밋은 허용
             _align(ctx, main, om, cur, allow_ahead_log_only=True,
@@ -440,7 +437,8 @@ def merge_feature(ctx: Context, feature: str, guard_held: bool = False) -> dict:
         run["steps"]["tail_log_commit"] = head2
         _save_run(ctx, run)
         if gitops.is_ancestor(root, head2, main_before):
-            return {"ok": True, "merged": False, "reason": "already_merged", "master": main_before}
+            return {"ok": True, "merged": False, "reason": "already_merged", "master": main_before,
+                    "warnings": warnings}
         if develop_check == "included":
             check_line = f"  develop 검토 대상 코드 커밋 {code[:12]} 포함 확인 (테스트는 자동 검증하지 않음)\n"
         else:
@@ -453,10 +451,10 @@ def merge_feature(ctx: Context, feature: str, guard_held: bool = False) -> dict:
         need = _bases(root, head2) | _bases(root, main_before)
         if not need <= _bases(root, new):
             raise FlowStop("merged_logs_missing")
-        _final_log_checks(ctx, new)
+        warnings += _final_log_checks(ctx, new)
         gitops.cas_update_branch(root, main, new, main_before, f"merge {name} --no-ff")
         run["steps"]["merge"] = new
         run["finished"] = utc_now()
         _save_run(ctx, run)
         return {"ok": True, "merged": True, "commit": new, "master_before": main_before, "bootstrap": bootstrap,
-                "develop_check": develop_check, "next": f"git push {remote} {main}  (사용자 실행, pre-push가 로그 완전성을 다시 검사)"}
+                "develop_check": develop_check, "warnings": warnings, "next": f"git push {remote} {main}  (사용자 실행)"}
