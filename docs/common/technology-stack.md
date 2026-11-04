@@ -37,6 +37,8 @@ Spring Boot BOM이 관리하는 버전(직접 고정하지 않음, 4.1.2 기준)
 - 라이브러리는 Spring Boot BOM 버전을 우선 쓴다. BOM 밖의 플러그인·라이브러리만 `libs.versions.toml`에 고정한다.
 - 버전을 올리면 이 표와 `libs.versions.toml`을 함께 고치고, 두 서비스를 모두 빌드·테스트한다.
 
+MEMBER-001 계획에는 계층·OpenAPI 스키마 검사 도구가 포함되지만 아직 의존성을 추가하지 않았다. 구현 단계에서 JDK 21·Kotlin·Spring Boot/Jackson 3 호환성을 확인한 뒤 필요한 테스트 의존성만 고정한다. 지수 백오프·Full Jitter 설계만으로 별도 재시도 프레임워크가 설치됐다고 기록하지 않는다.
+
 ## 확인 근거 (2026-11-04)
 
 - Gradle 배포 목록(`services.gradle.org`): 9.3.0 배포 파일과 SHA-256.

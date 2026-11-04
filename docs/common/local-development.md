@@ -102,3 +102,16 @@ IntelliJ에서 Application 클래스를 직접 실행할 때는 다음 환경변
 - PowerShell 프록시 우회 확인: `curl.exe --noproxy "*" -fsS http://127.0.0.1:8081/actuator/health/readiness`.
 - 그룹 명세 503: 그룹 상태와 내부 IP·포트, 통합 덮어쓰기 적용을 확인한다.
 - 그룹 명세 500: 두 앱의 키 설정·재시작 여부를 확인한다. 값을 출력하지 않는다.
+
+## MEMBER-001 선행 개발 실행 계획 (미적용 M-04·M-06·M-11)
+
+아래는 구현 후 제공할 동작이다. 현재 source 선택·시드·업무 API는 아직 없다.
+
+- local 프로필은 `task.group-membership.source=fixture`로 멤버 내부 합성 소속 데이터를 사용한다. 기본 프로필은 http다. fixture는 local 외에서 선택할 수 없다.
+- 루트 Compose와 멤버 단독 Compose에서 해당 멤버 설정을 사용한다. Compose 환경변수에 `TASK_GROUP_MEMBERSHIP_SOURCE` 선택을 연결하여 필요할 때 http로 명시 전환한다. 이 연결도 구현 대상이다.
+- 기존 `docker compose up -d --build --wait`로 local 시드와 fixture를 적용한 멤버 API를 실행하고 Swagger에서 성공 응답을 확인한다. 그룹 서비스가 아직 업무 API를 제공하지 않아도 fixture 기반 조회는 200이어야 한다.
+- http 선택 시 실제 그룹 주소·키를 사용한다. 실패하면 500/503을 반환하며 fixture로 대체하지 않는다. 실제 그룹 업무 API가 없는 현재 구성에서는 http의 정상 업무 연동을 완료로 표시하지 않는다.
+- 기존 그룹 명세 전달은 실제 HTTP를 유지한다. 그룹 정지 시 명세 드롭다운 조회 실패와 fixture 멤버 API 성공을 별도로 확인한다.
+- local Flyway 경로는 기존 `db/migration/mariadb` + `db/seed/local`이다. 시드 재실행 조건·보호 규칙은 [POL-DATA-004](data-conventions.md#pol-data-004-local-시드), ID·소속 예시는 [멤버 엔티티](../../services/member-service/docs/entities.md#local-시드-계획-m-06)를 따른다.
+- R__ 내용이 그대로이면 단순 재시작으로 행이 다시 생성되지 않는다. 시드 재적용을 위해 전체 DB를 삭제하지 않는다. 내용 변경 후 재적용이나 별도 검증용 새 DB를 사용한다. 사용자 데이터 초기화가 필요할 때만 사용자가 대상 Compose 프로젝트·볼륨과 삭제 영향을 확인한다.
+- 시드·fixture는 합성 정보이고 jar에 포함된다. 기본 프로필에서 실행되지 않는다는 의미이며 산출물에서 제거했다고 기록하지 않는다.

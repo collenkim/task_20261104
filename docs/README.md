@@ -17,12 +17,14 @@
 - 루트 `docker compose up -d --build --wait`로 두 앱과 DB를 실행한다. 서비스 소유 Compose도 단독 실행할 수 있다.
 - 공통 실행 규칙과 기술 정책은 `docs/common/`, 업무 정책·엔티티·API 계약은 `services/<서비스>/docs/`에서 관리한다.
 - 현재 구현은 실행 골격이다. 업무 엔티티·조회 API·실제 업무 연동의 완료 여부를 Swagger 노출이나 설정 존재만으로 판단하지 않는다.
+- MEMBER-001의 [통합 계획](common/member-query-plan.md)·[구현 요청서](common/requests/MEMBER-001.md)는 문서에 반영됐다. 다중 소속·local fixture 선행 개발·백오프/지터는 아직 실행 코드에 적용되지 않았다.
 
 ## 공통 규칙 읽는 순서
 
 | 문서 | 확인할 내용 |
 | --- | --- |
 | [구성 계획](common/project-setup-plan.md)·[기술 스택](common/technology-stack.md) | 요구사항·버전·현재 구현 범위 |
+| [멤버 조회 계획](common/member-query-plan.md)·[구현 요청](common/requests/MEMBER-001.md) | MEMBER-001 범위·소유 계약·단계·미적용 상태 |
 | [구조 변경 계획](common/structure-change-plan.md) | 멤버 공개·그룹 내부 전용 전환의 보완 항목(G-01~G-14)과 완료 기준 |
 | [아키텍처](common/architecture.md)·[CQRS](common/cqrs.md) | 서비스 독립성·계층·조회/변경 경계 |
 | [코드 컨벤션](common/code-conventions.md)·[포매터](common/formatting.md) | Kotlin·Spring·JPA·enum 코드 필드, Google 스타일 |

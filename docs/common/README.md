@@ -14,6 +14,7 @@
 | --- | --- | --- | --- |
 | 1 | [project-setup-plan](project-setup-plan.md) | - | SETUP-001 범위·확정 사항·완료 기준과 결과 |
 | 1-1 | [structure-change-plan](structure-change-plan.md) | G-xx | 멤버 공개 진입점·그룹 내부 전용 전환의 보완 항목과 완료 기준 |
+| 1-2 | [member-query-plan](member-query-plan.md)·[구현 요청](requests/MEMBER-001.md) | M-xx | 다중 소속 멤버 조회·local fixture·계약·재시도·단계 검증(미적용) |
 | 2 | [architecture](architecture.md) | POL-ARCH | 서비스 경계, 직접 참조 금지, 인프라 소유, 공개 범위와 호출 방향 |
 | 3 | [cqrs](cqrs.md) | POL-CQRS | 서비스 내부 계층과 조회·변경 경로 |
 | 4 | [code-conventions](code-conventions.md) | POL-CODE | Kotlin·Spring·JPA·enum 코드명/설명 규칙 |

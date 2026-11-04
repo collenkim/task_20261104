@@ -33,6 +33,8 @@ Swagger: [멤버 서비스](http://127.0.0.1:8081/swagger-ui.html)에서 두 명
 
 현재는 서비스 실행 골격이며 업무 조회 API·엔티티는 후속 작업이다. [요구사항 재검증](docs/common/setup-verification.md)에 구현·미구현을 구분했다.
 
+다음 작업 MEMBER-001은 [통합 계획](docs/common/member-query-plan.md)과 [구현 요청서](docs/common/requests/MEMBER-001.md)를 기준으로 한다. 다중 소속 멤버 조회, local 임시 그룹 공급자, 계약·트랜잭션 검증, 지수 백오프·지터는 현재 문서에만 반영된 구현 대상이다.
+
 실행 방식·포트·종료 방법은 [로컬 실행](docs/common/local-development.md)을 본다.
 
 ## AI 세션 기록
