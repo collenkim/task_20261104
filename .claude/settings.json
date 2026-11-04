@@ -1,0 +1,151 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(~/.codex/auth.json)",
+      "Read(~/.claude/.credentials.json)",
+      "Read(~/.claude.json)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./.ai-logging/mask-values.jsonl)",
+      "Bash(git commit:*)",
+      "Bash(git -C * commit *)",
+      "PowerShell(git commit *)",
+      "PowerShell(git -C * commit *)",
+      "Bash(git merge:*)",
+      "Bash(git -C * merge *)",
+      "PowerShell(git merge *)",
+      "PowerShell(git -C * merge *)",
+      "Bash(git push:*)",
+      "Bash(git -C * push *)",
+      "PowerShell(git push *)",
+      "PowerShell(git -C * push *)",
+      "Bash(git pull:*)",
+      "Bash(git -C * pull *)",
+      "PowerShell(git pull *)",
+      "PowerShell(git -C * pull *)",
+      "Bash(git reset:*)",
+      "Bash(git -C * reset *)",
+      "PowerShell(git reset *)",
+      "PowerShell(git -C * reset *)",
+      "Bash(git rebase:*)",
+      "Bash(git -C * rebase *)",
+      "PowerShell(git rebase *)",
+      "PowerShell(git -C * rebase *)",
+      "Bash(git cherry-pick:*)",
+      "Bash(git -C * cherry-pick *)",
+      "PowerShell(git cherry-pick *)",
+      "PowerShell(git -C * cherry-pick *)",
+      "Bash(git revert:*)",
+      "Bash(git -C * revert *)",
+      "PowerShell(git revert *)",
+      "PowerShell(git -C * revert *)",
+      "Bash(git stash:*)",
+      "Bash(git -C * stash *)",
+      "PowerShell(git stash *)",
+      "PowerShell(git -C * stash *)",
+      "Bash(git checkout:*)",
+      "Bash(git -C * checkout *)",
+      "PowerShell(git checkout *)",
+      "PowerShell(git -C * checkout *)",
+      "Bash(git switch:*)",
+      "Bash(git -C * switch *)",
+      "PowerShell(git switch *)",
+      "PowerShell(git -C * switch *)",
+      "Bash(git clean:*)",
+      "Bash(git -C * clean *)",
+      "PowerShell(git clean *)",
+      "PowerShell(git -C * clean *)",
+      "Bash(git add:*)",
+      "Bash(git -C * add *)",
+      "PowerShell(git add *)",
+      "PowerShell(git -C * add *)",
+      "Bash(git rm:*)",
+      "Bash(git -C * rm *)",
+      "PowerShell(git rm *)",
+      "PowerShell(git -C * rm *)",
+      "Bash(git mv:*)",
+      "Bash(git -C * mv *)",
+      "PowerShell(git mv *)",
+      "PowerShell(git -C * mv *)",
+      "Bash(git am:*)",
+      "Bash(git -C * am *)",
+      "PowerShell(git am *)",
+      "PowerShell(git -C * am *)",
+      "Bash(git tag:*)",
+      "Bash(git -C * tag *)",
+      "PowerShell(git tag *)",
+      "PowerShell(git -C * tag *)",
+      "Bash(git update-ref:*)",
+      "Bash(git -C * update-ref *)",
+      "PowerShell(git update-ref *)",
+      "PowerShell(git -C * update-ref *)",
+      "Bash(git commit-tree:*)",
+      "Bash(git -C * commit-tree *)",
+      "PowerShell(git commit-tree *)",
+      "PowerShell(git -C * commit-tree *)",
+      "Bash(git branch -d:*)",
+      "Bash(git -C * branch -d *)",
+      "PowerShell(git branch -d *)",
+      "PowerShell(git -C * branch -d *)",
+      "Bash(git branch -D:*)",
+      "Bash(git -C * branch -D *)",
+      "PowerShell(git branch -D *)",
+      "PowerShell(git -C * branch -D *)",
+      "Bash(git branch -f:*)",
+      "Bash(git -C * branch -f *)",
+      "PowerShell(git branch -f *)",
+      "PowerShell(git -C * branch -f *)",
+      "Bash(git branch -m:*)",
+      "Bash(git -C * branch -m *)",
+      "PowerShell(git branch -m *)",
+      "PowerShell(git -C * branch -m *)"
+    ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -I \"$CLAUDE_PROJECT_DIR/scripts/ai_logging/cli.py\" hook claude UserPromptSubmit",
+            "timeout": 30,
+            "onFailure": "block"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -I \"$CLAUDE_PROJECT_DIR/scripts/ai_logging/cli.py\" hook claude SessionStart",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -I \"$CLAUDE_PROJECT_DIR/scripts/ai_logging/cli.py\" hook claude Stop",
+            "timeout": 300
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -I \"$CLAUDE_PROJECT_DIR/scripts/ai_logging/cli.py\" hook claude SessionEnd",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

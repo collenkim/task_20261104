@@ -1,0 +1,9 @@
+{
+  "description": "AI 세션 로깅 브랜치 규칙. service-작업ID 형식의 커밋 제목과 feature/<작업ID> 브랜치 이름에 쓴다.",
+  "service": "AI",
+  "main": "master",
+  "develop": "develop",
+  "remote": "origin",
+  "feature_prefix": "feature/",
+  "bootstrap_feature": "feature/LOG-001"
+}
