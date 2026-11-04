@@ -36,14 +36,16 @@ task.<서비스>
 
 - 조회 API는 `…Query`를 만들어 `…QueryHandler`에 넘긴다.
 - 처리기는 조회 전용 결과(`…View`)를 돌려준다. 엔티티를 API 응답으로 내보내지 않는다.
-- DB 조회·엔티티의 내부 조회 모델 변환은 저장소 어댑터의 `@Transactional(readOnly = true)` 메서드에서 끝낸다. Spring 프록시를 거쳐 호출하며 자기 호출로 트랜잭션을 우회하지 않는다. MEMBER-001 구현 대상(M-02)이다.
+- DB 조회·엔티티의 내부 조회 모델 변환은 저장소 어댑터의 `@Transactional(readOnly = true)` 메서드에서 끝낸다. Spring 프록시를 거쳐 호출하며 자기 호출로 트랜잭션을 우회하지 않는다. 멤버 JpaMemberReader에 적용했다(M-02).
 - 여러 데이터 소스를 조합하는 QueryHandler 전체에 DB 트랜잭션을 적용하지 않는다. 그룹 HTTP/fixture 포트 진입 전에 DB 트랜잭션이 종료되어야 한다.
 - 다른 서비스 데이터가 필요하면 `application/port`의 계약으로 받는다.
   - 구현은 `infrastructure/client`에 둔다.
   - QueryHandler가 순서를 조정하되 DB 트랜잭션과 외부 호출의 실행 경계를 나눈다. JPA 엔티티·지연 로딩 참조를 포트 밖으로 반환하지 않는다.
 - 목록 조회는 페이지네이션 규칙([POL-API-003](api-conventions.md#pol-api-003-페이지네이션))을 따른다.
 
-## POL-CQRS-004 교체 가능한 경계 (미적용 M-02·M-04·M-09)
+## POL-CQRS-004 교체 가능한 경계
+
+M-02 저장소 출력 포트와 M-04 소속 공급자 선택은 구현했다. 입력 포트·QueryHandler·전체 계층 검사는 M-05·M-09의 후속 작업이다.
 
 - 입력 포트는 Query/View를 주고받는 기술 독립적인 조회 계약이다. HTTP Controller는 이를 호출한다. 새로운 내부 진입점도 같은 유스케이스를 사용할 수 있다.
 - 출력 포트는 application이 소유하고 infrastructure가 구현한다. application은 JPA/Spring Data/RestClient/HTTP/Servlet/Jackson/OpenAPI/presentation DTO에 의존하지 않는다.

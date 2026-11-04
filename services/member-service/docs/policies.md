@@ -12,9 +12,11 @@
 - 그룹 클라이언트가 서버 내부 키를 첨부한다. 사용자 헤더를 그룹으로 그대로 전달하지 않는다.
 - 그룹 장애가 멤버 기동·readiness·자기 명세를 막지 않는다. 현재 그룹 명세 요청은 장애 시 503으로 실패한다.
 - [보안](../../../docs/common/security.md), [통신](../../../docs/common/service-communication.md), [API](../../../docs/common/api-conventions.md), [CQRS](../../../docs/common/cqrs.md)를 따른다.
-- 업무 식별자·조회 조건·공개 필드는 [API 정의](api.md)와 [엔티티](entities.md)에 기록한다. 아래 MEMBER-001 정책은 미적용 목표다.
+- 업무 식별자·조회 조건·공개 필드는 [API 정의](api.md)와 [엔티티](entities.md)에 기록한다. MEMBER-001은 저장소와 소속 공급자 경계를 구현했으며 공개 API 결합은 M-05에서 진행한다.
 
-## POL-MEMBER-001 조회와 다중 소속 (미적용 M-02·M-05)
+## POL-MEMBER-001 조회와 다중 소속
+
+저장소 M-02와 소속 공급자의 계약 검사는 구현했다. 공개 응답 결합 M-05·전체 유스케이스 트랜잭션 검증은 후속 단계다.
 
 - 멤버는 0~N개 그룹에 소속될 수 있으며 권한은 소속별로 다르다. 공개 계약은 항상 `groups[]`다.
 - 멤버 DB에서 정렬·페이지를 먼저 결정하고, 해당 ID만 그룹 포트로 일괄 조회한다. 전체 건수는 멤버 수, 멤버 순서는 DB 결과를 유지한다.
@@ -23,7 +25,9 @@
 - 알 수 없는 비어 있지 않은 권한 코드는 허용한다. 권한 enum을 멤버에 복제하지 않는다. 상세의 선택 정보 `joinedAt`·`pricing` 누락은 null로 매핑한다. 새로운 알 수 없는 응답 필드는 수용한다.
 - 조회 트랜잭션은 저장소 경계에서 종료한다. fixture/HTTP 선택과 무관하게 그룹 포트 호출 시 활성 트랜잭션이 없어야 한다.
 
-## POL-MEMBER-002 임시 그룹 공급자 (미적용 M-04)
+## POL-MEMBER-002 임시 그룹 공급자
+
+source 설정·HTTP/fixture 구현과 local 격리를 적용했다. 공개 멤버 API의 실제 200 응답은 M-05·M-11에서 확인한다.
 
 - `GroupMembershipReader`의 `FixtureGroupMembershipReader`와 `HttpGroupMembershipReader` 구현을 둔다. application·Controller에는 공급자 종류 분기나 특정 멤버 ID 하드코딩을 넣지 않는다.
 - 설정 키는 `task.group-membership.source`(`fixture`/`http`)다. 기본 프로필은 http, local 프로필은 선행 작업 동안 fixture를 기본값으로 사용한다. 환경변수 `TASK_GROUP_MEMBERSHIP_SOURCE`로 명시적으로 선택할 수 있다.
@@ -33,4 +37,4 @@
 - fixture와 HTTP는 동일한 내부 소속 모델과 순수 계약 검증 규칙을 사용한다. fixture 모드는 업무 그룹 HTTP 호출을 하지 않는다.
 - HTTP 실패 시 fixture로 대체하지 않는다. 실제 그룹 API가 준비되면 설정만 http로 전환하고 실제 제공자 검증을 추가한다.
 - 기존 `/internal-docs/group`은 실제 그룹 명세 HTTP 조회를 유지한다. fixture로 가짜 그룹 업무 명세를 생성하거나 그룹 내부 API가 구현된 것처럼 표시하지 않는다.
-- 현재 source 설정·fixture 코드는 없다. 목표 명령과 확인 항목은 [로컬 실행](../../../docs/common/local-development.md)에 있다.
+- source 설정·fixture를 읽는 기능은 있으며 local 시드·공개 API는 아직 없다. 현재 실행 방법과 후속 확인 항목은 [로컬 실행](../../../docs/common/local-development.md)에 있다.

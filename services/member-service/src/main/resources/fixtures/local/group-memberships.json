@@ -1,0 +1,49 @@
+{
+  "members": [
+    {
+      "memberId": "tu3fgxd45k",
+      "memberships": [
+        {
+          "groupId": "arutjf9348",
+          "groupName": "개발팀",
+          "permission": "Editor",
+          "permissionName": "편집자",
+          "joinedAt": "2026-08-15T04:00:00.123456Z",
+          "pricing": "Premium"
+        },
+        {
+          "groupId": "demo000002",
+          "groupName": "프로젝트팀",
+          "permission": "Viewer",
+          "permissionName": "조회자",
+          "joinedAt": null,
+          "pricing": null
+        }
+      ]
+    },
+    {
+      "memberId": "dj8fy4bewk",
+      "memberships": [
+        {
+          "groupId": "arutjf9348",
+          "groupName": "개발팀",
+          "permission": "Viewer",
+          "permissionName": "조회자"
+        }
+      ]
+    },
+    { "memberId": "k2m9x0p1q3", "memberships": [] },
+    { "memberId": "j0n8k2m4p6", "memberships": [] },
+    {
+      "memberId": "q1w2e3r4t5",
+      "memberships": [
+        {
+          "groupId": "demo000002",
+          "groupName": "프로젝트팀",
+          "permission": "Editor",
+          "permissionName": "편집자"
+        }
+      ]
+    }
+  ]
+}

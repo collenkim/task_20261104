@@ -8,16 +8,16 @@
 
 | 대상 | 현재 상태 |
 | --- | --- |
-| 업무 JPA 엔티티·Repository | 미구현. 프로젝트 구성 단계에서 업무 필드·키·관계를 임의로 확정하지 않는다 |
-| 업무 테이블 | 없음 |
+| 업무 JPA 엔티티·Repository | MemberEntity·MemberJpaRepository·JpaMemberReader 구현, `ef03e16`에서 검증 |
+| 업무 테이블 | Flyway V2의 member. local 시드는 아직 미적용 |
 | `flyway_schema_history` | Flyway가 생성·관리하는 이력 테이블. 업무 엔티티로 매핑하지 않음 |
 | `jpa_probe` / `JpaProbe` | 테스트 전용. 운영 스키마·jar에 포함하지 않음 |
 
 Spring Data JPA 스타터, Hibernate, Kotlin JPA 기본 생성자·프록시 지원은 구성돼 있다. `ddl-auto=validate`로 검증하고 Flyway만 DDL을 적용한다.
 
-자료형·UTC·문자셋은 [공통 데이터 규칙](../../../docs/common/data-conventions.md)을 따른다. 다음은 MEMBER-001의 목표이며 아직 업무 테이블은 생성되지 않았다.
+자료형·UTC·문자셋은 [공통 데이터 규칙](../../../docs/common/data-conventions.md)을 따른다. 다음 스키마는 MEMBER-001 M-01에 구현됐으며 실제 MariaDB 검증은 [1단계 기록](../../../docs/common/member-query-stage-1-verification.md)에 있다. 실행 DB에는 다음 앱 기동의 Flyway migrate 때 적용된다.
 
-## member 테이블 계획 (미적용 M-01)
+## member 테이블 (M-01 적용)
 
 마이그레이션은 `src/main/resources/db/migration/mariadb/V2__create_member.sql`이다. 기존 V1을 수정하지 않는다. `MemberEntity`는 infrastructure가 소유하며 application·공개 API에 반환하지 않는다.
 
@@ -31,14 +31,14 @@ Spring Data JPA 스타터, Hibernate, Kotlin JPA 기본 생성자·프록시 지
 | created_at | DATETIME(6) | 불가 | 생성 시각 UTC / createdAt |
 | created_by | VARCHAR(50) | 불가 | 생성 주체 / createdBy |
 
-- 인덱스 후보 `ix_member_name_id(name, id)`를 실제 조회 계획과 함께 검증한다. 이름 DESC·ID ASC에서 같은 인덱스가 정렬 비용을 모두 제거한다고 가정하지 않는다.
+- `ix_member_name_id(name, id)`를 적용했다. 검증 데이터셋에서 ASC는 Using index, DESC·ID ASC는 Using index; Using filesort였다. 대량 데이터 성능 보장으로 해석하지 않는다.
 - 기본 문자열 비교는 `utf8mb4_unicode_ci`, ID는 `ascii_bin`이다. 형식·공백·길이는 입력/데이터 검증에서 따로 보장한다.
 - 그룹명·권한·과금·소속 관계는 저장하지 않는다. 그룹 서비스 DB와 외래 키·JPA 연관 관계를 만들지 않는다.
 - 등록·생성 필드는 서로 다른 의미이며 임의로 같은 값으로 추론하지 않는다. 시드에서는 명시적으로 고정값을 지정할 수 있다.
 
 ## local 시드 계획 (M-06)
 
-상태: 미적용. 파일은 `src/main/resources/db/seed/local/R__seed_member.sql`, fixture는 `src/main/resources/fixtures/local/group-memberships.json`으로 계획한다. 위치·재실행·기존 데이터 보호는 [POL-DATA-004](../../../docs/common/data-conventions.md#pol-data-004-local-시드)를 따른다.
+상태: 시드 M-06 미적용. `src/main/resources/db/seed/local/R__seed_member.sql`은 후속 단계다. 소속 fixture `src/main/resources/fixtures/local/group-memberships.json`은 M-04에 추가했다. fixture만으로 멤버 DB 행이 생성되지는 않는다. 위치·재실행·기존 데이터 보호는 [POL-DATA-004](../../../docs/common/data-conventions.md#pol-data-004-local-시드)를 따른다.
 
 | 멤버 ID | 이름 | fixture 소속 | 목적 |
 | --- | --- | --- | --- |

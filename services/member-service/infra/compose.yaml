@@ -46,6 +46,7 @@ services:
       MEMBER_DB_HOST: member-db
       MEMBER_DB_PORT: "3306"
       TASK_SECRETS_DIR: /run/secrets
+      TASK_GROUP_MEMBERSHIP_SOURCE: ${TASK_GROUP_MEMBERSHIP_SOURCE:-fixture}
       TASK_GROUP_CLIENT_BASE_URL: ${TASK_GROUP_CLIENT_BASE_URL:-http://127.0.0.1:9}
     secrets:
       - source: member_db_app_password

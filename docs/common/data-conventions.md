@@ -25,7 +25,7 @@
 - 현재 검색 위치: `classpath:db/migration/mariadb`. 이름은 `V<번호>__<설명>.sql`이고 SQL 개행은 LF다.
 - DB는 Compose가 먼저 생성한다. Flyway `create-schemas=false`로 실행하며 이력은 각 DB의 `flyway_schema_history`에 저장한다.
 - 적용한 MariaDB 마이그레이션 내용은 수정하지 않고 다음 버전을 추가한다.
-- MariaDB V1은 최초 이력만 만든다. 업무 테이블은 후속 기능에서 V2부터 추가한다. 운영 경로에 시드 데이터나 테스트 테이블을 넣지 않는다.
+- MariaDB V1은 최초 이력만 만든다. 멤버 V2는 member 테이블을 추가했고 그룹 업무 테이블은 후속 기능 대상이다. 운영 마이그레이션 경로에 시드 데이터나 테스트 테이블을 넣지 않는다.
 - 테스트의 `db/test-migration/V900__jpa_probe.sql`은 테스트 리소스에서만 추가된다. 운영 jar에는 포함하지 않는다.
 
 ## POL-DATA-003 다른 서비스 데이터

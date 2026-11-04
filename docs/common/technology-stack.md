@@ -49,8 +49,8 @@ MEMBER-001 계획에는 계층·OpenAPI 스키마 검사 도구가 포함되지�
 
 | 항목 | 이 저장소에서 쓰는 것 |
 | --- | --- |
-| 스타터 이름 | `spring-boot-starter-webmvc`, `spring-boot-starter-security-oauth2-resource-server`, `spring-boot-starter-restclient`, `spring-boot-starter-flyway` |
-| 테스트 스타터 | `spring-boot-starter-webmvc-test`(`AutoConfigureMockMvc`는 `org.springframework.boot.webmvc.test.autoconfigure`), `spring-boot-starter-security-test` |
+| 스타터 이름 | `spring-boot-starter-webmvc`, `spring-boot-starter-restclient`, `spring-boot-starter-data-jpa`, `spring-boot-starter-flyway` |
+| 테스트 스타터 | `spring-boot-starter-webmvc-test`(`AutoConfigureMockMvc`는 `org.springframework.boot.webmvc.test.autoconfigure`) |
 | Jackson 3 | 패키지 `tools.jackson`, Kotlin 모듈 `tools.jackson.module:jackson-module-kotlin`, `JsonMapper` 주입 |
 | Flyway | DB별 모듈 필요: `flyway-mysql` |
 | Testcontainers 2 | `org.testcontainers:testcontainers-mariadb`, 클래스 `org.testcontainers.mariadb.MariaDBContainer` |

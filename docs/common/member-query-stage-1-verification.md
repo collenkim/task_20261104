@@ -5,7 +5,7 @@
 | 검증일 | 2026-11-05 KST |
 | 브랜치·기준 | `feature/MEMBER-001`, HEAD `1bfa20f` 위 작업 폴더 |
 | 범위 | M-01 멤버 테이블·매핑, M-02 조회 포트·페이지·정렬·저장소 트랜잭션 |
-| 상태 | 구현·작업 폴더 검증 완료. 커밋 SHA 확인 전 |
+| 상태 | 구현·검증 완료. 후속 확인에서 커밋 `ef03e16`의 12개 경로·내용이 검증본과 일치 |
 | 전체 계획 | [멤버 조회 계획](member-query-plan.md) |
 | 스키마 계약 | [멤버 엔티티](../../services/member-service/docs/entities.md) |
 
@@ -56,6 +56,8 @@ ID·이름 투영에 대해 두 방향의 `EXPLAIN`을 수행했다. 현재의 �
 내림차순에서도 인덱스만으로 정렬이 끝난다고 판단하지 않는다. 부분 열 투영과 저장소 밖 트랜잭션 경계의 동작은 [Spring Data 투영](https://docs.spring.io/spring-data/jpa/reference/repositories/projections.html)·[트랜잭션 문서](https://docs.spring.io/spring-data/jpa/reference/jpa/transactions.html)를 참고하고 실제 테스트로 확인했다.
 
 ## 커밋과 후속 단계
+
+2026-11-05 후속 확인: 0단계는 `478026f`, 1단계는 `ef03e16`으로 실행됐다. 각각 19개·12개 경로와 검증 당시 내용을 커밋 blob과 개행 정규화 비교했다. 아래는 당시 예약이 대기 중이었던 상황이며 현재 미완료 상태를 뜻하지 않는다. 현재 구현 범위는 [통합 계획](member-query-plan.md)의 상태 표를 따른다.
 
 - 0단계 문서 커밋 `2dd91a81e303`은 이번 착수 시 아직 pending이었다. Codex 세션은 `unknown (open_turn_without_hook_state)`여서 자동 실행 완료를 확인하지 못했다. 턴 상태를 임의로 idle로 바꾸거나 커밋 보호를 우회하지 않았다.
 - 사용자의 계속 진행 요청에 따라 예약된 19개 문서를 동결하고 독립적인 새 소스·테스트·이 검증 문서만 추가했다. 1단계 예약은 0단계 뒤에 실행되도록 연결한다. 예약은 완료 커밋이 아니며 실제 SHA/트리 검증이 남아 있다.

@@ -16,8 +16,8 @@
   - 구조 변경 항목과 완료 기준은 [구조 변경 계획](common/structure-change-plan.md)에 있다.
 - 루트 `docker compose up -d --build --wait`로 두 앱과 DB를 실행한다. 서비스 소유 Compose도 단독 실행할 수 있다.
 - 공통 실행 규칙과 기술 정책은 `docs/common/`, 업무 정책·엔티티·API 계약은 `services/<서비스>/docs/`에서 관리한다.
-- 현재 구현은 실행 골격이다. 업무 엔티티·조회 API·실제 업무 연동의 완료 여부를 Swagger 노출이나 설정 존재만으로 판단하지 않는다.
-- MEMBER-001의 [통합 계획](common/member-query-plan.md)·[구현 요청서](common/requests/MEMBER-001.md)는 문서에 반영됐다. 다중 소속·local fixture 선행 개발·백오프/지터는 아직 실행 코드에 적용되지 않았다.
+- 현재는 실행 기반과 멤버 테이블·조회 저장소·소속 공급자 경계를 구현했다. 공개 API·실제 그룹 업무 연동은 아직 없다. 완료 여부를 Swagger 노출이나 설정 존재만으로 판단하지 않는다.
+- MEMBER-001의 [통합 계획](common/member-query-plan.md)·[구현 요청서](common/requests/MEMBER-001.md)가 기준이다. [1단계 저장소](common/member-query-stage-1-verification.md)와 [2단계 공급자](common/member-query-stage-2-verification.md)의 검증 범위를 구분한다. 공개 API·local 시드·백오프/지터는 후속 단계다.
 
 ## 공통 규칙 읽는 순서
 

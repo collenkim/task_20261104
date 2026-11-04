@@ -1,4 +1,6 @@
 # IDE·bootRun 기본 그룹 주소. 컨테이너는 Compose가 내부 IP를 지정한다.
 task:
+  group-membership:
+    source: ${TASK_GROUP_MEMBERSHIP_SOURCE:fixture}
   group-client:
     base-url: ${TASK_GROUP_CLIENT_BASE_URL:http://127.0.0.1:8082}

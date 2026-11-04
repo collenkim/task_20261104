@@ -4,7 +4,7 @@
 | --- | --- |
 | 목적 | 테스트 계층, 테스트 DB, 테스트용 비밀값을 다루는 규칙을 정한다 |
 | 범위 | `services/*/src/test/` |
-| 관련 코드 | `services/*/src/test/kotlin/task/*/support/`(`TestSupport.kt`), `JpaPersistenceTests.kt`, `CommonPolicyTests.kt`, `GroupApiDocsTests.kt`, `GroupClientTests.kt`, `InternalServiceConfigurationTests.kt` |
+| 관련 코드 | `services/*/src/test/kotlin/task/*/`, 멤버 MemberPage/MemberPersistence/GroupMembershipDecoder/FixtureGroupMembership/HttpGroupMembership/GroupMembershipConfiguration 테스트 |
 
 ## POL-TEST-001 계층
 
@@ -50,13 +50,17 @@
 
 ## POL-TEST-005 계층과 트랜잭션 (미적용 M-09)
 
+현재 MemberPersistenceTests는 저장소 프록시의 읽기 트랜잭션과 반환 후 종료를 검증한다. 아래 전체 유스케이스·계층 검사는 아직 남아 있다.
+
 - application에서 infrastructure·presentation·JPA·Spring Data·RestClient·HTTP/Servlet·Jackson·OpenAPI 타입을 참조하지 않는지 검사한다. 입력/출력 포트의 인자·반환 타입도 검사 대상이다.
 - presentation은 입력 포트와 Query/View에만 의존하고 JPA·외부 HTTP DTO를 사용하지 않는다. 다른 서비스 코드·공유 런타임 모듈 참조도 금지한다. 계층 검사 도구가 실제 금지 예제를 검출하는지 최소 위반 fixture로 확인한다.
 - 실제 Spring 프록시와 MariaDB를 사용하여 MemberReader 내부에서 읽기 트랜잭션이 활성화되고, 반환 후 GroupMembershipReader 진입 시 비활성임을 확인한다. 이 테스트 메서드 자체에 `@Transactional`을 붙이지 않는다.
 - HTTP 어댑터 진입 시 멤버 호출 스레드의 `TransactionSynchronizationManager` 상태를 검사한다. 테스트 HTTP 서버의 별도 스레드에서 상태를 검사해 통과 처리하지 않는다. 지연 로딩이 밖으로 새지 않는지도 검증한다.
 - fixture와 HTTP를 같은 입력 포트/QueryHandler에 연결하여 공개 계약·정렬·결합 결과가 같은지 확인한다. 난수·대기·클라이언트 교체를 위해 업무 코드를 바꾸지 않아야 한다.
 
-## POL-TEST-006 MEMBER-001 기능 검증 (미적용 M-02~M-06·M-08)
+## POL-TEST-006 MEMBER-001 기능 검증
+
+필수 완료 매트릭스다. 현재 저장소(M-01·M-02), HTTP/fixture 포트·설정(M-03·M-04)은 [1단계](member-query-stage-1-verification.md)·[2단계](member-query-stage-2-verification.md)에서 검증했다. 원시 HTTP 입력·공개 API·시드·백오프/지터는 후속 단계다.
 
 | 영역 | 필수 사례 |
 | --- | --- |

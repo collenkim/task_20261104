@@ -9,8 +9,8 @@
 ## POL-COMM-001 호출 방식과 방향
 
 - HTTP API와 Spring RestClient(JDK HttpClient)만 사용한다. 다른 서비스 코드·DTO·DB를 직접 참조하지 않는다.
-- 빈 이름은 `groupRestClient`다. 업무별 HTTP 인터페이스와 application port는 기능 개발 때 추가한다.
-- 현재 실제 연동은 그룹 OpenAPI 명세 조회다. 업무 조회 연동은 아직 없다.
+- 빈 이름은 `groupRestClient`다. 멤버 소속 조회는 application의 `GroupMembershipReader`와 HTTP 어댑터를 사용한다.
+- 실제 그룹과의 연동은 OpenAPI 명세 조회다. 업무 소속 조회는 HTTP 소비자 어댑터까지 구현했으며 그룹 제공자 API·실제 통합은 아직 없다.
 
 ## POL-COMM-002 주소와 기동
 
@@ -70,10 +70,11 @@ delay(n) = UniformInteger(0, upper(n) 밀리초)
 
 그룹 내부 계약은 `services/group-service/docs/api.md`가 소유한다. 멤버는 자기 코드의 모델로 읽는다. 현재 명세 전달 테스트는 실제 HTTP를 사용하지만 업무 조회 계약의 증거는 아니다. 기능 개발 때 그룹 명세와 소비자 테스트로 호환성을 확인한다.
 
-## POL-COMM-006 선행 개발용 공급자 교체 (미적용 M-03·M-04)
+## POL-COMM-006 선행 개발용 공급자 교체
 
 - 실제 서비스 간 통신은 계속 HTTP다. local fixture는 다른 서비스 통신을 대체 검증하는 멤버 내부 개발용 어댑터이며 실제 그룹 데이터 연동이 아니다.
-- `GroupMembershipReader`가 application 계약을 소유하고 fixture/HTTP 구현이 이를 따른다. 구체 선택·프로필 격리는 [멤버 정책](../../services/member-service/docs/policies.md#pol-member-002-임시-그룹-공급자-미적용-m-04)에 따른다.
+- `GroupMembershipReader`가 application 계약을 소유하고 fixture/HTTP 구현이 이를 따른다. 구체 선택·프로필 격리는 [멤버 정책](../../services/member-service/docs/policies.md#pol-member-002-임시-그룹-공급자)에 따른다.
 - Controller·QueryHandler는 공급자 종류를 모르며 둘의 반환 모델과 의미는 같다. 순수 소속 계약 검증을 재사용한다. 원격 전송 DTO와 공개 DTO는 분리한다.
 - HTTP 모드는 키를 서버에서 추가하고 현재 숫자 IP:포트 설정을 재사용한다. 키·쿼리 ID 목록·응답 본문을 로그에 넣지 않는다.
 - source 설정만 바꿔 공급자를 교체하고 실제 그룹 구현 후 제공자 계약·통합 실행을 별도로 검증한다. HTTP 실패를 fixture/빈 결과로 대체하지 않는다. 명세 전달은 계속 실제 HTTP를 사용한다.
+- HTTP 응답은 200 application/json이어야 한다. 필수 타입을 강제 변환하지 않으며 중복 JSON 키·후행 문서도 계약 오류다. 선택 시각은 UTC Z 또는 +00:00, 소수점 아래 최대 6자리다. 내부 값은 Instant로 통일한다.
