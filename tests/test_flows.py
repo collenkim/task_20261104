@@ -292,8 +292,7 @@ class BootstrapTests(unittest.TestCase):
         r = subprocess.run(["git", "-C", e.root, "commit", "--allow-empty", "-q", "-m", "bad"], capture_output=True)
         self.assertNotEqual(r.returncode, 0)
 
-    def test_bootstrap_without_develop_and_fast_forward_refused(self):
-        """최초 도입은 develop 검증을 생략하고, IDE·git merge의 fast-forward master는 merge-feature·pre-push가 거부."""
+    def _bootstrap_feature(self):
         e, ctx = self.env, self.env.ctx
         e.git("switch", "-q", "-c", "feature/LOG-001")
         e.edit("config/ai-logging.json", json.dumps({"main": "master"}))
@@ -302,35 +301,68 @@ class BootstrapTests(unittest.TestCase):
         e.talk(("구성 완료", "네"))
         snap = snapshot.commit_snapshots(ctx, "AI-LOG-001", "세션 로그 스냅샷 (구성 완료)",
                                          states=turns.effective_states(ctx))
-        self.assertTrue(snap["ok"], snap)
-        origin_master = e.rev("refs/remotes/origin/master")
-        # 사용자가 IDE에서 master로 바꿔 feature를 병합(fast-forward)한 상황
-        e.git("switch", "-q", "master")
-        e.git("merge", "-q", "--ff-only", "feature/LOG-001")
-        e.git("switch", "-q", "feature/LOG-001")
-        ff_master = e.rev("master")
-        r = flows.merge_feature(ctx, "LOG-001")
-        self.assertEqual(r["reason"], "master_direct_source_commit", r)
-        self.assertEqual(e.rev("master"), ff_master)  # 거부 시 ref 그대로
-        p = subprocess.run(["git", "-C", e.root, "push", "-q", "origin", "master"], capture_output=True)
-        self.assertNotEqual(p.returncode, 0)
-        err = p.stderr.decode("utf-8")  # 한글 안내가 UTF-8로 나와야 IDE에서 깨지지 않는다
-        self.assertIn("push를 막았습니다", err)
-        self.assertIn("master_direct_source_commit", err)
-        self.assertIn("git branch -f master origin/master", err)
-        self.assertEqual(e.remote_rev("refs/heads/master"), origin_master)
-        # 안내대로 로컬 master를 되돌리고(사용자 역할) merge-feature → develop 병합 없이 성공
-        e.git("branch", "-f", "master", "origin/master")
+        self.assertTrue(snap["ok"] and snap["committed"], snap)
+        return snap["commit"]
+
+    def push_master(self):
+        p = subprocess.run(["git", "-C", self.env.root, "push", "-q", "origin", "master"], capture_output=True)
+        return p.returncode, p.stderr.decode("utf-8")  # 한글 안내가 UTF-8이어야 IDE에서 깨지지 않는다
+
+    def test_bootstrap_merge_feature_without_develop(self):
+        """최초 도입은 develop 병합 없이 merge-feature로 병합되고 생략 사실을 남긴다."""
+        e, ctx = self.env, self.env.ctx
+        self._bootstrap_feature()
         r = flows.merge_feature(ctx, "LOG-001")
         self.assertTrue(r["ok"] and r["merged"] and r["bootstrap"], r)
         self.assertEqual(r["develop_check"], "skipped_bootstrap")
+        self.assertEqual(r["warnings"], [])
         m = e.rev("master")
         self.assertEqual(len(gitops.parents(e.root, m)), 2)
         self.assertIn("develop 검증 생략(최초 도입: master에 검증 절차 없음)", e.git("log", "-1", "--format=%B", m))
-        p = subprocess.run(["git", "-C", e.root, "push", "-q", "origin", "master"], capture_output=True)
-        self.assertEqual(p.returncode, 0, p.stderr.decode("utf-8", "replace"))
+        rc, err = self.push_master()
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(err, "")  # 경고 없음
         self.assertEqual(e.remote_rev("refs/heads/master"), m)
 
+    def test_push_never_blocked_by_log_lag_and_logs_accumulate(self):
+        """IDE fast-forward·스냅샷 뒤 대화가 있어도 push는 진행(경고), 다음 push에 더 긴 스냅샷이 이어서 쌓인다."""
+        e, ctx = self.env, self.env.ctx
+        first = self._bootstrap_feature()
+        e.talk(("스냅샷 뒤 대화", "네"))  # 마지막 스냅샷 이후 대화
+        # 사용자가 IDE에서 master로 바꿔 feature를 병합(fast-forward)하고 push
+        e.git("switch", "-q", "master")
+        e.git("merge", "-q", "--ff-only", "feature/LOG-001")
+        rc, err = self.push_master()
+        self.assertEqual(rc, 0, err)
+        self.assertIn("push 진행(참고)", err)
+        self.assertIn("master_direct_source_commit", err)
+        self.assertIn("logs:snapshot_behind_original", err)
+        self.assertEqual(e.remote_rev("refs/heads/master"), e.rev("master"))
+        # 다음 스냅샷: 같은 세션의 더 긴 전체본이 추가된다(기존 스냅샷은 그대로)
+        e.git("switch", "-q", "feature/LOG-001")
+        old = set(snapshot.tree_manifests(e.root, first))
+        r = snapshot.submit_snapshots(ctx, task="AI-LOG-001", title="세션 로그 스냅샷 (이어서)")
+        self.assertTrue(r["ok"] and r["committed"], r)
+        new = set(snapshot.tree_manifests(e.root, r["commit"]))
+        self.assertTrue(old < new)
+        self.assertTrue(snapshot.completeness(ctx, r["commit"])["complete"])
+        # git 명령으로 직접 --no-ff 병합 → push: 경고 없이 통과
+        e.git("switch", "-q", "master")
+        e.git("merge", "-q", "--no-ff", "-m", "[AI-LOG-001] feature/LOG-001 master 병합", "-m", "  로그 이어서 반영",
+              "feature/LOG-001")
+        rc, err = self.push_master()
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(err, "")
+        self.assertEqual(e.remote_rev("refs/heads/master"), e.rev("master"))
+        # 형식이 틀린 병합 메시지는 병합 단계에서 막힌다(커밋 규칙)
+        e.git("switch", "-q", "feature/LOG-001")
+        e.talk(("또 대화", "네"))
+        snapshot.submit_snapshots(ctx, task="AI-LOG-001", title="세션 로그 스냅샷 (추가)")
+        e.git("switch", "-q", "master")
+        bad = subprocess.run(["git", "-C", e.root, "merge", "-q", "--no-ff", "-m", "Merge branch", "feature/LOG-001"],
+                             capture_output=True)
+        self.assertNotEqual(bad.returncode, 0)
+        self.assertIn("title_format", bad.stderr.decode("utf-8"))
 
 if __name__ == "__main__":
     unittest.main()

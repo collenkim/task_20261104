@@ -416,8 +416,10 @@ ai-logs/
 - **최초 도입 예외(LOG-001)**: master에 설정이 없을 때는 `new-feature`·`push-develop`을 거부하고, `merge-feature feature/LOG-001`만 허용한다.
   - 사용자 결정: 도입 전에는 develop 검증 절차가 없으므로 최초 도입만 develop 포함 확인을 생략한다. 병합 커밋 본문에 생략 사실을 남긴다.
   - 일반 feature는 feature에서 검증했더라도 develop 최종 테스트를 거쳐야 하므로 develop 포함 확인을 유지한다.
-- **master 직접 소스 커밋 거부**: IDE 병합의 fast-forward로 꼬리 로그 없이 master가 움직여 push가 막힌 실제 사례에 따라 추가했다.
-  - master 첫 부모 경로의 새 커밋은 병합 커밋 또는 로그 전용 커밋이어야 한다. `merge-feature`와 pre-push가 모두 검사한다.
+- **push 검사 범위(사용자 결정)**: push는 항상 가능해야 하고, 로그는 순서대로 쌓이기만 하면 된다.
+  - 스냅샷 뒤처짐·없음, 병합 커밋 없는 master 소스 커밋(fast-forward), AI 턴 진행 중은 경고만 한다. 뒤처진 대화는 다음 스냅샷(더 긴 전체본)에 담긴다.
+  - 막는 것은 기존 스냅샷 수정·삭제, 금지 경로, 메시지 형식, 커밋된 비밀값, master 삭제뿐이다.
+  - 계획 6·8.6절의 "원본 끝까지 담기지 않으면 push 거부"는 이 결정으로 대체한다.
 - **출력 인코딩**: Windows에서 Python이 파이프에 CP949로 쓰던 것을 UTF-8로 고정했다(IDE Git 콘솔의 한글 깨짐 수정).
 
 ## 12. 참고 자료

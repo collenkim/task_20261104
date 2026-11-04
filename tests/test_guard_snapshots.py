@@ -450,7 +450,7 @@ class GitHookTests(Base):
         self.assertNotEqual(r.returncode, 0)  # 작업 폴더에 수집기가 없어도 런타임 사본이 실행된다
         self.assertIn(b"title_format", r.stderr)
 
-    def test_pre_push_master_requires_complete_logs_and_no_committed_secret(self):
+    def test_pre_push_master_warns_on_log_lag_and_blocks_committed_secret(self):
         e = self.env
         remote = os.path.join(e.tmp, "remote.git")
         subprocess.run(["git", "init", "-q", "--bare", remote], check=True)
@@ -459,8 +459,9 @@ class GitHookTests(Base):
         with open(self.ctx.config_path, "w") as f:
             json.dump({"main": cur}, f)
         r = subprocess.run(["git", "-C", e.root, "push", "-q", "origin", cur], capture_output=True)
-        self.assertNotEqual(r.returncode, 0)  # 스냅샷 없음
+        self.assertEqual(r.returncode, 0, r.stderr.decode("utf-8", "replace"))  # 스냅샷 없음: 경고만
         self.assertIn(b"logs:snapshot_missing", r.stderr)
+        self.assertIn("push 진행(참고)".encode("utf-8"), r.stderr)
         self.assertTrue(snapshot.commit_snapshots(self.ctx, "AI-LOG-009", "스냅샷")["committed"])
         r = subprocess.run(["git", "-C", e.root, "push", "-q", "origin", cur], capture_output=True)
         self.assertEqual(r.returncode, 0, r.stderr.decode("utf-8", "replace"))

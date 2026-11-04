@@ -113,7 +113,7 @@ ai-logs/snapshots/<claude|codex>/<세션 ID>/<정책 버전 12자>/L<원본 바�
     - 비밀이 아닌 값은 `config/ai-logs-allowlist.json`에 사유와 함께 좁은 규칙으로 추가한다.
 - **이미 커밋된 값**
   - 새 마스킹 커밋으로 지울 수 없다.
-  - `push-develop`·`merge-feature`·pre-push가 커밋 트리의 모든 스냅샷을 현재 정책으로 다시 검사한다.
+  - `push-develop`·`merge-feature`·pre-push가 커밋 트리의 모든 스냅샷을 현재 정책으로 다시 검사한다(마스킹 실패는 게시 중단).
   - 발견되면 게시를 멈추고 보고한다. 이력 정리 여부는 사용자가 결정한다.
 
 ### 턴 보호와 예약 작업
@@ -165,25 +165,27 @@ master ──new-feature──> feature/<ID> ──(사용자 git merge)──> 
    - 보완한 뒤 다시 develop에 병합하고 `push-develop`을 실행한다.
 5. **최종 병합**: `merge-feature <feature>` (사용자 실행)
    - feature의 마지막 코드 커밋이 develop에 들어 있는지 확인한다(develop 최종 테스트를 거친 코드만 master로 간다. 테스트 통과 자체는 자동 검증하지 않는다).
-   - 로컬 master에 병합 커밋 없이 들어온 소스 커밋(IDE·`git merge`의 fast-forward, 직접 커밋)이 있으면 거부한다(`master_direct_source_commit`).
    - 꼬리 로그 스냅샷 커밋을 만든다.
    - 로컬 master에 `--no-ff` 병합한다.
-   - 코드(feature와 같은 로그 밖 트리)와 로그를 검증한다. **push는 하지 않는다.**
-6. **master push**: 사용자가 `git push origin master`를 실행한다. pre-push가 실제로 보내는 master 커밋을 읽기 전용으로 다시 검사한다.
-   - 메시지 형식
-   - 금지 경로
-   - master 첫 부모 경로의 새 커밋이 병합 커밋 또는 로그 전용 커밋인지(`master_direct_source_commit`)
-   - 로그 완전성(원본 끝까지)
-   - 커밋된 비밀값
-   - 막히면 문제 항목과 해당 항목의 안내만 한국어로 출력한다(UTF-8, IDE Git 콘솔에서 읽을 수 있음).
+   - 코드(feature와 같은 로그 밖 트리)와 커밋된 비밀값을 검증한다. **push는 하지 않는다.**
+   - git 명령으로 직접 병합해도 된다: `submit`(꼬리 스냅샷) → `git switch master` → `git merge --no-ff -m "[작업ID] 제목" -m "  내용" <feature>`. 단 develop 포함 확인은 `merge-feature`만 한다.
+6. **master push**: 사용자가 `git push origin master`(또는 IDE push)를 실행한다. pre-push가 보내는 커밋을 읽기 전용으로 검사한다.
+   - **막는 것**(쌓인 이력을 깨거나 게시하면 안 되는 경우만)
+     - 기존 스냅샷 수정·삭제, 금지 경로(`ai-logs/live/`, `.ai-logging/` 등)
+     - 커밋 메시지 형식
+     - 커밋된 비밀값(마스킹 실패), master 삭제
+   - **경고만 하고 push는 진행**
+     - 스냅샷이 원본보다 뒤처짐·없음: 담기지 않은 대화는 다음 스냅샷 커밋·push에 이어서 쌓인다.
+     - 병합 커밋 없이 master에 들어온 소스 커밋(fast-forward, `master_direct_source_commit`)
+     - AI 턴 진행 중
+   - 출력은 한국어 UTF-8이다(IDE Git 콘솔에서 읽을 수 있음).
 
 **금지 사항**
 
 - develop 전체를 master에 병합하지 않는다.
 - `develop:master`로 push하지 않는다.
 - GitHub PR 등 로컬 명령 밖에서 master에 병합하지 않는다.
-- **IDE의 Merge 메뉴나 `git merge`로 feature를 master에 병합하지 않는다.** fast-forward가 되면 꼬리 로그 스냅샷이 빠지고 병합 커밋도 남지 않는다. 반드시 `merge-feature`를 쓴다.
-  - 이미 했다면(push 전): 확인 후 `git branch -f master origin/master`로 로컬 master를 되돌리고 `merge-feature`를 실행한다.
+- master 병합은 `--no-ff`를 권장한다(IDE Merge 대화상자에서도 `--no-ff` 옵션 선택). fast-forward도 push는 되지만 병합 커밋이 남지 않아 feature 단위 구분이 어려워진다.
 - force push, `--no-verify`, amend를 쓰지 않는다.
 
 #### 최초 도입(LOG-001) 절차
@@ -195,10 +197,9 @@ master ──new-feature──> feature/<ID> ──(사용자 git merge)──> 
    - `merge-feature`는 원격 master에 로깅 설정이 없고 feature가 `feature/LOG-001`일 때만 develop 확인을 건너뛴다.
    - 병합 커밋 본문과 결과(`develop_check: skipped_bootstrap`)에 "develop 검증 생략(최초 도입: master에 검증 절차 없음)"을 남긴다.
    - develop에 병합해 두었다면 일반 확인(`included`)을 한다.
-3. 모든 Claude·Codex 대화를 끝낸다(꼬리 로그가 원본 끝까지 담기도록).
-4. 일반 터미널에서 `python -I scripts/ai_logging/cli.py merge-feature feature/LOG-001`로 꼬리 로그를 포함해 로컬 master에 `--no-ff` 병합한다.
-5. 곧바로 `git push origin master`를 실행한다. 4와 5 사이에 AI 대화를 하면 pre-push가 `snapshot_behind_original`로 막는다(4부터 다시).
-6. 이후 master에 설정이 생기면 일반 흐름을 쓴다. 일반 feature는 develop 확인을 생략할 수 없다(`feature_code_not_in_develop`).
+3. `merge-feature feature/LOG-001`(또는 `submit` 후 `git merge --no-ff`)로 꼬리 로그를 포함해 로컬 master에 병합한다.
+4. `git push origin master`를 실행한다. 병합 뒤 대화가 더 있었다면 경고만 나오고, 그 대화는 다음 push에 이어서 담긴다.
+5. 이후 master에 설정이 생기면 일반 흐름을 쓴다. 일반 feature의 `merge-feature`는 develop 확인을 생략할 수 없다(`feature_code_not_in_develop`).
 
 ### 설치
 
@@ -253,11 +254,12 @@ python -I scripts/ai_logging/cli.py status    # hook 설정·실행 기록·Git 
   - Codex 세션: `task_complete`로 idle
   - 진행 중인 Claude 턴: 열린 턴으로 판정
 - 기존 Claude SessionStart·Stop hook 실행 기록(`.ai-logging/registry.jsonl`)을 확인했다.
-- 실제 pre-push 차단: IDE에서 feature를 master에 fast-forward 병합하고 GitHub로 push하자 pre-push가 `snapshot_behind_original`로 막았다(원격 master 변경 없음).
-  - 이때 한글 안내가 깨졌다(Python이 파이프에 CP949로 출력). 이후 수집기 출력(stdout·stderr)을 UTF-8로 고정했다.
-  - fast-forward 자체를 잡도록 `master_direct_source_commit` 검사를 추가했고, 실제 저장소에서 `271d843`을 감지하는 것을 읽기 전용으로 확인했다.
+- 실제 pre-push 차단 사례: IDE fast-forward 병합 후, 그리고 `git merge --no-ff` 후 GitHub push가 `snapshot_behind_original`로 막혔다(원격 master 변경 없음).
+  - 이때 한글 안내가 깨졌다(Python이 파이프에 CP949로 출력). 수집기 출력(stdout·stderr)을 UTF-8로 고정했다.
+  - 스냅샷은 계속 쌓이는 구조이므로 뒤처짐으로 push를 막는 것은 설계 오류로 판단해 경고로 바꿨다.
+  - 실제 저장소 master(`e2f753e`)로 pre-push 검사를 읽기 전용으로 돌려 막는 문제 0건(경고 3건)을 확인했다.
 
-**가짜 원본·임시 저장소로만 확인함** (`tests/`, 84개 통과)
+**가짜 원본·임시 저장소로만 확인함** (`tests/`, 85개 통과)
 
 - 회귀 a~j(13개): 수정 전 실패(11 failures, 2 errors), 수정 후 통과
 - 스냅샷 규칙
@@ -275,13 +277,14 @@ python -I scripts/ai_logging/cli.py status    # hook 설정·실행 기록·Git 
 - 임시 저장소의 실제 Git hook
   - 형식·턴·금지 경로 검사
   - 읽기 전용 확인, 수집기 없는 브랜치에서도 hook 실행
-  - pre-push 완전성·커밋된 비밀값 거부
+  - pre-push: 스냅샷 없음은 경고로 통과, 커밋된 비밀값은 거부
 - 로컬 bare 원격으로 전체 흐름
   - master → feature → develop(검토 실패) → push-develop → resume → 보완 → develop → push-develop(중복 제외) → merge-feature → master push
   - atomic push 거부 후 이어서 진행
   - master 로그 밖 변경 시 resume 거부
   - 다른 feature 미병합, 최초 도입 예외
-  - 최초 도입: develop 병합 없이 `merge-feature` 성공(생략 문구 기록), fast-forward된 master는 `merge-feature`·pre-push 모두 거부, pre-push 안내가 UTF-8로 나옴
+  - 최초 도입: develop 병합 없이 `merge-feature` 성공(생략 문구 기록, 경고 없이 push)
+  - fast-forward·스냅샷 뒤 대화가 있어도 push 진행(UTF-8 경고), 다음 스냅샷이 더 긴 전체본으로 추가되고 기존 스냅샷은 유지, `git merge --no-ff` 후 push 통과, 형식이 틀린 병합 메시지는 거부
 
 **확인하지 못함** (사용자 확인 필요)
 
@@ -304,7 +307,7 @@ python -I scripts/ai_logging/cli.py status    # hook 설정·실행 기록·Git 
 - **마지막 push 이후의 대화**(그 push를 지시한 응답 등)는 그 push에 담길 수 없다. 다음 게시나 병합 때 포함된다.
   - 단계 로그 커밋은 Stop hook 안에서 만들어진다. 그래서 그 턴의 종료 기록(`turn_duration` 등)은 다음 스냅샷에 들어간다.
 - **도구가 원본 형식을 바꾸면** 턴 판정과 세션 판별이 `unknown`·보류로 바뀔 수 있다(안전한 쪽으로 멈춤).
-- **"누락이 절대 없다"고 보장하지 않는다.** 검사 결과(`completeness`, pre-push)로 확인된 범위만 완전하다고 본다.
+- **"누락이 절대 없다"고 보장하지 않는다.** 검사 결과(`completeness`, pre-push 경고)로 확인된 범위만 완전하다고 본다. push 시점에 뒤처진 대화는 다음 스냅샷에 담긴다.
 - 공개 GitHub 저장소 계정명(`collenkim`)은 저장소 주소 자체이므로 마스킹하지 않는다.
 
 ### 커밋·브랜치 규칙

@@ -1,6 +1,7 @@
 """Git hook 검사(commit-msg, pre-push)와 런타임 설치.
 
 - 검사는 읽기 전용이다: 파일·index·ref를 바꾸지 않는다(잠금도 잡지 않는다).
+- pre-push는 쌓인 로그 이력을 깨는 경우와 마스킹 실패만 막고, 로그 뒤처짐은 경고만 한다(다음 push에 이어서 쌓임).
 - 런타임: .git/ai-logging/runtime/ 에 hook 스크립트와 수집기 사본을 두고 core.hooksPath를 그 hooks로 지정한다.
   로깅 설정이 없는 브랜치(최초 도입 전 master 등)로 전환해도 hook이 사라지지 않는다.
   hook은 작업 폴더에 수집기가 있으면 그것을, 없으면 런타임 사본을 실행한다.
@@ -90,11 +91,18 @@ def _tree_policy(ctx: Context, commit: str):
     return Policy(load_mask_entries(ctx.mask_path), allow)
 
 
-def check_pre_push(ctx: Context, remote: str, lines: list[str]) -> list[str]:
+def check_pre_push(ctx: Context, remote: str, lines: list[str]) -> tuple[list[str], list[str]]:
+    """(막는 문제, 경고)를 돌려준다.
+
+    막는 것: 쌓인 로그 이력을 바꾸거나 지우는 커밋·금지 경로(치환 목록·live), 커밋 메시지 형식,
+    커밋된 비밀값(마스킹 실패), master 삭제.
+    경고만 하는 것: 스냅샷이 원본보다 뒤처짐·없음(다음 push에 담긴다), 병합 커밋 없이 들어온 소스 커밋,
+    AI 턴 진행 중. 스냅샷은 세션마다 더 긴 전체본이 계속 쌓이므로 뒤처진 부분은 다음 게시 때 이어진다.
+    """
     cfg = config.load(ctx)
     main_ref = f"refs/heads/{cfg['main']}"
     root = ctx.root
-    problems = []
+    problems, warnings = [], []
     for ln in lines:
         parts = ln.split()
         if len(parts) != 4:
@@ -122,39 +130,41 @@ def check_pre_push(ctx: Context, remote: str, lines: list[str]) -> list[str]:
             # master를 처음 만드는 push(원격에 master 없음)는 도입 전 이력이므로 검사하지 않는다.
             if remote_oid != gitops.ZERO:
                 for c in direct_source_commits(root, base, local_oid, remote):
-                    problems.append(f"commit {c[:12]} master_direct_source_commit")
-            busy = turns.busy_sessions(ctx)
-            if busy:
-                problems.append("ai_turn_not_idle")
+                    warnings.append(f"commit {c[:12]} master_direct_source_commit")
+            if turns.busy_sessions(ctx):
+                warnings.append("ai_turn_not_idle")
             pol = _tree_policy(ctx, local_oid)
             comp = snapshot.completeness(ctx, local_oid, pol)
             for f in comp["failures"][:20]:
-                problems.append(f"logs:{f['rule']} {f.get('session', '')} {f.get('file', '')}".rstrip())
+                warnings.append(f"logs:{f['rule']} {f.get('session', '')} {f.get('file', '')}".rstrip())
             for f in snapshot.scan_tree_secrets(ctx, local_oid, pol)[:20]:
                 problems.append(f"secret:{f['rule']} {f['file']}" + (f":{f['line']}" if "line" in f else ""))
-    return problems
+    return problems, warnings
 
 
 ADVICE = (
-    ("logs:snapshot_behind_original", "스냅샷이 원본보다 뒤처졌습니다(마지막 스냅샷 이후 대화가 있음). 모든 AI 대화를 끝낸 뒤 "
-                                      "merge-feature(또는 push-develop)를 다시 실행하고 곧바로 push하세요."),
-    ("logs:snapshot_missing", "현재 정책의 스냅샷이 없습니다. merge-feature(또는 push-develop)를 실행하세요."),
-    ("master_direct_source_commit", "병합 커밋 없이 master에 들어온 소스 커밋이 있습니다(IDE·git merge의 fast-forward 등). "
-                                    "push 전이라면 확인 후 'git branch -f master origin/master'로 되돌리고 merge-feature로 "
-                                    "병합하세요."),
+    ("logs:", "이번 push에 담기지 않은 대화는 다음 push(다음 스냅샷 커밋)에 이어서 쌓입니다. 지금 포함하려면 병합 전에 "
+              "'python -I scripts/ai_logging/cli.py submit'으로 스냅샷을 커밋하세요."),
+    ("master_direct_source_commit", "병합 커밋 없이 master에 들어온 소스 커밋입니다(IDE·git merge의 fast-forward 등). "
+                                    "이력 구분을 위해 다음부터는 --no-ff 병합(또는 merge-feature)을 권장합니다."),
+    ("ai_turn_not_idle", "AI 턴이 진행 중입니다. 그 턴의 대화는 다음 push에 담깁니다."),
     ("message:", "커밋 메시지 형식: [서비스-작업ID] 제목 / 빈 줄 / 두 칸 들여쓴 작업 내용"),
-    ("ai_turn_not_idle", "AI 턴이 진행 중입니다. 대화가 끝난 뒤 다시 push하세요."),
     ("secret:", "이미 커밋된 값이 현재 치환 목록·검출 규칙에 걸립니다. 새 마스킹 커밋으로 지워지지 않으므로 게시를 멈추고 "
                 "이력 정리를 결정하세요."),
 )
 
 
+def _advice(items: list[str]) -> list[str]:
+    return [text for key, text in ADVICE if any(key in p for p in items)]
+
+
 def pre_push(ctx: Context, remote: str, stdin_text: str) -> int:
-    problems = check_pre_push(ctx, remote, [x for x in stdin_text.splitlines() if x.strip()])
+    problems, warnings = check_pre_push(ctx, remote, [x for x in stdin_text.splitlines() if x.strip()])
     if problems:
-        advice = [text for key, text in ADVICE if any(key in p for p in problems)]
-        _err(["push를 막았습니다:"] + ["  - " + p for p in problems[:40]] + advice)
+        _err(["push를 막았습니다:"] + ["  - " + p for p in problems[:40]] + _advice(problems))
         return 1
+    if warnings:
+        _err(["push 진행(참고):"] + ["  - " + p for p in warnings[:40]] + _advice(warnings))
     return 0
 
 

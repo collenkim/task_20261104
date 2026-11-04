@@ -120,7 +120,11 @@ def _print_snapshot(r):
 
 def _print_flow(cmd, r):
     if r.get("ok"):
-        print(f"{cmd} 완료: " + ", ".join(f"{k}={v}" for k, v in r.items() if k not in ("ok", "completeness")))
+        print(f"{cmd} 완료: " + ", ".join(f"{k}={v}" for k, v in r.items() if k not in ("ok", "completeness", "warnings")))
+        for w in r.get("warnings") or []:
+            print(f"  참고: {w}")
+        if any(w.startswith("logs:") for w in r.get("warnings") or []):
+            print("  담기지 않은 대화는 다음 스냅샷 커밋·push에 이어서 쌓입니다.")
         return
     print(f"{cmd} 중단: {r.get('reason')} {r.get('detail', '') or ''}".rstrip())
     for k in ("note", "stderr"):
