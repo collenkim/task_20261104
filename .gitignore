@@ -12,3 +12,16 @@ ai-logs/live/
 # Python
 __pycache__/
 *.py[cod]
+
+# 로컬 비밀값(인증키·고정 토큰·DB 비밀번호): ./gradlew generateLocalSecrets 가 만든다.
+# 저장소·이미지·빌드 컨텍스트·AI 세션 로그에 값이 남지 않게 한다. AI는 이 폴더를 읽지 않는다(AGENTS.md).
+secrets/
+
+# Gradle·Kotlin 빌드 산출물
+build/
+.gradle/
+.kotlin/
+
+# IDE
+.idea/
+*.iml

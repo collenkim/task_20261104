@@ -1,6 +1,40 @@
 # task_20261104
 CLO 플랫폼 과제
 
+## 프로젝트 구성
+
+메시지 브로커 없이 HTTP API로만 통신하는 마이크로서비스 2개다. 서비스마다 전용 DB·Compose 프로젝트를 갖고 각자 독립 host로 기동한다.
+
+- 사용자는 **멤버 서비스만** 호출한다.
+- 그룹 서비스는 내부 호출 키를 확인하는 **내부 전용** 서비스다. 호출은 멤버 → 그룹 단방향이다([ADR-005](docs/common/decisions/ADR-005-member-edge-group-internal.md)).
+- 사용자 인증·인가는 제외하고 멤버 → 그룹 호출에만 공유 시크릿 헤더를 사용한다([구조 변경 계획](docs/common/structure-change-plan.md)).
+
+| 서비스 | 위치 | 공개 범위 | 앱 포트 | DB 호스트 포트 | 문서 |
+| --- | --- | --- | --- | --- | --- |
+| 멤버 서비스 | `services/member-service/` | 공개(진입점) | 8081 | 127.0.0.1:13306 | [README](services/member-service/docs/README.md) |
+| 그룹 서비스 | `services/group-service/` | 내부 전용(멤버만) | 8082 (호스트 미노출) | 127.0.0.1:23306 | [README](services/group-service/docs/README.md) |
+
+- 기술: JDK 21, Kotlin 2.3.21, Spring Boot 4.1.2, Gradle 9.3.0, Spring Data JPA, MariaDB 11.8.9, springdoc-openapi 3.2.0 ([기술 스택](docs/common/technology-stack.md))
+- 공통 정책·컨벤션: [docs/common/README.md](docs/common/README.md) (아키텍처, CQRS, 코드 컨벤션, 포맷, API, 보안, 서비스 간 통신, 데이터, 테스트)
+- 구성 계획과 확인 결과: [docs/common/project-setup-plan.md](docs/common/project-setup-plan.md)
+
+저장소 루트에서 두 서비스를 함께 실행한다.
+
+```powershell
+./gradlew.bat generateLocalSecrets       # 최초 한 번, 기존 비밀값 유지
+docker compose up -d --build --wait      # 두 앱 + 전용 MariaDB 2개, 소스 자동 빌드
+docker compose ps                       # 상태 확인
+docker compose down                     # 종료, 데이터 볼륨 유지
+```
+
+Swagger: [멤버 서비스](http://127.0.0.1:8081/swagger-ui.html)에서 두 명세를 선택한다. 멤버 명세는 실행 가능하고 그룹 명세는 읽기 전용이다. 그룹 명세는 멤버 서버가 내부 키로 받아 전달하며 브라우저에 키를 주지 않는다.
+
+공통 문서는 [문서 시작점](docs/README.md)에서 기술 스택·코드/enum 규칙·CQRS·데이터·API·보안·실행 정책 순서로 확인한다. 서비스별 정책·엔티티·API 계약은 각 서비스의 `docs/`가 소유한다.
+
+현재는 서비스 실행 골격이며 업무 조회 API·엔티티는 후속 작업이다. [요구사항 재검증](docs/common/setup-verification.md)에 구현·미구현을 구분했다.
+
+실행 방식·포트·종료 방법은 [로컬 실행](docs/common/local-development.md)을 본다.
+
 ## AI 세션 기록
 
 이 저장소는 과제 수행에 쓴 AI 에이전트 세션을 자동으로 수집해 `ai-logs/snapshots/`에 커밋한다. 수집 범위는 입력한 프롬프트, AI 응답, 에이전트가 실행한 명령과 결과, 파일 수정 내역이다.

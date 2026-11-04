@@ -1,0 +1,9 @@
+# 로컬 일괄 실행 진입점. 앱·DB·네트워크·볼륨 정의는 각 서비스가 소유한다.
+# 최초 한 번: ./gradlew.bat generateLocalSecrets
+# 실행: docker compose up -d --build --wait
+# 종료: docker compose down (데이터 볼륨 유지)
+name: task-local
+
+include:
+  - services/member-service/infra/compose.yaml
+  - services/group-service/infra/compose.yaml

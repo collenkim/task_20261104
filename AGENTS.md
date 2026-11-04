@@ -1,5 +1,13 @@
 # 에이전트 공통 규칙 (Codex, Claude Code)
 
+## 프로젝트 문서와 개발 규칙
+
+- 작업 전 `docs/README.md`에서 공통 문서와 서비스 소유 문서를 확인한다. 현재 스펙은 `docs/common/technology-stack.md`, 검증 상태는 `docs/common/setup-verification.md`를 기준으로 한다.
+- 코드 작성은 `docs/common/code-conventions.md`와 CQRS·API·데이터 정책을 따른다. 코드·상태 enum에는 `code`, `status`, `codeName`, `description`을 명시한다(POL-CODE-005). 외부 계약에 enum의 순번이나 상수 이름을 그대로 사용하지 않는다.
+- 업무 정책·엔티티·API 정의는 해당 서비스의 `docs/`에 갱신한다. 공통 규칙은 서비스 문서마다 복제하지 않고 공통 문서로 연결한다.
+- 로컬 기본 실행은 루트 `docker compose up -d --build --wait`다. 서비스별 Compose와 DB·네트워크·볼륨의 소유권을 유지한다. 일괄/단독 실행의 포트·볼륨 차이는 `docs/common/local-development.md`를 확인한다.
+- 미구현 기능과 미검증 항목을 완료로 표시하지 않는다. 소스·설정 변경 시 관련 문서와 실제 검증 결과를 함께 갱신한다.
+
 ## 커밋 메시지
 
 ```text
@@ -55,5 +63,6 @@
 ## 민감정보
 
 - 비밀값·개인정보를 명령줄 인수, 출력, 응답에 쓰지 않는다. 진단은 규칙·줄 번호·길이·형태만 출력한다.
-- 읽지 않는 파일: `.ai-logging/mask-values.jsonl`, `~/.codex/auth.json`, `~/.claude/.credentials.json`, `~/.claude.json`, `.env`, `.env.*`.
+- 읽지 않는 파일: `.ai-logging/mask-values.jsonl`, `~/.codex/auth.json`, `~/.claude/.credentials.json`, `~/.claude.json`, `.env`, `.env.*`, `secrets/`(로컬 키·토큰·DB 비밀번호).
+  - `secrets/`는 `./gradlew generateLocalSecrets`가 만든다. 존재·파일 이름만 확인하고 내용은 열지 않는다(`docs/common/security.md`).
 - 테스트의 가짜 비밀값은 실행 중에 조각을 이어 붙여 만든다(완성된 형태를 소스에 쓰지 않는다).
