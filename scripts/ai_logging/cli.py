@@ -196,6 +196,8 @@ def main(argv=None) -> int:
     _utf8_stdout()  # hook·githook 포함 모든 명령의 출력(stdout·stderr)을 UTF-8로
     ctx = default_context()
     cmd = argv[0] if argv else "status"
+    if cmd in ("push-develop", "merge-feature", "submit", "sync", "verify"):
+        os.environ.setdefault("AI_LOGGING_PROGRESS", "1")
     if cmd == "hook":
         if len(argv) != 3:
             return 0

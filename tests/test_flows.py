@@ -129,6 +129,30 @@ class FlowTests(unittest.TestCase):
     def nonlog(self, ref):
         return {k: v for k, v in gitops.tree_files(self.env.root, ref).items() if not k.startswith("ai-logs/")}
 
+    def test_feature_and_develop_log_commits_both_reach_master(self):
+        e, ctx = self.env, self.ctx
+        self.assertTrue(flows.new_feature(ctx, "LOG-002")["ok"])
+        e.edit("src/app.py", "feature source\n")
+        e.commit_msg("AI-LOG-002", "구현", "소스는 최종 feature 병합 때만 반영")
+        e.talk(("feature 검증", "통과"))
+        logged = snapshot.commit_snapshots(ctx, "AI-LOG-002", "feature 검증 로그")
+        self.assertTrue(logged["ok"] and logged["committed"], logged)
+        before = self.nonlog("master")
+        e.merge_into_develop("feature/LOG-002", "AI-LOG-002")
+        e.git("switch", "-q", "develop")
+        e.talk(("develop 검증", "통과"))
+        result = flows.push_develop(ctx, "LOG-002")
+        self.assertTrue(result["ok"] and result["pushed"], result)
+        self.assertEqual(result["picked"], 2)
+        self.assertEqual(self.nonlog("master"), before)
+        master_files = gitops.tree_files(e.root, "master", "ai-logs/snapshots")
+        for path, blob in gitops.tree_files(e.root, "develop", "ai-logs/snapshots").items():
+            self.assertEqual(master_files.get(path), blob)
+        again = flows.push_develop(ctx, "LOG-002")
+        self.assertTrue(again["ok"], again)
+        self.assertEqual(again["picked"], 0)
+        self.assertEqual(self.nonlog("master"), before)
+
     def test_full_branch_flow(self):
         e, ctx = self.env, self.ctx
         self.assertTrue(e.hooks["ok"], e.hooks)
