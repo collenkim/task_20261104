@@ -2,6 +2,8 @@
 
 | 항목 | 내용 |
 | --- | --- |
+| 분류 | 공통 기준 |
+| 상태 | 현재 · 적용 예정 사항은 해당 절에서 구분 |
 | 목적 | 멤버 → 그룹 호출의 주소·키·제한 시간·실패 처리 |
 | 범위 | 유일한 호출 방향은 멤버 → 그룹. 그룹은 다른 서비스를 호출하지 않음 |
 | 관련 코드 | 멤버 `infrastructure/client/`, `application/exception/` |
@@ -41,7 +43,7 @@
 
 ### 지수 백오프와 Full Jitter
 
-M-08에서 기존 전송 경계에 지수 백오프와 Full Jitter를 적용했다. 다른 계층에 재시도를 중첩하지 않는다. `RetryOnTransientFailureInterceptor`는 마지막 인터셉터다. 기존 명세 조회의 재시도도 같은 정책으로 회귀 검증한다([4단계 기록](member-query-stage-4-verification.md)).
+M-08에서 기존 전송 경계에 지수 백오프와 Full Jitter를 적용했다. 다른 계층에 재시도를 중첩하지 않는다. `RetryOnTransientFailureInterceptor`는 마지막 인터셉터다. 기존 명세 조회의 재시도도 같은 정책으로 회귀 검증한다([4단계 기록](../verification/MEMBER-001/stage-4.md)).
 
 ```text
 n = 재시도 번호(1부터, 최초 시도는 대기 없음)

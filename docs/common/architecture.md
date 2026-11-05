@@ -2,11 +2,13 @@
 
 | 항목 | 내용 |
 | --- | --- |
+| 분류 | 공통 기준 |
+| 상태 | 현재 · 적용 예정 사항은 해당 절에서 구분 |
 | 목적 | 서비스 경계와 서비스 사이의 의존 규칙을 정한다 |
 | 범위 | 멤버 서비스, 그룹 서비스, 공통 빌드 규칙, 서비스별 인프라 |
 | 관련 코드 | `settings.gradle.kts`, `build-logic/src/main/kotlin/task.spring-service.gradle.kts`, `services/*/infra/compose.yaml` |
 
-현재 구조는 [ADR-005](decisions/ADR-005-member-edge-group-internal.md)와 [구조 변경 계획](structure-change-plan.md)을 따른다. 검증 결과는 [재검증 기록](setup-verification.md)에서 구분한다.
+현재 구조는 [ADR-005](decisions/ADR-005-member-edge-group-internal.md)와 [구조 변경 계획](../tasks/SETUP-001/structure-change-plan.md)을 따른다. 검증 결과는 [재검증 기록](../verification/SETUP-001/setup-verification.md)에서 구분한다.
 
 ## 구성
 
@@ -23,7 +25,7 @@ flowchart LR
 | 공개 범위 | 사용자에게 공개(유일한 진입점) | 내부 전용. 내부 키를 확인한 요청 처리 | 접근 통제([POL-SEC-006](security.md#pol-sec-006-그룹-서비스-접근-통제)) |
 | 책임 | 멤버 정보 조회, 사용자용 공개 API(그룹 데이터가 필요한 조회 포함) | 그룹·소속 관계 조회(내부 API) | 공통 규칙 |
 | 다른 서비스 호출 | 그룹 서비스 호출(소비자) | 없음 | [service-communication](service-communication.md) |
-| API 문서 | Swagger에서 두 명세 선택 | 내부 명세. 멤버 Swagger에서 읽기 전용으로 표시 | [POL-API-004](api-conventions.md#pol-api-004-api-문서) |
+| API 문서 | Swagger에서 두 명세 선택·실행 | 멤버 서버를 경유하여 명세 제공 및 두 조회 실행 | [POL-API-004](api-conventions.md#pol-api-004-api-문서) |
 | 데이터 | 멤버 정보 | 그룹 정보, 멤버 식별자, 소속 관계 | 데이터 규칙([data-conventions](data-conventions.md)) |
 | DB | 전용 MariaDB·DB·스키마·계정 | 전용 MariaDB·DB·스키마·계정 | - |
 | 인프라 | 단독 Compose `task-member` | 단독 Compose `task-group` | 일괄 실행 진입점 `task-local` |
@@ -76,9 +78,10 @@ flowchart LR
 
 - 외부 진입점은 멤버 서비스 하나다. 사용자는 멤버 서비스만 호출한다.
 - 그룹 서비스는 내부 전용이다. 외부에 호스트 포트를 열지 않으며 내부 키를 검사한다([POL-SEC-006](security.md#pol-sec-006-그룹-서비스-접근-통제)).
+- 그룹의 두 조회는 멤버의 고정 중계 경로를 통해서도 실행할 수 있다. 현재 중계에는 사용자 인증이 없다. 그룹 직접 포트 미공개와 멤버 경유 API의 접근 가능성을 구분한다.
 - 호출은 멤버 → 그룹 단방향이다. 그룹은 다른 서비스를 호출하지 않는다. 순환 호출을 만들지 않는다.
 - 그룹 데이터가 필요한 사용자 기능은 멤버 API로 정의하고, 멤버가 그룹을 호출해 응답을 만든다.
 - 그룹 장애는 멤버의 기동·readiness를 막지 않는다. 그룹 데이터가 필요한 멤버 API만 실패한다([POL-COMM-004](service-communication.md#pol-comm-004-인증과-실패-처리)).
-- 구현 항목과 범위는 [구조 변경 계획](structure-change-plan.md), 실제 결과는 [재검증 기록](setup-verification.md)을 따른다.
+- 구현 항목과 범위는 [구조 변경 계획](../tasks/SETUP-001/structure-change-plan.md), 실제 결과는 [재검증 기록](../verification/SETUP-001/setup-verification.md)을 따른다.
 
 - 통합 통신 네트워크는 `compose.override.yaml`이 소유한다. 내부 대역 `172.30.104.0/24`, 멤버 `.2`, 그룹 `.3`을 사용한다. IP와 호출 주소를 함께 변경한다.

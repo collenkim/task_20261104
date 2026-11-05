@@ -1,52 +1,36 @@
-# 프로젝트 공통 문서 시작점
+# 프로젝트 문서 시작점
 
 | 항목 | 내용 |
 | --- | --- |
-| 목적 | AI와 개발자가 현재 스펙·정책·구현 범위·실행 방법을 빠르게 파악한다 |
-| 범위 | 저장소 공통 내용과 서비스 소유 문서의 연결 |
-| 관련 문서 | [저장소 README](../README.md), [공통 문서 목록](common/README.md) |
+| 분류 | 문서 색인 |
+| 상태 | 현재 |
+| 목적 | 현재 기준, 적용 예정 계약, 과거 작업과 검증 증거를 구분한다 |
 
-## 현재 프로젝트 기준
+## 읽는 순서와 소유권
 
-- JDK 21, Kotlin 2.3.21, Spring Boot 4.1.2, Gradle 9.3.0, Spring Data JPA, MariaDB 11.8.9를 사용한다.
-- 멤버·그룹 서비스는 각각 앱·DB/스키마·계정·볼륨·네트워크를 소유한다. 서비스 간 직접 코드·DB 참조와 메시지 브로커는 사용하지 않는다.
-- **공개 범위**([ADR-005](common/decisions/ADR-005-member-edge-group-internal.md))
-  - 사용자는 멤버 서비스만 호출한다(공개 진입점, 두 서비스 명세를 제공하는 Swagger).
-  - 그룹 서비스는 내부 키로 호출하는 내부 전용 서비스다. 호출은 멤버 → 그룹 단방향이다.
-  - 구조 변경 항목과 완료 기준은 [구조 변경 계획](common/structure-change-plan.md)에 있다.
-- 루트 `docker compose up -d --build --wait`로 두 앱과 DB를 실행한다. 서비스 소유 Compose도 단독 실행할 수 있다.
-- 공통 실행 규칙과 기술 정책은 `docs/common/`, 업무 정책·엔티티·API 계약은 `services/<서비스>/docs/`에서 관리한다.
-GROUP-001에서 그룹 API와 멤버 HTTP 연동을 구현한다. 현재 멤버당 0~1개, 그룹 상세 6필드 단일 객체, 권한 code만 제공한다. 저장 UTC TIMESTAMP(6), 응답 한국 시간 분 문자열이다. 루트 Compose는 http, 멤버 단독 local은 fixture다.
-
-[그룹 구현 요청서](common/requests/GROUP-001.md)·[그룹 계획](common/group-query-plan.md)·[검증 기록](common/group-query-verification.md)을 기준으로 확인한다. MEMBER-001 기록은 과거 증거로 보존하며 현재 소속·시각·표시명 계약은 GROUP-001이 대체한다.
-
-
-## 공통 규칙 읽는 순서
-
-| 문서 | 확인할 내용 |
-| --- | --- |
-| [구성 계획](common/project-setup-plan.md)·[기술 스택](common/technology-stack.md) | 요구사항·버전·현재 구현 범위 |
-| [멤버 조회 계획](common/member-query-plan.md)·[구현 요청](common/requests/MEMBER-001.md) | MEMBER-001 범위·소유 계약·단계·미적용 상태 |
-| [구조 변경 계획](common/structure-change-plan.md) | 멤버 공개·그룹 내부 전용 전환의 보완 항목(G-01~G-14)과 완료 기준 |
-| [아키텍처](common/architecture.md)·[CQRS](common/cqrs.md) | 서비스 독립성·계층·조회/변경 경계 |
-| [코드 컨벤션](common/code-conventions.md)·[포매터](common/formatting.md) | Kotlin·Spring·JPA·enum 코드 필드, Google 스타일 |
-| [데이터 규칙](common/data-conventions.md) | DB 소유권·Flyway·UTC·문자셋 |
-| [API 규칙](common/api-conventions.md)·[서비스 통신](common/service-communication.md) | 오류 코드·코드명/설명·HTTP 연동·타임아웃 |
-| [보안](common/security.md) | 내부 호출 키·검사 제외 경로·비밀 파일·빌드 입력 제한 |
-| [로컬 실행](common/local-development.md) | 일괄/단독 실행·DB 전용 실행·모드별 볼륨 |
-| [테스트](common/testing.md)·[검증 결과](common/setup-verification.md) | 확인한 동작과 미검증 범위 |
-| [커밋·브랜치](common/commit-conventions.md) | master 기준 feature 생성·develop 검증·사용자 master 반영 |
-| [결정 기록](common/decisions/README.md) | 현재 적용 중인 기술·구조 결정 |
+| 순서 | 위치 | 역할 |
+| --- | --- | --- |
+| 1 | [루트 README](../README.md) | 최소 설치 조건·프로젝트 목적·실행·빌드·AI 도구 요약 |
+| 2 | [common](common/README.md) | 두 서비스에 공통으로 적용되는 정책·기술·운영 |
+| 3 | 아래 서비스 소유 문서 | 현재 업무 계약·정책·엔티티·공유 명세 |
+| 4 | [tasks](tasks/README.md) | 작업별 요청·계획·결정·인계. 과거 범위를 현재 계약으로 사용하지 않음 |
+| 5 | [verification](verification/README.md) | 특정 커밋·환경·시점에서 실행한 검증 결과와 확인 불가 항목 |
 
 ## 서비스 소유 문서
 
-| 서비스 | 개요·실행 | 정책 | 엔티티 | API |
-| --- | --- | --- | --- | --- |
-| 멤버 | [README](../services/member-service/docs/README.md) | [정책](../services/member-service/docs/policies.md) | [엔티티](../services/member-service/docs/entities.md) | [API](../services/member-service/docs/api.md) |
-| 그룹 | [README](../services/group-service/docs/README.md) | [정책](../services/group-service/docs/policies.md) | [엔티티](../services/group-service/docs/entities.md) | [API](../services/group-service/docs/api.md) |
+| 서비스 | 실행 | 정책 | 데이터 | 현행 API | 검토·개정안 |
+| --- | --- | --- | --- | --- | --- |
+| 멤버 | [README](../services/member-service/docs/README.md) | [정책](../services/member-service/docs/policies.md) | [엔티티](../services/member-service/docs/entities.md) | [API](../services/member-service/docs/api.md)·[공유](../services/member-service/docs/contracts.md) | [개정안](../services/member-service/docs/api-review.md) |
+| 그룹 | [README](../services/group-service/docs/README.md) | [정책](../services/group-service/docs/policies.md) | [엔티티](../services/group-service/docs/entities.md) | [API](../services/group-service/docs/api.md) | [개정안](../services/group-service/docs/api-review.md) |
 
-## 문서 관리
+## 문서 상태
 
-현재 실행 방법·스펙·검증 결과를 기준으로 유지한다. 같은 정책 표를 여러 문서에 복제하지 않고 소유 문서로 연결한다. 미구현·미검증 항목은 완료로 표시하지 않는다.
+- 현재: 실행 중인 코드·설정의 기준. 코드에 없는 새 요구는 적용 상태를 따로 적는다.
+- 제안: 아직 결정하지 않은 대안. 구현 승인으로 사용하지 않는다.
+- 적용 예정: 승인됐지만 코드에 반영하지 않은 계약. 현재 OpenAPI와 구분한다.
+- 이력: 당시의 요청·계획·검증. 과거 수치·명령을 현재 결과로 고쳐 쓰지 않는다.
+- 사후 재구성: 원래 요청서가 없어 기존 문서·이력으로 정리한 기록. 확인 근거와 한계를 표시한다.
 
-AI 기록 관리 절차는 저장소 README·AGENTS.md와 [AI 로깅 계획](ai-logging-plan.md)을 따른다. 수집된 원본과 스냅샷은 프로젝트 문서 정리 대상으로 편집하지 않는다.
+공통 내용은 common, 서비스 업무 내용은 서비스 docs에서 관리한다. 계약 변경 시 사용자 결정과 소유 계약을 먼저 정하고 코드·예제·OpenAPI·테스트를 함께 맞춘다. 문서에 완료라고 쓰는 것만으로 구현·검증 완료가 되지 않는다.
+
+AI 수집·제출 절차는 [운영 문서](common/ai-logging.md)와 [에이전트 규칙](../AGENTS.md)을 따른다. ai-logs의 원본 사본은 문서 정리 대상에서 제외한다.

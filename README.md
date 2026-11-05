@@ -1,373 +1,98 @@
 # task_20261104
-CLO 플랫폼 과제
 
-## 프로젝트 구성
+메시지 브로커 없이 HTTP로 연결하는 멤버·그룹 조회 마이크로서비스다. 두 서비스는 코드·DB·계정·네트워크·볼륨을 각각 소유한다.
 
-메시지 브로커 없이 HTTP API로만 통신하는 마이크로서비스 2개다. 서비스마다 전용 DB·Compose 프로젝트를 갖고 각자 독립 host로 기동한다.
+| 서비스 | 역할 | 앱 접근 | 개발 DB 접근 |
+| --- | --- | --- | --- |
+| [멤버](services/member-service/docs/README.md) | 사용자 진입점, 멤버 조회와 그룹 데이터 조합 | 127.0.0.1:8081 | 127.0.0.1:13306 |
+| [그룹](services/group-service/docs/README.md) | 그룹·소속 관계 조회 | 내부 8082, 호스트 미공개 | 127.0.0.1:23306 |
 
-- 사용자는 **멤버 서비스만** 호출한다.
-- 그룹 서비스는 내부 호출 키를 확인하는 **내부 전용** 서비스다. 호출은 멤버 → 그룹 단방향이다([ADR-005](docs/common/decisions/ADR-005-member-edge-group-internal.md)).
-- 사용자 인증·인가는 제외하고 멤버 → 그룹 호출에만 공유 시크릿 헤더를 사용한다([구조 변경 계획](docs/common/structure-change-plan.md)).
+현재 사용자 인증은 없으며 멤버 → 그룹 호출에 호출자 ID와 내부 키를 사용한다. 그룹 API도 멤버의 고정 중계를 통해 실행할 수 있다. 내부 키는 브라우저에 전달하지 않는다. [보안 정책](docs/common/security.md)
 
-| 서비스 | 위치 | 공개 범위 | 앱 포트 | DB 호스트 포트 | 문서 |
-| --- | --- | --- | --- | --- | --- |
-| 멤버 서비스 | `services/member-service/` | 공개(진입점) | 8081 | 127.0.0.1:13306 | [README](services/member-service/docs/README.md) |
-| 그룹 서비스 | `services/group-service/` | 내부 전용(멤버만) | 8082 (호스트 미노출) | 127.0.0.1:23306 | [README](services/group-service/docs/README.md) |
+JDK 21·Kotlin 2.3.21·Spring Boot 4.1.2·Gradle 9.3.0·JPA·MariaDB를 사용한다. 버전과 고정 위치는 [기술 스택](docs/common/technology-stack.md)에 있다.
 
-- 기술: JDK 21, Kotlin 2.3.21, Spring Boot 4.1.2, Gradle 9.3.0, Spring Data JPA, MariaDB 11.8.9, springdoc-openapi 3.2.0 ([기술 스택](docs/common/technology-stack.md))
-- 공통 정책·컨벤션: [docs/common/README.md](docs/common/README.md) (아키텍처, CQRS, 코드 컨벤션, 포맷, API, 보안, 서비스 간 통신, 데이터, 테스트)
-- 구성 계획과 확인 결과: [docs/common/project-setup-plan.md](docs/common/project-setup-plan.md)
+## 최소 설치 프로그램과 실행 조건
 
-저장소 루트에서 두 서비스를 함께 실행한다.
+명령은 Windows PowerShell 기준이다. **현재 최초 실행에는 호스트 JDK 21이 필요하다.** Docker가 앱을 빌드하더라도 준비 명령인 `./gradlew.bat generateLocalSecrets`는 호스트의 Java로 실행한다.
+
+| 프로그램 | 필요한 작업과 조건 | 버전 기준·확인 |
+| --- | --- | --- |
+| JDK 21 | 비밀 파일 최초 생성, 로컬 빌드·테스트, IDE/bootRun. `JAVA_HOME`과 `PATH`가 JDK 21을 가리켜야 한다 | 현재 호스트 확인: Temurin 21.0.12.1. `java -version`, `javac -version` |
+| Docker Desktop 또는 Docker Engine | 두 앱·DB의 Linux 컨테이너 실행과 BuildKit 이미지 빌드. 데몬이 실행 중이고 CLI·테스트에서 Docker API에 접근할 수 있어야 한다 | 저장소 검증 기준: CLI/Engine 29.8.2, Windows Desktop 4.94.0.241994. `docker version` |
+| Docker Compose | `docker compose` 명령과 루트 파일의 `include` 지원. 이전 `docker-compose` v1은 대상이 아니다 | include 기능 하한 2.20.3, 프로젝트 검증 버전 5.5.1. `docker compose version` |
+| Git | 저장소 취득, 작업 브랜치·커밋·로그 제출 | Windows에서 확인한 버전 2.55.0.windows.5. `git --version`. 이 버전보다 낮은 모든 Git의 호환성을 확인한 것은 아니다 |
+| Python 3.11 이상 | AI 로그 수집기·Git hook·제출 절차와 Python 실행 검증. 앱 컨테이너 자체에는 호스트 Python이 필요하지 않다 | 현재 확인 버전 3.12.10. `python --version`. 로깅 도구는 표준 라이브러리만 사용 |
+
+Compose의 2.20.3은 `include`를 위한 기능 하한이며 프로젝트 전체를 그 버전에서 검증했다는 의미는 아니다. 실제 검증 조합과 고정 위치는 [기술 스택](docs/common/technology-stack.md)에 있다. Desktop·CLI/Engine·Compose의 버전 숫자를 같게 맞추거나 Compose YAML의 `version:`으로 호환성을 설정하지 않는다. [Docker include 공식 조건](https://docs.docker.com/compose/how-tos/multiple-compose-files/include/)
+
+Windows에서는 Docker Desktop이 지원하는 OS와 가상화 조건을 충족해야 하며 Linux 컨테이너 모드를 사용한다. WSL 2 백엔드를 선택하면 WSL 설치·업데이트와 하드웨어 가상화를 확인한다. OS 에디션·빌드 및 백엔드별 상세 조건은 [Docker의 Windows 설치 문서](https://docs.docker.com/desktop/setup/install/windows-install/)를 따른다. 이 저장소에서 macOS·Linux 호스트의 전체 실행을 확인한 것으로 간주하지 않는다.
+
+| 실행 방식 | 추가 준비 |
+| --- | --- |
+| Docker로 두 서비스 일괄 실행 | JDK 21로 최초 비밀 파일 생성 → Docker Compose 실행. 애플리케이션 JDK/JRE와 MariaDB는 이미지로 제공 |
+| IDE 또는 bootRun으로 앱 실행 | 호스트 JDK 21, IDE의 프로젝트 SDK·Gradle JVM을 21로 지정. DB는 서비스별 Compose로 실행. IDE는 선택 설치 |
+| 빌드·통합 테스트 | JDK 21과 실행 중인 Docker. Testcontainers가 Docker API에 접근할 수 있어야 함 |
+| Swagger 수동 확인 | 웹 브라우저. 별도 Swagger 프로그램 설치는 필요 없음 |
+| Swagger 브라우저 자동 검증 | 기존 스크립트가 사용하는 전역 `fetch`·`WebSocket` 지원 Node.js와 Microsoft Edge. 앱 실행만을 위한 필수 설치는 아니며 다른 브라우저는 별도 검증 필요 |
+
+Gradle은 저장소의 **Wrapper 9.3.0**을 사용하므로 전역 Gradle을 설치하지 않는다. Kotlin·Spring Boot·JPA·Swagger 라이브러리는 Gradle이 받고, 호스트에 MariaDB 서버를 별도로 설치할 필요는 없다. 최초 실행에는 Gradle 배포·Maven 의존성·컨테이너 이미지를 내려받을 네트워크 접근이 필요하다.
+
+기본 호스트 포트 `8081`, `13306`, `23306`이 사용 가능한지 확인한다. 그룹 앱 `8082`는 기본 일괄 실행에서 호스트에 공개하지 않는다. IDE·서비스 단독 실행의 차이는 [로컬 실행 문서](docs/common/local-development.md)를 따른다.
+
+## 실행과 종료
+
+저장소 루트에서 실행한다. Dockerfile이 소스를 빌드하므로 사전 bootJar 생성은 필요하지 않다.
 
 ```powershell
-./gradlew.bat generateLocalSecrets       # 최초 한 번, 기존 비밀값 유지
-docker compose up -d --build --wait      # 두 앱 + 전용 MariaDB 2개, 소스 자동 빌드
-docker compose ps                       # 상태 확인
-docker compose down                     # 종료, 데이터 볼륨 유지
+./gradlew.bat generateLocalSecrets
+docker compose up -d --build --wait
+docker compose ps
 ```
 
-Swagger: [멤버 서비스](http://127.0.0.1:8081/swagger-ui.html)에서 두 명세를 선택한다. 멤버·그룹 조회를 모두 실행할 수 있다. 그룹 실행은 멤버의 /internal-api/group 중계를 통과한다. 그룹 명세는 멤버 서버가 내부 키로 받아 전달하며 브라우저에 키를 주지 않는다.
+- Swagger: [멤버·그룹 API 실행](http://127.0.0.1:8081/swagger-ui.html)
+- 상태 확인: [멤버 readiness](http://127.0.0.1:8081/actuator/health/readiness)
+- 종료: `docker compose down`. 데이터 볼륨을 삭제하는 `-v`는 사용하지 않는다.
+- 서비스별 독립 실행·IDE·DB 전용 실행·기존 DB 갱신은 [로컬 실행](docs/common/local-development.md)을 따른다. 루트 일괄 실행과 단독 실행의 데이터 볼륨은 다르다.
 
-공통 문서는 [문서 시작점](docs/README.md)에서 기술 스택·코드/enum 규칙·CQRS·데이터·API·보안·실행 정책 순서로 확인한다. 서비스별 정책·엔티티·API 계약은 각 서비스의 `docs/`가 소유한다.
+## API 요약
 
-GROUP-001에서 그룹 API와 멤버 HTTP 연동을 구현한다. 현재 멤버당 0~1개, 그룹 상세 6필드 단일 객체, 권한 code만 제공한다. 저장 UTC TIMESTAMP(6), 응답 한국 시간 분 문자열이다. 루트 Compose는 http, 멤버 단독 local은 fixture다.
+| API | 역할 | 계약 |
+| --- | --- | --- |
+| GET /api/members | 이름 정렬·페이지 기반 멤버 요약, 그룹 조합 | [멤버 API](services/member-service/docs/api.md) |
+| GET /api/member/{id} | 멤버 기본 정보와 소속 상세 | [멤버 API](services/member-service/docs/api.md) |
+| GET /api/groups/summary | 요청 멤버들의 소속과 그룹 전체 인원 | [그룹 API](services/group-service/docs/api.md) |
+| GET /api/group/{memberId} | 해당 멤버의 단일 그룹 상세 6필드 | [그룹 API](services/group-service/docs/api.md) |
 
-[그룹 계획](docs/common/group-query-plan.md)·[검증 기록](docs/common/group-query-verification.md)을 기준으로 확인한다. MEMBER-001 기록은 과거 증거로 보존하며 현재 소속·시각·표시명 계약은 GROUP-001이 대체한다.
+그룹 경로는 내부 계약이다. Swagger에서는 멤버의 `/internal-api/group` 아래 두 고정 GET 경로로 실행한다. 저장은 UTC TIMESTAMP(6), 업무 응답 시각은 한국 시간 `yyyy-MM-dd HH:mm`이다. 현재 소속은 멤버당 0~1개이며 응답의 정확한 필드는 서비스 API 정의서가 소유한다.
 
-실행 방식·포트·종료 방법은 [로컬 실행](docs/common/local-development.md)을 본다.
+REVIEW-001은 문서·계약 정리, REVIEW-002는 후속 코드 작업이다. [결정표](docs/tasks/REVIEW-001/decisions.md)와 서비스별 [멤버 개정안](services/member-service/docs/api-review.md)·[그룹 개정안](services/group-service/docs/api-review.md)의 승인·적용 상태를 구분한다.
+
+## 빌드와 테스트
+
+통합 테스트용 Docker가 실행 중이어야 한다. 명령은 저장소 루트 기준이다.
+
+```powershell
+./gradlew.bat build --no-daemon --console=plain
+./gradlew.bat :member-service:build --no-daemon --console=plain
+./gradlew.bat :group-service:build --no-daemon --console=plain
+```
+
+전체 build에는 포맷 검사·테스트·공유 OpenAPI 대조가 포함된다. 일반 build로 저장소의 OpenAPI를 갱신하지 않는다. 실행 검증·공급자별 검증 범위와 정책은 [테스트](docs/common/testing.md), 결과는 [검증 색인](docs/verification/README.md)을 따른다.
+
+## 문서
+
+- [문서 시작점](docs/README.md): 현재 공통 정책·서비스 정의·작업·검증을 구분한다.
+- [공통 규칙](docs/common/README.md): 아키텍처, CQRS, 코드 컨벤션, API, 보안, 데이터, 통신, 실행.
+- [작업 색인](docs/tasks/README.md): 요청·계획·결정·후속 인계.
+- [커밋·브랜치](docs/common/commit-conventions.md): master에서 feature 생성 → develop 검증 → 검증된 feature만 master 반영. master 병합·push는 사용자 절차다.
 
 ## AI 세션 기록
 
-이 저장소는 과제 수행에 쓴 AI 에이전트 세션을 자동으로 수집해 `ai-logs/snapshots/`에 커밋한다. 수집 범위는 입력한 프롬프트, AI 응답, 에이전트가 실행한 명령과 결과, 파일 수정 내역이다.
+Codex(VS Code 확장·CLI)와 Claude Code의 로컬 원본 트랜스크립트를 각 도구 hook과 Python 수집기로 자동 수집한다. 프롬프트·응답·도구 호출·명령 결과·파일 수정 기록을 담으며 마스킹 외에는 원문과 줄 순서를 보존한다.
 
-- 각 도구가 스스로 남기는 원본 트랜스크립트를 사용한다.
-- **마스킹(`****` 치환) 외에는 고치지 않고**, 원래 줄 순서 그대로 담는다.
-- 수집 대상은 이 저장소에서 실행한 로컬 세션이다. 범위 밖은 아래 "주의 사항과 한계"에 정리했다.
+- 제출 위치: `ai-logs/snapshots/`. 개발용 live·등록·보류·치환 목록은 Git 제외다.
+- 설정·스크립트: `.codex/hooks.json`, `.claude/settings.json`, `.githooks/`, `config/ai-logging.json`, `scripts/ai_logging/`.
+- 상태 확인: `python -X utf8 -I scripts/ai_logging/cli.py status`.
+- [운영·설치·턴 보호·예약·브랜치별 로그 동기화](docs/common/ai-logging.md), [과거 검증](docs/verification/LOG-001/ai-logging-verification.md), [현재 검토와 제한](docs/verification/REVIEW-001/findings.md).
 
-### 사용 도구와 원본 위치
-
-| 도구 | 버전(구성 시점) | 원본 트랜스크립트(도구가 자동 저장) | hook 설정 |
-| --- | --- | --- | --- |
-| Claude Code | 2.1.318 | `~/.claude/projects/<프로젝트 폴더>/<세션 ID>.jsonl`, 같은 이름 폴더의 `subagents/`, `tool-results/` | `.claude/settings.json` |
-| Codex (VS Code 확장, CLI) | CLI 0.166.0 | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`, `~/.codex/archived_sessions/` | `.codex/hooks.json` |
-
-원본에 담기는 내용
-
-- **Claude Code**
-  - 사용자 메시지와 응답
-  - `tool_use`: Bash 명령, Edit/Write의 수정 전후 내용
-  - `tool_result`: 명령 출력
-  - 서브에이전트 대화
-- **Codex**
-  - 사용자·응답 메시지
-  - 명령 실행(`exec_command`), 파일 수정(`apply_patch`)과 그 출력
-  - 턴 시작·종료 이벤트
-  - 추론(`reasoning`)은 Codex가 암호화한 형태로만 남기며, 그대로 둔다.
-
-### 구성 파일
-
-| 파일 | 역할 |
-| --- | --- |
-| `.claude/settings.json` | Claude hook 설정(UserPromptSubmit·SessionStart·Stop·SessionEnd), 인증 파일 읽기 금지, AI 턴 중 Git 변경 명령 금지(deny) |
-| `.codex/hooks.json` | Codex hook 설정(같은 이벤트, Windows는 `commandWindows`) |
-| `scripts/ai_logging/` | 수집기. Python 3.11+ 표준 라이브러리만 사용하며 `python -I`로 실행한다. 상주 프로세스는 없다. |
-| `.githooks/commit-msg`, `.githooks/pre-push` | 읽기 전용 Git hook 원본. `install`이 `.git/ai-logging/runtime/`에 복사하고 `core.hooksPath`를 그곳으로 지정한다. |
-| `config/ai-logging.json` | 작업 ID 규칙(`service`, `task_prefixes`), main·develop·원격 이름, feature 접두어, 최초 도입 feature |
-| `config/ai-logs-allowlist.json` | 비밀값이 아닌 값의 좁은 허용 규칙(사유 포함) |
-| `.gitattributes` | `ai-logs/snapshots/** -text -merge`: 개행 변환과 텍스트 병합을 막는다. |
-| `.gitignore` | `.ai-logging/`(로컬 상태·치환 목록), `ai-logs/live/`(로컬 확인용 사본) |
-| `tests/` | 회귀(a~j)·스냅샷·턴 보호·예약 작업·Git hook·브랜치 흐름 통합 테스트 |
-
-### 동작 개요
-
-```text
-도구가 원본 JSONL 기록 ──hook──> python -I scripts/ai_logging/cli.py hook <도구> <이벤트>
-  UserPromptSubmit : 턴 보호 잠금 안에서 세션 상태를 active로 기록 (기록 실패 시 프롬프트 차단, 출력 없음)
-  SessionStart     : 세션 등록 + live 수집
-  Stop             : 이 턴의 Stop임이 확인되면 idle → live 수집 → 예약된 Git 작업 실행
-  SessionEnd       : 세션 등록(+Claude는 수집). idle 판단에는 쓰지 않음
-```
-
-- **세션 판별**
-  - 폴더 이름이 아니라 원본 기록 안의 작업 폴더(`cwd`)로 판별한다.
-  - hook이 넘겨준 `transcript_path`·`cwd`, 과거에 발견한 세션, manifest, 커밋된 스냅샷의 합집합을 대상으로 유지한다.
-  - 원본이 사라진 대상은 0개 정상으로 처리하지 않고, 실패·경고로 보고한다.
-- **live와 스냅샷**
-  - `ai-logs/live/`는 hook이 매 턴 갱신하는 로컬 확인용 사본이다(커밋하지 않음).
-  - 제출본은 단계 완료 때만 만드는 **불변 스냅샷**이다. 턴마다 커밋하지 않는다.
-- **수집 오류**
-  - 수집 hook은 오류가 나도 exit 0으로 끝난다. 모델을 다시 실행시키는 출력은 내지 않는다(Codex Stop은 `{}`).
-  - 오류는 값 없이 종류·위치만 `.ai-logging/errors.jsonl`에 남는다.
-
-### 제출 로그 구조 (스냅샷)
-
-```text
-ai-logs/snapshots/<claude|codex>/<세션 ID>/<정책 버전 12자>/L<원본 바이트 20자리>-<sha256 앞 16자>/
-  manifest.json            도구·세션 ID·정책 버전·snapshot_id·snapshot_sha256(전체 64자)·첫/마지막 시각(UTC)·줄 수,
-                           파일별 원본/사본 바이트·sha256·마스킹 건수·개행 없는 마지막 기록 여부, 경고(50MB 초과)
-  files/<원본 상대 경로>    세션의 모든 파일 전체 사본(마스킹만 적용, 원본과 같은 줄 수·순서·개행)
-```
-
-- **ID 규칙**
-  - 같은 원본·같은 정책이면 같은 ID가 나온다. 생성 시각 같은 가변 값은 넣지 않는다.
-  - 폴더 이름의 해시는 앞 16자만 쓰고, 전체 해시는 manifest에 기록한다.
-  - 이미 있는 폴더는 고치지 않는다. 공통으로 고쳐 쓰는 목록 파일은 없다.
-- **최신본**
-  - 현재 정책 폴더에서 `L` 값(원본 바이트)이 가장 큰 스냅샷이 최신 전체본이다.
-  - 길이가 같은데 해시가 다르면 최신으로 추정하지 않고 보류한다.
-- **원본 불변성**
-  - 파일마다 이전 스냅샷·live·상태 기록과 원본 앞부분을 대조한다.
-  - 원본이 잘리거나 다시 쓰이거나 부속 파일이 삭제되면 보류한다.
-- **정책 버전**
-  - 검출 규칙, 허용 목록 내용, 치환 목록을 반영한다. 치환 목록이 바뀌면 새 정책 폴더에 전체 사본이 다시 생긴다.
-- **큰 파일**: 50,000,000바이트를 넘으면 경고만 하고 자르지 않는다.
-- **개행 없는 마지막 JSONL 기록**
-  - 세션이 idle로 확인되고 그 줄이 JSON으로 파싱될 때만 '종료된 유효 기록'으로 포함한다(`ends_without_newline: true`).
-  - 그 밖에는 마지막 개행까지만 담는다. 이 경우 완전성 검사(`completeness`)는 실패한다.
-- **시간과 순서**
-  - 시간은 원본에 기록된 UTC 그대로다.
-  - 순서의 기준은 원본의 줄 순서이며, 시각으로 다시 정렬하지 않는다.
-
-### 마스킹과 검증
-
-- **치환만 한다.** 값 자리를 `****`로 바꿀 뿐 줄·공백·개행·JSON 구조는 그대로다.
-- **치환 대상**
-  - 치환 목록(`.ai-logging/mask-values.jsonl`, Git 제외): 계정·조직 UUID, 이메일과 그 아이디 부분, Git 사용자 이메일, 검토 후 추가한 값
-  - Windows 사용자 이름(홈 폴더 이름, `USERNAME`): 독립된 단어일 때 대소문자 구분 없이 치환한다.
-  - 알려진 토큰 형식(Anthropic·OpenAI·GitHub·AWS·Slack·Google 키, JWT, PEM 개인키, Bearer)
-- **검출(마스킹보다 넓음)**
-  - 대상: 이메일, 토큰 형식, `password=`·`secret:`·`token=` 같은 대입과 플래그 값, 무작위 문자열, 바이너리
-  - 일부만 `****`인 값도 다시 검사한다.
-  - 무작위 문자열 면제는 키 이름만으로 하지 않는다. 검토한 URL 문맥(호스트·경로·쿼리 조건)으로만 허용한다.
-- **보류**
-  - 후보가 하나라도 있으면 그 세션은 보류한다(사본·스냅샷 갱신 없음).
-  - 보류는 게시를 막지 않는다. 로그 커밋(`push-develop`·`merge-feature`·`submit`·`stage-log`)은 보류 세션만 빼고 진행하고, 결과에 `logs:snapshot_hold <세션> N건` 경고와 커밋 본문의 제외 표시를 남긴다. 해소하면 그 세션의 다음 스냅샷(전체본)이 이어서 쌓인다.
-  - JSON 이스케이프(`
-` 등)의 글자는 뒤 문자열에 붙여 검사하지 않는다.
-  - 진단에는 값 없이 규칙·줄 번호·길이·형태만 남긴다.
-  - 보류 해소:
-    - `holds`로 형태를 확인한다.
-    - 치환할 값은 `mask-held <목록지문> <번호>...`로 치환 목록에 추가한다.
-    - 비밀이 아닌 값은 `config/ai-logs-allowlist.json`에 사유와 함께 좁은 규칙으로 추가한다.
-- **이미 커밋된 값**
-  - 새 마스킹 커밋으로 지울 수 없다.
-  - `push-develop`·`merge-feature`·pre-push가 커밋 트리의 모든 스냅샷을 현재 정책으로 다시 검사한다(마스킹 실패는 게시 중단).
-  - 발견되면 게시를 멈추고 보고한다. 이력 정리 여부는 사용자가 결정한다.
-
-### 턴 보호와 예약 작업
-
-- **세션별 턴 상태**: `active` / `idle` / `unknown`. `turns` 명령으로 확인한다.
-  - Codex Stop은 `turn_id`가 같아야 idle로 바꾼다.
-  - Claude Stop은 `last_assistant_message`가 이 턴 시작 이후의 원본에 있어야 idle로 바꾼다. 늦게 온 이전 턴 Stop은 무시한다.
-  - 원본 증거로 상태를 보완한다(Claude `turn_duration`·중단 기록, Codex `task_complete`·`turn_aborted`). 단, 이 턴 시작보다 뒤의 증거만 인정한다.
-  - SessionEnd·경과 시간·파일 크기 정지로는 idle을 추정하지 않는다.
-  - 판단할 수 없으면 `unknown`이다. 비정상 종료 등으로 멈춘 세션은 사람이 확인한 뒤 `turns resolve <tool/sid> idle`로 지정한다(사용자 실행).
-- **Git 변경 차단**: 어느 세션이든 active/unknown이면 막는다.
-  - commit-msg hook이 커밋을 막는다.
-  - 자동화 명령도 실행하지 않는다.
-  - 프롬프트 시작과 자동화 Git 작업은 같은 잠금(`.ai-logging/guard.lock`)을 쓴다.
-- **AI 턴 중의 Git 요청은 예약한다.** 턴이 끝나 모든 세션이 idle이 된 Stop 시점에 순서대로 실행한다.
-  - 예: `task reserve commit --message-file F -- <경로>...`, `task reserve stage-log SETUP-001 1단계`
-  - 예약할 때와 실행할 때 모두, feature 브랜치와 작업 ID가 다르면 거부한다(`task_branch_mismatch`).
-  - Claude는 `.claude/settings.json` deny 규칙으로 `git commit/merge/push/reset/checkout/switch/add/...` 실행이 막혀 있다.
-  - 실행 조건: 스테이징된 변경 없음, 진행 중인 Git 작업 없음, 예약 때와 같은 브랜치·HEAD.
-  - 실패하면 뒤 작업을 멈추고 `task list`에 사유를 남긴다. 재시도는 `task retry`, 취소는 `task cancel`.
-  - 자동 stash·강제 checkout/reset·작업 폴더 정리는 하지 않는다.
-  - 커밋은 임시 index와 비교 후 교체(CAS)로 만들어 사용자 index의 다른 항목을 바꾸지 않는다.
-
-### 브랜치 흐름
-
-```text
-master ──new-feature──> feature/<ID> ──(사용자 git merge)──> develop 검토·검증
-   ^                        ^   │                                │
-   │                        │   └─ resume: 최신 master(로그만)를 feature에 일반 merge 후 보완
-   │                        │                                    │
-   ├── push-develop: develop 로그 전용 커밋만 master에 cherry-pick -x + atomic push
-   └── merge-feature: 검증된 feature를 로컬 master에 --no-ff 병합 → 사용자가 git push origin master
-```
-
-1. **신규 작업**: `new-feature <ID>`
-   - master에서 `feature/<ID>`를 만든다.
-   - master에 로깅 설정이 있어야 하고, 병합되지 않은 다른 feature가 없어야 한다(동시에 하나).
-2. **develop 반영**: 구현·테스트 뒤 사용자가 feature를 develop에 `git merge`한다(commit-msg가 형식·턴 상태 검사).
-   - develop에서는 기능 검토·검증만 한다. 검증은 자동으로 하지 않는다.
-3. **develop push**: `push-develop <feature>` (사용자 실행). develop은 push할 때만 동기화한다.
-   - develop에 전체 스냅샷 로그 커밋을 만든다. 검토 대화와 실패 기록도 보존한다.
-   - develop 자체(첫 부모 경로)의 로그 전용 커밋 중 master에 없는 스냅샷만 고른다.
-   - 고른 커밋을 master 위에 `cherry-pick -x`와 같은 커밋으로 만든다(원 작성자·메시지, `(cherry picked from commit …)`).
-   - 작업 폴더를 전환하지 않는다.
-   - master의 로그 밖 트리가 그대로인지, 로그가 원본 끝까지 담겼는지, 커밋된 비밀값이 없는지 확인한다.
-   - 확인이 끝나면 `git push --atomic origin develop master` 후 원격 ref를 확인한다.
-   - 같은 스냅샷은 다시 적용하지 않는다. 실패하면 같은 명령으로 이어서 진행한다(`.ai-logging/runs/`).
-4. **보완**: `resume <feature>`
-   - 최신 master를 feature에 일반 merge한다. master의 새 변경이 로그 전용일 때만 진행한다.
-   - 보완한 뒤 다시 develop에 병합하고 `push-develop`을 실행한다.
-5. **최종 병합**: `merge-feature <feature>` (사용자 실행)
-   - feature의 마지막 코드 커밋이 develop에 들어 있는지 확인한다(develop 최종 테스트를 거친 코드만 master로 간다. 테스트 통과 자체는 자동 검증하지 않는다).
-   - 꼬리 로그 스냅샷 커밋을 만든다.
-   - 로컬 master에 `--no-ff` 병합한다.
-   - 코드(feature와 같은 로그 밖 트리)와 커밋된 비밀값을 검증한다. **push는 하지 않는다.**
-   - git 명령으로 직접 병합해도 된다: `submit`(꼬리 스냅샷) → `git switch master` → `git merge --no-ff -m "[작업ID] 제목" -m "  내용" <feature>`. 단 develop 포함 확인은 `merge-feature`만 한다.
-6. **master push**: 사용자가 `git push origin master`(또는 IDE push)를 실행한다. pre-push가 보내는 커밋을 읽기 전용으로 검사한다.
-   - **막는 것**(쌓인 이력을 깨거나 게시하면 안 되는 경우만)
-     - 기존 스냅샷 수정·삭제, 금지 경로(`ai-logs/live/`, `.ai-logging/` 등)
-     - 커밋 메시지 형식
-     - 커밋된 비밀값(마스킹 실패), master 삭제
-   - **경고만 하고 push는 진행**
-     - 스냅샷이 원본보다 뒤처짐·없음: 담기지 않은 대화는 다음 스냅샷 커밋·push에 이어서 쌓인다.
-     - 민감정보 후보로 보류된 세션: 그 세션은 커밋되지 않고, 해소 뒤 이어서 쌓인다.
-     - 병합 커밋 없이 master에 들어온 소스 커밋(fast-forward, `master_direct_source_commit`)
-     - AI 턴 진행 중
-   - 출력은 한국어 UTF-8이다(IDE Git 콘솔에서 읽을 수 있음).
-
-**금지 사항**
-
-- develop 전체를 master에 병합하지 않는다.
-- `develop:master`로 push하지 않는다.
-- GitHub PR 등 로컬 명령 밖에서 master에 병합하지 않는다.
-- master 병합은 `--no-ff`를 권장한다(IDE Merge 대화상자에서도 `--no-ff` 옵션 선택). fast-forward도 push는 되지만 병합 커밋이 남지 않아 feature 단위 구분이 어려워진다.
-- force push, `--no-verify`, amend를 쓰지 않는다.
-
-#### 최초 도입(LOG-001) 절차
-
-도입 전 master(`26b4ccd`)에는 로깅 설정이 없다. 그래서 `new-feature`와 `push-develop`은 거부되고, 아래 절차가 유일한 예외다.
-
-1. `feature/LOG-001`에서 구성하고 feature에서 검증한다.
-2. **develop 검증은 생략한다.** 도입 전에는 develop 검증 절차 자체가 없기 때문이다.
-   - `merge-feature`는 원격 master에 로깅 설정이 없고 feature가 `feature/LOG-001`일 때만 develop 확인을 건너뛴다.
-   - 병합 커밋 본문과 결과(`develop_check: skipped_bootstrap`)에 "develop 검증 생략(최초 도입: master에 검증 절차 없음)"을 남긴다.
-   - develop에 병합해 두었다면 일반 확인(`included`)을 한다.
-3. `merge-feature feature/LOG-001`(또는 `submit` 후 `git merge --no-ff`)로 꼬리 로그를 포함해 로컬 master에 병합한다.
-4. `git push origin master`를 실행한다. 병합 뒤 대화가 더 있었다면 경고만 나오고, 그 대화는 다음 push에 이어서 담긴다.
-5. 이후 master에 설정이 생기면 일반 흐름을 쓴다. 일반 feature의 `merge-feature`는 develop 확인을 생략할 수 없다(`feature_code_not_in_develop`).
-
-### 설치
-
-```powershell
-python -I scripts/ai_logging/cli.py install   # 치환 목록(값 출력 없음)·로컬 제외·Git hook 런타임 설치·실행 확인·첫 수집
-python -I scripts/ai_logging/cli.py status    # hook 설정·실행 기록·Git hook·턴 상태·예약 작업·수집 결과
-```
-
-- **치환 목록 확정**
-  - 원본과 Git 설정에서 계정 UUID·이메일·사용자 이름을 찾아 `.ai-logging/mask-values.jsonl`에 합집합으로 저장한다. 기존 항목은 지우지 않는다.
-- **로컬 제외**
-  - `.git/info/exclude`에 `/ai-logs/live/`, `/ai-logs/snapshots/`, `/.ai-logging/`을 등록한다.
-  - 로깅 설정이 없는 브랜치로 바꿔도 치환 목록이 `git add -A`에 섞이지 않는다.
-- **Git hook 런타임**
-  - hook 원본과 수집기 사본을 `.git/ai-logging/runtime/`에 두고 `core.hooksPath`를 지정한다.
-  - `git hook run`으로 실제 실행을 확인한다: 잘못된 메시지 거부, pre-push 실행, master 삭제 거부.
-  - 브랜치를 바꿔도 hook이 사라지지 않는다. 상태(`.ai-logging/`)는 브랜치와 무관하다.
-- **Claude Code**: `.claude/settings.json`을 자동으로 읽는다(`/hooks`에서 확인). UserPromptSubmit은 `"onFailure": "block"`(v2.1.295+)으로 실패 시 프롬프트를 막는다.
-- **Codex**
-  - hook을 사람이 신뢰해야 실행된다: CLI `/hooks`, VS Code 확장은 Settings > Hooks.
-  - `.codex/hooks.json`이 바뀌면 다시 검토한다.
-  - `status`의 `trusted_hash` 기록만으로 신뢰·실행을 판단하지 않는다. "Codex hook 실제 실행(설정 변경 이후)" 항목으로 확인한다.
-
-### 명령 요약 (`python -I scripts/ai_logging/cli.py <명령>`)
-
-| 명령 | 설명 |
-| --- | --- |
-| `install`, `status` | 설치·상태 |
-| `sync`, `verify [--final]` | live 수집 / live 읽기 전용 검사(`--final`: 원본 끝까지·누락 세션·manifest 밖 파일까지 실패) |
-| `snapshot`, `completeness [REV]`, `live-covered` | 스냅샷 생성(커밋 안 함) / 원본 끝까지 담았는지 / live ⊆ snapshot |
-| `submit [작업ID]` | 모든 AI 응답이 끝난 뒤 현재 브랜치에 로그 전용 커밋(일반 터미널) |
-| `turns`, `turns resolve` | 턴 상태 / 멈춘 세션 수동 지정 |
-| `task reserve/list/run/cancel/retry` | AI 턴 중 Git 작업 예약·관리 |
-| `new-feature`, `push-develop`, `resume`, `merge-feature` | 브랜치 흐름 |
-| `holds`, `mask-held`, `repair-live`, `index` | 보류 확인·치환 / 손상 manifest 보관 후 재수집 / 세션 목록 |
-
-테스트: `python -I -m unittest discover -s tests -v`
-
-### 검증 기록 (AI-LOG-001, 2026-11-04)
-
-**실제 환경에서 확인함** (Windows 11, Git 2.55, Python 3.12, 이 저장소, 실제 Claude·Codex 원본)
-
-- `install`
-  - 이 저장소에 hook 런타임을 설치했다.
-  - `git hook run`으로 확인: commit-msg 잘못된 메시지 거부, pre-push 실행, master 삭제 입력 거부.
-- 실제 두 세션(Claude 1, Codex 1)
-  - live 수집과 검출 결과를 검토했다.
-  - 오탐 2종은 허용 목록에 사유와 함께 추가했다: 검사 결과 이름, Claude `tool-results` 경로의 도구 호출 ID.
-  - 보류 0건이 됐다.
-- 실제 두 세션의 스냅샷을 만들고 `live-covered`로 live ⊆ snapshot(파일 11개)을 확인했다. 이후 `ai-logs/live/`를 `.gitignore`로 전환했다.
-- 실제 원본의 턴 종료 증거를 판정했다.
-  - Codex 세션: `task_complete`로 idle
-  - 진행 중인 Claude 턴: 열린 턴으로 판정
-- 기존 Claude SessionStart·Stop hook 실행 기록(`.ai-logging/registry.jsonl`)을 확인했다.
-- 실제 pre-push 차단 사례: IDE fast-forward 병합 후, 그리고 `git merge --no-ff` 후 GitHub push가 `snapshot_behind_original`로 막혔다(원격 master 변경 없음).
-  - 이때 한글 안내가 깨졌다(Python이 파이프에 CP949로 출력). 수집기 출력(stdout·stderr)을 UTF-8로 고정했다.
-  - 스냅샷은 계속 쌓이는 구조이므로 뒤처짐으로 push를 막는 것은 설계 오류로 판단해 경고로 바꿨다.
-  - 실제 저장소 master(`e2f753e`)로 pre-push 검사를 읽기 전용으로 돌려 막는 문제 0건(경고 3건)을 확인했다.
-- 작업 ID 매핑: 이 저장소 설정으로 `feature/LOG-001` → `AI-LOG-001`, `SETUP-001` → `SETUP-001`, 다른 브랜치 ID 거부, develop 제외를 확인했다.
-
-**가짜 원본·임시 저장소로만 확인함** (`tests/`, 90개 통과)
-
-- 회귀 a~j(13개): 수정 전 실패(11 failures, 2 errors), 수정 후 통과
-- 스냅샷 규칙
-  - 결정적 ID, 정책 폴더 분리
-  - 같은 길이 재작성 보류, 꼬리 처리
-  - 50MB 경고, 부속 파일 삭제 보류
-  - autocrlf에서 CRLF 바이트 보존
-  - 보류 세션만 빼고 로그 커밋(본문에 제외 표시, 값 미포함), 보류만 남으면 실패가 아니라 커밋할 것 없음
-  - `
-` 뒤 스냅샷 부속 파일 경로는 허용, 다른 위치는 후보 유지, 역슬래시(`\`) 뒤 `n`은 실제 글자로 검사
-- 턴 보호
-  - 늦은 Codex Stop, Claude Stop 일치 확인
-  - 중단 기록, SessionEnd 무시
-  - 손상 상태·잠금 대기에서 CLI가 exit 2로 프롬프트 차단, Stop 오류 시 exit 0
-- 예약 작업
-  - idle 대기, 순서 실행, squash 백업 ref
-  - 스테이징 변경 보존, HEAD 변경 거부
-- 임시 저장소의 실제 Git hook
-  - 형식·턴·금지 경로 검사
-  - 읽기 전용 확인, 수집기 없는 브랜치에서도 hook 실행
-  - pre-push: 스냅샷 없음은 경고로 통과, 커밋된 비밀값은 거부
-- 로컬 bare 원격으로 전체 흐름
-  - master → feature → develop(검토 실패) → push-develop → resume → 보완 → develop → push-develop(중복 제외) → merge-feature → master push
-  - atomic push 거부 후 이어서 진행
-  - master 로그 밖 변경 시 resume 거부
-  - 다른 feature 미병합, 최초 도입 예외
-  - 최초 도입: develop 병합 없이 `merge-feature` 성공(생략 문구 기록, 경고 없이 push)
-  - `feature/SETUP-001` 전체 흐름(직접 커밋 → develop → push-develop → merge-feature → push)의 모든 커밋이 `[SETUP-001]`, `[AI-SETUP-001]`·`[AI-LOG-001]`은 commit-msg·예약·로그 커밋에서 거부
-  - fast-forward·스냅샷 뒤 대화가 있어도 push 진행(UTF-8 경고), 다음 스냅샷이 더 긴 전체본으로 추가되고 기존 스냅샷은 유지, `git merge --no-ff` 후 push 통과, 형식이 틀린 병합 메시지는 거부
-  - 한 세션이 보류여도 `push-develop` 진행(`logs:snapshot_hold` 경고, 그 세션 제외), 치환 목록 추가 뒤 다음 `push-develop`에 그 세션이 이어서 반영, 커밋 트리에 비밀값 없음
-
-**확인하지 못함** (사용자 확인 필요)
-
-- Codex UserPromptSubmit hook의 실제 실행과 신뢰 등록. 이번 추가분이라 Settings > Hooks에서 검토해야 한다.
-- Codex hook이 실행 자체에 실패할 때 프롬프트가 막히는지(fail-closed 여부는 문서에 없다).
-- Claude 안에서 UserPromptSubmit hook이 시간 초과·비정상 종료될 때 `onFailure: block`이 동작하는지. exit 2 경로만 하위 프로세스로 시험했다.
-- GitHub 원격의 `--atomic` push. 로컬 bare 저장소로만 시험했다.
-- 실제 저장소에서의 develop 병합·`push-develop`. 이번 작업 범위에서 제외했다.
-- 실제 저장소에서의 `merge-feature`·master push 성공. 사용자가 최초 도입 절차로 실행한다.
-- PowerShell 도구용 deny 규칙(`PowerShell(git commit *)`)이 실제로 막는지.
-- `git -C <경로> <명령>` 같은 다른 형태는 deny 규칙이 모두 막지 못할 수 있다. 최종 방어는 commit-msg·pre-push hook이다.
-
-### 주의 사항과 한계
-
-- **세션 저장을 끄는 실행 방식 금지**: `codex exec --ephemeral`, `claude -p --no-session-persistence`, `--dangerously-bypass-hook-trust`.
-  - 원본 세션 파일 삭제·이동, `ai-logs/` 수동 편집, `git clean -fdx`·`-fdX`도 금지한다.
-- **클라우드·웹 세션은 로컬 원본이 없어 수집되지 않는다**(claude.ai 웹, Codex Cloud 작업 등). 이 과제에는 쓰지 않는다.
-  - 부득이 썼다면 해당 서비스의 대화 내보내기 기능으로 원문을 받는다.
-  - 받은 원문은 `ai-logs/`가 아닌 별도 경로에 두고, 커밋 전에 사람이 마스킹을 검토한다. 이 수집기의 자동 검증 대상이 아니다.
-- **마지막 push 이후의 대화**(그 push를 지시한 응답 등)는 그 push에 담길 수 없다. 다음 게시나 병합 때 포함된다.
-  - 단계 로그 커밋은 Stop hook 안에서 만들어진다. 그래서 그 턴의 종료 기록(`turn_duration` 등)은 다음 스냅샷에 들어간다.
-- **도구가 원본 형식을 바꾸면** 턴 판정과 세션 판별이 `unknown`·보류로 바뀔 수 있다(안전한 쪽으로 멈춤).
-- **"누락이 절대 없다"고 보장하지 않는다.** 검사 결과(`completeness`, pre-push 경고)로 확인된 범위만 완전하다고 본다. push 시점에 뒤처진 대화는 다음 스냅샷에 담긴다.
-- 공개 GitHub 저장소 계정명(`collenkim`)은 저장소 주소 자체이므로 마스킹하지 않는다.
-
-### 커밋·브랜치 규칙
-
-`AGENTS.md` 참고. 모든 일반·로그·병합 커밋은 `[작업ID] 제목` + 빈 줄 + 두 칸 들여쓴 작업 내용 형식을 따른다. master 병합·push는 사용자가 직접 한다.
-
-- **작업 ID**: feature 브랜치 이름에서 정한다(`config/ai-logging.json`).
-
-  | 브랜치 | 작업 ID | 근거 |
-  | --- | --- | --- |
-  | `feature/SETUP-001` | `SETUP-001` | `service`가 비어 있으면 feature ID 그대로 |
-  | `feature/LOG-xxx` | `AI-LOG-xxx` | `task_prefixes`의 `"LOG-": "AI"` (AI 로깅 도구 작업) |
-
-- 직접 커밋, 예약 커밋, 로그 스냅샷 커밋(`stage-log`·`submit`·꼬리 로그), `resume`·`merge-feature`·`push-develop`이 만드는 커밋 모두 같은 작업 ID를 쓴다.
-- feature 브랜치에서 다른 작업 ID로 커밋하면 commit-msg hook·예약 작업·로그 커밋이 거부한다(`task_branch_mismatch`). develop·master는 여러 feature의 병합이 들어오므로 검사하지 않는다.
-- 이미 기록된 이력(`[AI-LOG-001]`)은 그대로 둔다.
+hook 실행 미확인·보류·스냅샷 꼬리 지연은 정상 수집 완료로 간주하지 않는다. 최종 제출은 모든 AI 응답 종료 후 완전성 검사 결과로 판단한다. 원본·스냅샷을 직접 수정하거나 스테이징하지 않는다.

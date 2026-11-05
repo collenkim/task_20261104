@@ -2,9 +2,11 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 목적 | 현재 HTTP 경로와 후속 업무 계약 소유 |
+| 분류 | 서비스 정의 |
+| 상태 | 현재 · 적용 예정 사항은 해당 절에서 구분 |
+| 목적 | 현재 HTTP 경로와 적용 중인 업무 계약 소유 |
 | 범위 | 사용자 진입점 http://127.0.0.1:8081 |
-| 관련 코드 | infrastructure/configuration/, presentation/error/, application.yaml |
+| 관련 코드 | presentation/query/, presentation/error/, infrastructure/configuration/, application.yaml |
 
 ## 현재 제공 경로
 
@@ -25,7 +27,7 @@
 
 ## 공개 계약 (GROUP-001 개정, 0.2.0)
 
-2026-11-05 공개 API와 local 자동 시드를 구현하고 실제 MariaDB + fixture/테스트 HTTP 서버로 검증한다. 현재 계약은 [GROUP-001 계획](../../../docs/common/group-query-plan.md)에 따른다. 과거 3단계 증거와 현재 0.2.0 계약을 구분한다. [3단계 검증](../../../docs/common/member-query-stage-3-verification.md)을 기준으로 완료 범위를 구분한다. 전체 범위는 [통합 계획](../../../docs/common/member-query-plan.md), 공통 규칙은 [API 정책](../../../docs/common/api-conventions.md)을 따른다.
+현재 0.2.0 계약은 GROUP-001에서 적용했다. 실제 제공자 연동과 Swagger 실행 결과는 [GROUP-001 검증](../../../docs/verification/GROUP-001/group-query-verification.md)에 있다. [MEMBER-001 검증](../../../docs/verification/MEMBER-001/stage-3.md)은 당시 계약의 증거다. 공통 규칙은 [API 정책](../../../docs/common/api-conventions.md)을 따른다. REVIEW-002의 응답 변경 제안은 [개정안](api-review.md)에서 승인 상태와 함께 관리하며, 아래 예제는 현재 코드의 응답이다.
 
 ### GET /api/members
 

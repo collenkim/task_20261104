@@ -2,62 +2,34 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 목적 | 멤버·그룹 서비스가 함께 따르는 규칙을 한곳에 둔다 |
-| 범위 | 모든 서비스(`services/*`)와 공통 빌드 규칙(`build-logic/`) |
-| 관련 문서 | 서비스별 결정은 `services/<서비스>/docs/`에 쓴다 |
+| 분류 | 공통 정책 색인 |
+| 상태 | 현재 |
+| 목적 | 공통 목적·규칙·운영의 소유 문서를 한곳에서 찾는다 |
 
-최상위 요약과 문서 책임은 [프로젝트 문서 시작점](../README.md), 실행은 [로컬 실행](local-development.md)을 먼저 확인한다.
+| 문서 | 정책 영역 | 내용 |
+| --- | --- | --- |
+| [기술 스택](technology-stack.md) | 버전 | 고정 위치·프로젝트 검증 조합 |
+| [아키텍처](architecture.md) | POL-ARCH | 서비스 독립성·코드/DB 참조 금지·공개 경계 |
+| [CQRS](cqrs.md) | POL-CQRS | 조회·변경·포트·트랜잭션 경계 |
+| [코드 컨벤션](code-conventions.md) | POL-CODE | Kotlin·Spring·JPA·로그·enum 내부 메타데이터 |
+| [포매터](formatting.md) | POL-FMT | Google 스타일·Spotless 검사 |
+| [API](api-conventions.md) | POL-API | 오류·페이지·시각·공유 계약·출력 필드 제한 |
+| [보안](security.md) | POL-SEC | 현재 내부 호출 키·공개 경로·비밀 파일 |
+| [서비스 통신](service-communication.md) | POL-COMM | 단방향 HTTP·타임아웃·재시도·계약 |
+| [데이터](data-conventions.md) | POL-DATA | 소유권·Flyway·시각·시드 |
+| [테스트](testing.md) | POL-TEST | DB·계층·계약·실행 검증의 구분 |
+| [로컬 실행](local-development.md) | 실행 | 일괄·단독·IDE·볼륨 |
+| [커밋·브랜치](commit-conventions.md) | Git | feature 단위·develop 검증·사용자 master 반영 |
+| [AI 로깅](ai-logging.md) | 운영 | hook·보류·스냅샷·예약·로그 동기화 |
+| [결정 기록](decisions/README.md) | ADR | 현재 결정과 대체된 결정의 배경 |
 
-## 읽는 순서
+작업 계획·요청은 [작업 색인](../tasks/README.md), 실행 증거는 [검증 색인](../verification/README.md)에 둔다. 서비스 고유 API·정책·엔티티는 [문서 시작점](../README.md)의 서비스 문서가 소유한다.
 
-| 순서 | 문서 | 정책 ID | 내용 |
-| --- | --- | --- | --- |
-| 1 | [project-setup-plan](project-setup-plan.md) | - | SETUP-001 범위·확정 사항·완료 기준과 결과 |
-| 1-1 | [structure-change-plan](structure-change-plan.md) | G-xx | 멤버 공개 진입점·그룹 내부 전용 전환의 보완 항목과 완료 기준 |
-| 1-2 | [member-query-plan](member-query-plan.md)·[구현 요청](requests/MEMBER-001.md) | M-xx | 공개 조회·다중 소속·시드·재시도·공유 명세·실행 검증, 통합 검증과 커밋 인계 |
-| 2 | [architecture](architecture.md) | POL-ARCH | 서비스 경계, 직접 참조 금지, 인프라 소유, 공개 범위와 호출 방향 |
-| 3 | [cqrs](cqrs.md) | POL-CQRS | 서비스 내부 계층과 조회·변경 경로 |
-| 4 | [code-conventions](code-conventions.md) | POL-CODE | Kotlin·Spring·JPA·enum 코드명/설명 규칙 |
-| 5 | [formatting](formatting.md) | POL-FMT | Spotless + ktfmt(Google 스타일) |
-| 6 | [api-conventions](api-conventions.md) | POL-API | 버전, 오류 응답, 페이지네이션, API 문서 |
-| 7 | [security](security.md) | POL-SEC | 내부 키, 검사 제외 경로, 키·비밀번호, 그룹 접근 통제 |
-| 8 | [service-communication](service-communication.md) | POL-COMM | 멤버 → 그룹 HTTP 호출: 방향·주소·타임아웃·재시도·내부 키·계약 소유 |
-| 9 | [data-conventions](data-conventions.md) | POL-DATA | 서비스별 DB·스키마·계정, Flyway, 다른 서비스 데이터 |
-| 10 | [testing](testing.md) | POL-TEST | 테스트 계층, Testcontainers, 가짜 비밀값 |
-| 11 | [technology-stack](technology-stack.md) | - | 버전 표와 확인 근거, Spring Boot 4 변경점 |
-| 12 | [local-development](local-development.md) | - | Compose 일괄/단독 실행, DB 전용 실행, 모드별 볼륨 |
-| 13 | [commit-conventions](commit-conventions.md) | - | 커밋 메시지·브랜치 흐름 요약 |
-| - | [decisions/](decisions/) | ADR | 결정 기록(JDK 21, 공유 모듈 미사용, 내부 키, MariaDB, 멤버 공개·그룹 내부 전용) |
+## 정책 ID와 문서 형식
 
-AI 세션 로깅 도구는 [../ai-logging-plan.md](../ai-logging-plan.md)와 저장소 `README.md`를 본다.
-
-## 정책 ID
-
-- 형식: `POL-<영역>-<번호 3자리>`. 예: `POL-API-002`.
-- 코드 주석·테스트 이름·커밋 본문에서 이 ID로 정책을 가리킨다.
-- 번호는 다시 쓰지 않는다. 폐기한 정책은 문서에 `폐기`로 남긴다.
-- 결정 기록은 `ADR-<번호 3자리>`이고, 결정 배경과 대안을 남긴다.
-
-## 문서 머리말 형식
-
-공통·서비스 문서는 제목 아래에 다음 표를 둔다.
-
-| 항목 | 내용 |
-| --- | --- |
-| 목적 | 이 문서가 정하는 것 |
-| 범위 | 적용 대상(서비스·계층·환경) |
-| 관련 코드 | 정책을 구현·검사하는 경로 |
-
-- 공통 문서에는 규칙만 쓰고, 서비스 문서에는 그 서비스의 구체적인 결정을 쓴다.
-- 명령의 기준 폴더를 적는다. 공통 문서의 명령은 저장소 루트 기준이고, 서비스 문서의 명령은 그 서비스 폴더 기준이다.
-- 정책 문서는 확정된 목표 규칙을 쓰고, 아직 코드에 없는 규칙은 `미적용(G-xx)`로 표시한다. 실행 안내·현재 상태 문서는 지금 동작을 쓰고 바뀔 점을 따로 적는다.
-- 문서는 한국어로 쓴다. 코드 식별자·설정 키·명령은 원문 그대로 둔다.
-
-## 현재 구현과 검증
-
-- [요구사항 재검증](setup-verification.md): 충족·미구현·과거 검증을 구분한다. MEMBER-001 공개 조회·시드·계층 검사는 [3단계 기록](member-query-stage-3-verification.md), 재시도는 [4단계 기록](member-query-stage-4-verification.md), 공유 OpenAPI·실제 Compose/Swagger는 [5단계 기록](member-query-stage-5-verification.md)을 따른다.
-- [멤버 서비스](../../services/member-service/docs/README.md)·[그룹 서비스](../../services/group-service/docs/README.md)의 정책·엔티티·API 정의서를 함께 읽는다.
-
-- [GROUP-001 계획](group-query-plan.md)·[검증 기록](group-query-verification.md): 그룹 제공자·멤버 연동·단일 소속·시각·인증·로그의 현재 기준.
-
-- [GROUP-001 구현 요청서](requests/GROUP-001.md): 확정 요구와 Swagger 중계 실행의 구현·검증 기준.
+- 정책 ID는 POL-영역-세 자리 번호다. 번호를 재사용하지 않고 폐기는 명시한다. 정의 제목과 단순 참조를 구분한다.
+- ADR은 결정 배경·대안·상태·적용 범위를 기록한다. 신규 제안은 기존 승인을 자동 대체하지 않는다.
+- 문서 머리에 분류·상태·목적 또는 범위를 표시한다. 현재/제안/적용 예정/이력은 [문서 상태](../README.md#문서-상태)를 따른다.
+- 공통 명령은 저장소 루트 기준이다. 서비스 명령은 해당 서비스 폴더 기준인지 명시한다.
+- 한국어로 작성하며 코드 식별자·명령·설정 키는 원문을 사용한다. 예제의 필드와 규칙은 소유 문서를 연결하고 중복 정본을 만들지 않는다.
+- 과거 기록의 다중 소속·옛 시각 형식 등은 이력으로 보존한다. 현재 정책의 적용 상태와 혼동하지 않도록 대체 문서를 연결한다.

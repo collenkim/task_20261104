@@ -2,6 +2,8 @@
 
 | 항목 | 내용 |
 | --- | --- |
+| 분류 | 서비스 정의 |
+| 상태 | 현재 · 적용 예정 사항은 해당 절에서 구분 |
 | 목적 | 현재 스키마와 엔티티 구현 여부를 명확히 한다 |
 | 범위 | MariaDB DB·스키마 `member_service` |
 | 관련 코드 | `src/main/resources/db/migration/mariadb/`, `src/main/resources/application.yaml` |
@@ -15,7 +17,7 @@
 
 Spring Data JPA 스타터, Hibernate, Kotlin JPA 기본 생성자·프록시 지원은 구성돼 있다. `ddl-auto=validate`로 검증하고 Flyway만 DDL을 적용한다.
 
-자료형·UTC·문자셋은 [공통 데이터 규칙](../../../docs/common/data-conventions.md)을 따른다. 현재 타입은 GROUP-001 V3 기준이다. 초기 스키마의 MariaDB 검증은 [1단계 기록](../../../docs/common/member-query-stage-1-verification.md)에 있다. 실행 DB에는 다음 앱 기동의 Flyway migrate 때 적용된다.
+자료형·UTC·문자셋은 [공통 데이터 규칙](../../../docs/common/data-conventions.md)을 따른다. 현재 타입은 GROUP-001 V3 기준이다. 초기 스키마의 MariaDB 검증은 [1단계 기록](../../../docs/verification/MEMBER-001/stage-1.md)에 있다. 실행 DB에는 다음 앱 기동의 Flyway migrate 때 적용된다.
 
 ## member 테이블 (M-01 적용)
 

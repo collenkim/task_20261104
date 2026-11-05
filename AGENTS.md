@@ -2,7 +2,7 @@
 
 ## 프로젝트 문서와 개발 규칙
 
-- 작업 전 `docs/README.md`에서 공통 문서와 서비스 소유 문서를 확인한다. 현재 스펙은 `docs/common/technology-stack.md`, 검증 상태는 `docs/common/setup-verification.md`를 기준으로 한다.
+- 작업 전 `docs/README.md`에서 현재 공통 정책·서비스 정의와 작업별 기록을 구분한다. 현재 스펙은 `docs/common/technology-stack.md`, 검증 결과는 `docs/verification/<작업ID>/`를 기준으로 한다. 적용 예정 계약은 서비스의 `docs/api-review.md`와 작업 결정표에서 승인 상태를 확인한다.
 - 코드 작성은 `docs/common/code-conventions.md`와 CQRS·API·데이터 정책을 따른다. 코드·상태 enum에는 `code`, `status`, `codeName`, `description`을 명시한다(POL-CODE-005). 외부 계약에 enum의 순번이나 상수 이름을 그대로 사용하지 않는다.
 - 업무 정책·엔티티·API 정의는 해당 서비스의 `docs/`에 갱신한다. 공통 규칙은 서비스 문서마다 복제하지 않고 공통 문서로 연결한다.
 - 로컬 기본 실행은 루트 `docker compose up -d --build --wait`다. 서비스별 Compose와 DB·네트워크·볼륨의 소유권을 유지한다. 일괄/단독 실행의 포트·볼륨 차이는 `docs/common/local-development.md`를 확인한다.
@@ -37,7 +37,9 @@
   - GitHub PR로 master 병합
   - force push
 
-## 에이전트의 Git 사용 (README "턴 보호와 예약 작업")
+## 에이전트의 Git 사용
+
+운영 절차는 [AI 로깅 운영](docs/common/ai-logging.md#턴-보호와-예약-작업)을 따른다.
 
 - AI 턴이 진행 중이면 Git 변경(커밋·병합·push·checkout·reset·add 등)을 직접 실행하지 않는다.
   - Claude는 deny 규칙으로 막혀 있다.
@@ -51,7 +53,9 @@
   - `turns resolve`
 - 자동 stash·강제 checkout/reset·사용자 변경 정리·이력 재작성은 사용자 승인 없이 하지 않는다.
 
-## AI 세션 로그 보존 (README "AI 세션 기록")
+## AI 세션 로그 보존
+
+수집·검증·제출 절차는 [AI 로깅 운영](docs/common/ai-logging.md)을 따른다.
 
 - 도구 원본 세션 파일(`~/.claude/projects/`, `~/.codex/sessions/`, `~/.codex/archived_sessions/`)을 수정·삭제·이동하지 않는다.
 - `ai-logs/`를 직접 편집하거나 스테이징하지 않는다. 스냅샷 로그 커밋은 수집기 명령만 만든다.

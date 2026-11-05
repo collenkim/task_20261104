@@ -2,6 +2,7 @@
 
 | 항목 | 내용 |
 | --- | --- |
+| 분류 | 결정 기록 |
 | 상태 | 확정 (2026-11-04) |
 | 범위 | 두 서비스의 컴파일·테스트·실행 |
 | 관련 코드 | `gradle/libs.versions.toml`(`java`), `build-logic/src/main/kotlin/task.spring-service.gradle.kts`(toolchain), `services/*/Dockerfile` |

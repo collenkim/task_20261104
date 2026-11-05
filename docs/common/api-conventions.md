@@ -2,6 +2,8 @@
 
 | 항목 | 내용 |
 | --- | --- |
+| 분류 | 공통 기준 |
+| 상태 | 현재 · 적용 예정 사항은 해당 절에서 구분 |
 | 목적 | 두 서비스의 HTTP API가 같은 형식으로 동작하게 한다 |
 | 범위 | 모든 서비스의 HTTP API(`/actuator/health`, API 문서 경로 포함). 사용자에게 공개되는 API는 멤버 서비스뿐이고, 그룹 API는 멤버 서비스만 호출하는 내부 API다([ADR-005](decisions/ADR-005-member-edge-group-internal.md)) |
 | 관련 코드 | `services/*/src/main/kotlin/task/*/presentation/error/`, `infrastructure/configuration/OpenApiConfiguration.kt`, `application.yaml`(`spring.data.web.pageable`) |
@@ -62,7 +64,7 @@
 | 응답 형식 | 페이지 메타데이터 `page{size, number, totalElements, totalPages}` 유지. 목록 키는 서비스 계약이 소유(MEMBER-001: `members`) |
 
 - 기존 `spring.data.web.pageable` 블록(기본 20·최대 100·via-dto)과 기존 공통 정책 테스트는 유지한다. 현재 테스트 API는 Pageable을 사용한다.
-- MEMBER-001 업무 API는 원시 파라미터 개수와 형식을 검증한 요청 DTO를 Query로 변환하고, 명시적 응답 DTO를 반환한다. 작업 폴더 구현·검증 상태는 [3단계 기록](member-query-stage-3-verification.md)에 있다. application에 Pageable/Page를 노출하지 않는다. 목록 키를 `members`로 정한 것은 서비스별 명시적 계약이며 기존 API의 `content`를 일괄 변경하지 않는다.
+- MEMBER-001 업무 API는 원시 파라미터 개수와 형식을 검증한 요청 DTO를 Query로 변환하고, 명시적 응답 DTO를 반환한다. 작업 폴더 구현·검증 상태는 [3단계 기록](../verification/MEMBER-001/stage-3.md)에 있다. application에 Pageable/Page를 노출하지 않는다. 목록 키를 `members`로 정한 것은 서비스별 명시적 계약이며 기존 API의 `content`를 일괄 변경하지 않는다.
 - page/size/sort는 각각 한 번만 받는다. 공백·빈 값·음수·정수 범위 초과·반복은 400이다. 생략에만 기본값을 적용하고 size의 범위 검증 후 최대 크기를 적용한다. offset은 Long으로 계산한 뒤 JPA Integer 범위 안인지 검증한다. 정확한 경계는 서비스 API 문서가 소유한다.
 - 제한 없는 전체 목록 API는 만들지 않는다. Spring 내부 PageImpl 직렬화 결과를 외부 계약으로 사용하지 않는다.
 
@@ -85,6 +87,8 @@
 - 업무 API 시각은 Asia/Seoul의 yyyy-MM-dd HH:mm 문자열이다. DB에는 UTC TIMESTAMP(6)으로 마이크로초를 보존하고 응답 mapper에서만 분 단위로 표시한다. OpenAPI는 string/pattern/길이/예제로 정의하며 format: date-time은 사용하지 않는다. HTTP 표준 헤더·실행 로그·AI 원본 시각에는 적용하지 않는다.
 - 가입 시각·소속 시각·생성 시각은 의미를 구분한다. 필드 이름·필수/선택·null 의미는 서비스 계약에 고정한다.
 - 다중 관계는 배열이다. 관계가 없으면 빈 배열이며 선택 부가 정보가 없으면 정의된 null 규칙을 따른다. 장애를 빈 배열로 바꾸지 않는다.
+
+단일 관계를 객체로 반환할지 0~1개 배열로 반환할지는 서비스 소유 응답 계약이 정한다. DB 소속 수와 JSON의 배열 여부를 혼동하지 않는다. 현재 멤버는 groups 배열이며 개정안의 승인과 적용 전까지 이를 현행 계약으로 표시한다.
 - 외부 소유 코드의 정의를 소비자 enum으로 복제하지 않는다. 문자열 코드와 표시명을 분리하고 알 수 없는 유효 코드를 수용한다. 코드명은 분기 조건으로 사용하지 않는다.
 
 ## POL-API-006 공유 계약과 스냅샷
@@ -101,3 +105,13 @@ GROUP-001 그룹 전용 코드: GROUP_MEMBERSHIP_NOT_FOUND(404), GROUP_MEMBERSHI
 멤버 GET /internal-api/group/api/groups/summary와 /internal-api/group/api/group/{memberId}만 그룹으로 전달한다. 내부 키·ID는 서버가 주입하며 원격 주소나 임의 경로는 사용자에게 받지 않는다. 기술 중계는 @Hidden이며 멤버 업무 스냅샷에 포함하지 않는다. 두 조회는 Swagger 밖에서도 멤버 주소로 접근할 수 있다.
 
 이 중계는 그룹 테스트를 위해 정상 JSON·표준 6필드 ProblemDetail의 상태/본문을 유지한다. 멤버 업무 조합 API의 오류 변환 정책과 다르다. 연결 실패/시간 초과는 503 GROUP_SERVICE_UNAVAILABLE, JSON·매체·계약 오류/리다이렉트는 500 INTERNAL_ERROR다. 응답 상한은 1MiB이며 내부 헤더는 전달하지 않고 no-store를 적용한다.
+
+## POL-API-007 정의된 응답만 노출
+
+상태: 사용자 확정 요구. 모든 출력 경계의 강제 수단은 REVIEW-002에서 보완한다. 현행 구현 완료로 표시하지 않는다.
+
+- 목록·상세·중첩 항목·page·그룹 중계에는 서비스별로 확정한 응답 필드만 노출한다. Entity·내부 모델·원격 JSON의 확장 필드를 자동으로 전달하지 않는다.
+- 응답 DTO와 OpenAPI의 객체별 필드 목록·타입·필수·null 규칙을 맞춘다. 실제 응답 키 집합과 계약을 대조하고 정의 외 필드를 넣은 실패 사례를 검사한다.
+- 내부 소비자는 호환성 정책에 따라 알 수 없는 원격 속성을 무시할 수 있다. 이 동작이 공개 응답 필드의 추가 승인을 뜻하지 않는다.
+- enum의 코드명·상태·설명은 내부 모델에 보존한다. 업무 API는 소유 계약에서 정한 code 필드만 반환한다.
+- 목표 계약과 구현 범위는 [멤버 개정안](../../services/member-service/docs/api-review.md), [그룹 개정안](../../services/group-service/docs/api-review.md), [REVIEW-002 계획](../tasks/REVIEW-002/plan.md)을 따른다.

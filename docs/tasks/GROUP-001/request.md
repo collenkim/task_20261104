@@ -2,20 +2,26 @@
 
 | 항목 | 내용 |
 | --- | --- |
+| 분류 | 작업 기록 |
+| 상태 | 이력 · 당시 요청·계획·검증 내용을 보존. 현재 구현 완료 선언이 아님 |
+| 현재 기준 | [문서 색인](../../README.md)의 공통·서비스 정의를 따른다 |
+
+| 항목 | 내용 |
+| --- | --- |
 | 목적 | 그룹 조회 API와 멤버의 실제 연동, 단일 소속 정합성, 멤버 경유 Swagger 실행 구현 |
-| 상태 | 2026-11-05 사용자 확정 요구. 실제 완료 여부는 검증 기록에서 관리 |
+| 당시 상태 | 2026-11-05 사용자 확정 요구. 실제 완료 여부는 검증 기록에서 관리 |
 | 범위 | 그룹·멤버 서비스 코드, 소유 문서, 공통 정책·검증·실행 구성 |
 | 정본 | 저장소의 이 파일. Temp 계획·구두 변경 사항을 통합 |
-| 전체 계획 | [그룹 조회 계획](../group-query-plan.md) |
-| 실제 결과 | [구현·검증 기록](../group-query-verification.md) |
+| 전체 계획 | [그룹 조회 계획](plan.md) |
+| 실제 결과 | [구현·검증 기록](../../verification/GROUP-001/group-query-verification.md) |
 
 ## 0. 시작 조건과 문서 우선순위
 
 - master에서 생성한 feature/GROUP-001에서 그룹 구현과 멤버 연동을 함께 변경한다. 기존 MEMBER-001 구현과 사용자 변경을 유지한다.
 - [AGENTS.md](../../../AGENTS.md)를 따른다. AI 턴 중 Git 변경을 직접 실행하지 않고 커밋은 예약한다. develop은 통합 검증용, master에는 검증된 feature만 사용자가 병합한다.
 - secrets/·.env·인증 파일을 읽지 않으며 AI 원본·스냅샷을 직접 편집하거나 스테이징하지 않는다.
-- 최신 사용자 결정 → 이 요청서·[계획](../group-query-plan.md) → 소유 API/정책 문서 순서다. 승인된 변경은 코드와 기준 문서를 함께 맞춘다.
-- [MEMBER-001 요청서](MEMBER-001.md)의 다중 소속 허용·permissionName·UTC 응답·이전 그룹 경로는 이 요청서로 대체한다. 과거 실행 증거는 고쳐 쓰지 않는다.
+- 최신 사용자 결정 → 이 요청서·[계획](plan.md) → 소유 API/정책 문서 순서다. 승인된 변경은 코드와 기준 문서를 함께 맞춘다.
+- [MEMBER-001 요청서](../MEMBER-001/request.md)의 다중 소속 허용·permissionName·UTC 응답·이전 그룹 경로는 이 요청서로 대체한다. 과거 실행 증거는 고쳐 쓰지 않는다.
 
 ## 1. 포함·제외와 책임
 
@@ -57,7 +63,7 @@
 
 ## 5. 데이터·시각·시드
 
-- [그룹 엔티티](../../../services/group-service/docs/entities.md), [멤버 엔티티](../../../services/member-service/docs/entities.md), [데이터 규칙](../data-conventions.md)을 따른다.
+- [그룹 엔티티](../../../services/group-service/docs/entities.md), [멤버 엔티티](../../../services/member-service/docs/entities.md), [데이터 규칙](../../common/data-conventions.md)을 따른다.
 - DB 시각은 UTC TIMESTAMP(6)이며 마이크로초를 보존한다. 응답 mapper에서만 Asia/Seoul yyyy-MM-dd HH:mm으로 변환한다. OpenAPI는 string/pattern으로 정의한다.
 - 멤버 가입일과 그룹 가입일은 독립적으로 저장한다. HTTP 헤더·실행 로그·AI 원본 시각의 정밀도는 변경하지 않는다.
 - 기존 멤버 V2를 수정하지 않고 V3에서 타입을 전환한다. 백업과 범위·zero date·NULL 확인 후 적용하며 잘못된 값을 보정하거나 삭제하지 않는다.
@@ -110,7 +116,7 @@
 1. 브랜치/작업 상태·현재 계약을 확인하고 이번 요청을 공통·서비스 문서에 반영한다.
 2. DB/enum/Reader, 그룹 조회, 멤버 소비자, 인증/로그, Swagger 중계 순서로 구현하고 단계마다 검증한다.
 3. 공유 명세는 생성 도구로 갱신하고 일반 build에서 읽기 전용 비교한다. Google 포맷과 관련 테스트를 통과시킨다.
-4. 실제 Compose·Swagger를 검증한 후 [검증 기록](../group-query-verification.md)에 명령·결과·한계를 기록한다.
+4. 실제 Compose·Swagger를 검증한 후 [검증 기록](../../verification/GROUP-001/group-query-verification.md)에 명령·결과·한계를 기록한다.
 5. 커밋은 [GROUP-001] 제목 + 빈 줄 + 두 칸 들여쓴 본문 규칙과 예약 절차를 따른다.
 6. feature → develop 검증, 보완 시 같은 feature 수정·재병합, 정상 시 사용자 feature → master 병합 순서를 유지한다.
 

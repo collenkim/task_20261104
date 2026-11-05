@@ -2,6 +2,7 @@
 
 | 항목 | 내용 |
 | --- | --- |
+| 분류 | 결정 기록 |
 | 상태 | 확정 (2026-11-04), 현재 구성 기준 |
 | 범위 | 두 서비스의 DB·드라이버·Flyway·테스트 |
 | 관련 코드 | `services/*/infra/compose.yaml`, `gradle/libs.versions.toml`, `application.yaml` |
@@ -22,4 +23,4 @@
 
 - [공식 이미지 태그](https://github.com/docker-library/official-images/blob/master/library/mariadb)
 - [Flyway MariaDB 모듈](https://documentation.red-gate.com/flyway/reference/database-driver-reference/mariadb)
-- [프로젝트 검증 결과](../setup-verification.md)
+- [프로젝트 검증 결과](../../verification/SETUP-001/setup-verification.md)

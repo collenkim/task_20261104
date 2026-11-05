@@ -1,24 +1,30 @@
 # SETUP-001 프로젝트 구성 계획
 
-> 과거 작업 기준 문서다. 현재 그룹 제공자·멤버 연동·단일 소속·시각 계약은 [GROUP-001 계획](group-query-plan.md)과 [검증](group-query-verification.md)을 따른다.
+| 항목 | 내용 |
+| --- | --- |
+| 분류 | 작업 기록 |
+| 상태 | 이력 · 당시 요청·계획·검증 내용을 보존. 현재 구현 완료 선언이 아님 |
+| 현재 기준 | [문서 색인](../../README.md)의 공통·서비스 정의를 따른다 |
+
+> 과거 작업 기준 문서다. 현재 그룹 제공자·멤버 연동·단일 소속·시각 계약은 [GROUP-001 계획](../GROUP-001/plan.md)과 [검증](../../verification/GROUP-001/group-query-verification.md)을 따른다.
 
 | 항목 | 내용 |
 | --- | --- |
 | 목적 | 멤버·그룹 서비스의 독립 실행 기반과 요구 문서를 구성한다 |
 | 범위 | Gradle 멀티 모듈, JPA, 서비스별 Docker 인프라, Swagger, 공통·서비스 문서 |
 | 작업 ID·브랜치 | `SETUP-001`, `feature/SETUP-001`; 커밋 형식은 현재 AGENTS.md 기준 |
-| 관련 문서 | [기술 스택](technology-stack.md), [재검증 기록](setup-verification.md), [로컬 실행](local-development.md) |
+| 관련 문서 | [기술 스택](../../common/technology-stack.md), [재검증 기록](../../verification/SETUP-001/setup-verification.md), [로컬 실행](../../common/local-development.md) |
 
 ## 1. 요구사항과 현재 범위
 
 - Java 21, Kotlin 2.3 이상, Spring Boot 4.1.0 이상, Gradle 9 이상을 사용한다. 선정 버전은 기술 스택에 한곳에서 관리한다.
 - 멤버·그룹 서비스는 각각 실행 산출물·host·DB 서버·DB/스키마·계정·볼륨·네트워크·Compose를 소유한다.
 - 메시지 브로커와 서비스 간 코드/DB 직접 참조를 사용하지 않는다. 연동은 HTTP API로만 한다.
-- 사용자는 멤버 서비스만 호출한다. 그룹 서비스는 멤버 서비스만 접근할 수 있는 내부 전용 서비스이고, 호출은 멤버 → 그룹 단방향이다([ADR-005](decisions/ADR-005-member-edge-group-internal.md)). 현재 구조와 검증 기준은 [구조 변경 계획](structure-change-plan.md)을 따른다.
+- 사용자는 멤버 서비스만 호출한다. 그룹 서비스는 멤버 서비스만 접근할 수 있는 내부 전용 서비스이고, 호출은 멤버 → 그룹 단방향이다([ADR-005](../../common/decisions/ADR-005-member-edge-group-internal.md)). 현재 구조와 검증 기준은 [구조 변경 계획](structure-change-plan.md)을 따른다.
 - Spring Data JPA/Hibernate, Flyway, Swagger와 Google 스타일 포매터를 구성한다. CQRS는 서비스 내부 조회·변경 경계를 분리하는 방식으로 적용한다.
 - 공통 규칙은 `docs/common/`, 서비스 정책·엔티티·API 정의는 `services/<서비스>/docs/`에서 관리한다.
 - 이번 작업의 완료 대상은 실행 골격이다. 업무 조회 API·업무 엔티티·실제 멤버 → 그룹 조회 흐름은 아직 미구현이며 전체 서비스 기능 완료로 표시하지 않는다.
-- DB는 MariaDB 11.8.9로 통일한다([ADR-004](decisions/ADR-004-mariadb.md)).
+- DB는 MariaDB 11.8.9로 통일한다([ADR-004](../../common/decisions/ADR-004-mariadb.md)).
 
 ## 2. 실행·소유권
 
@@ -70,7 +76,7 @@ secrets/                        로컬 실행 도구가 읽는 비밀값; Git �
 | 6 | 문서·산출물 재검증 | 서비스 정책·엔티티·API 문서 존재, 현재/과거 결과 분리, 테스트 코드가 운영 jar에 없음 |
 | 7 | develop 통합 검증·사용자 master 반영 | 아래 브랜치 흐름 준수. 로컬 검증만으로 develop/master 검증 완료를 선언하지 않음 |
 
-실제 통과 여부·명령·제한은 [재검증 기록](setup-verification.md)에 적는다. 검증 결과는 현재 파일 구성과 실제 실행 명령을 기준으로 갱신한다.
+실제 통과 여부·명령·제한은 [재검증 기록](../../verification/SETUP-001/setup-verification.md)에 적는다. 검증 결과는 현재 파일 구성과 실제 실행 명령을 기준으로 갱신한다.
 
 ## 5. 브랜치와 AI 기록
 

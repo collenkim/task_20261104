@@ -2,7 +2,13 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 상태 | 2026-11-05 승인 후 feature/GROUP-001 구현. 검증은 group-query-verification.md 참조. 커밋·병합은 별도 절차 |
+| 분류 | 작업 기록 |
+| 상태 | 이력 · 당시 요청·계획·검증 내용을 보존. 현재 구현 완료 선언이 아님 |
+| 현재 기준 | [문서 색인](../../README.md)의 공통·서비스 정의를 따른다 |
+
+| 항목 | 내용 |
+| --- | --- |
+| 당시 상태 | 2026-11-05 승인 후 feature/GROUP-001 구현. 검증은 group-query-verification.md 참조. 커밋·병합은 별도 절차 |
 | 목적 | 그룹 조회 API 2개, 멤버 소비자 변경, 양쪽 시각 계약·저장 타입 변경, 내부 인증과 실행 추적 로그 구현 |
 | 작업 ID | GROUP-001 |
 | 기준 | master c1da7ce — MEMBER-001 master 병합 완료. 구현 착수 시 최신 master를 다시 확인 |
@@ -10,7 +16,7 @@
 | 적용 우선순위 | 최신 사용자 요구 → 이 계획의 확정 사항 → 수정 대상 공통·서비스 문서 |
 | 소속 정책 확정 | 현재 멤버당 0~1개. DB UNIQUE로 복수 입력 차단, 다건 조회 시 예외·500·ERROR 로그. 2절 참고 |
 
-정본 구현 요청은 [GROUP-001 요청서](requests/GROUP-001.md), 완료 증거는 [검증 기록](group-query-verification.md)에 둔다.
+정본 구현 요청은 [GROUP-001 요청서](request.md), 완료 증거는 [검증 기록](../../verification/GROUP-001/group-query-verification.md)에 둔다.
 
 ## 0. 이번 수정 범위와 변경 이력
 

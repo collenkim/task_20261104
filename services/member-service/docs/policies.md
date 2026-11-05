@@ -2,6 +2,8 @@
 
 | 항목 | 내용 |
 | --- | --- |
+| 분류 | 서비스 정의 |
+| 상태 | 현재 · 적용 예정 사항은 해당 절에서 구분 |
 | 목적 | 책임·경계·후속 업무 규칙 |
 | 범위 | member-service |
 | 관련 코드 | src/main/kotlin/task/member/, infra/compose.yaml |
@@ -14,17 +16,17 @@
 - [보안](../../../docs/common/security.md), [통신](../../../docs/common/service-communication.md), [API](../../../docs/common/api-conventions.md), [CQRS](../../../docs/common/cqrs.md)를 따른다.
 - 업무 식별자·조회 조건·공개 필드는 [API 정의](api.md)와 [엔티티](entities.md)에 기록한다. MEMBER-001은 저장소·소속 공급자·공개 조회 API 결합을 구현했다.
 
-## POL-MEMBER-001 조회와 다중 소속
+## POL-MEMBER-001 조회와 단일 소속
 
-GROUP-001에서 현재 0~1개로 제한한다. 제목은 기존 문서 링크를 유지한다.
+현재 데이터 정합성은 멤버당 0~1개다. 공개 응답의 단일 group 전환은 [개정안](api-review.md)의 승인·적용 상태를 따른다.
 
-저장소·소속 계약·공개 응답 결합을 구현했다. fixture와 테스트 HTTP 공급자로 같은 공개 API를 실행하고 실제 호출 스레드의 트랜잭션 종료를 검증한다([3단계 기록](../../../docs/common/member-query-stage-3-verification.md)).
+저장소·소속 계약·공개 응답 결합을 구현했다. fixture와 테스트 HTTP 공급자로 같은 공개 API를 실행하고 실제 호출 스레드의 트랜잭션 종료를 검증한다([3단계 기록](../../../docs/verification/MEMBER-001/stage-3.md)).
 
 - 현재 멤버당 소속은 0~1개이며 그룹 DB UNIQUE와 조회 방어 로직이 이를 보장한다. 공개 계약은 항상 `groups[]`다.
 - 멤버 DB에서 정렬·페이지를 먼저 결정하고, 해당 ID만 그룹 포트로 일괄 조회한다. 전체 건수는 멤버 수, 멤버 순서는 DB 결과를 유지한다.
 - 각 멤버의 그룹 배열은 ID 오름차순이다. 동일 멤버 안에서 중복 group ID는 계약 오류다. 같은 group ID가 서로 다른 멤버에 있는 것은 정상이다.
 - 요청 ID마다 정확히 한 소속 목록이 필요하다. 누락·추가 member ID·중복 member ID, 비어 있는 필수 코드/그룹명은 오류다. 원격 sparse summary의 미포함 요청 ID만 미소속으로 변환하며 내부 모델의 누락·복수 소속은 오류다.
-- 알 수 없는 비어 있지 않은 권한 코드는 허용한다. 권한 enum을 멤버에 복제하지 않는다. 공개 상세 joinedAt·pricing의 nullable 형태는 유지하지만 실제 그룹 상세의 6개 필드는 필수다. permissionName은 반환하지 않는다. 새로운 알 수 없는 응답 필드는 수용한다.
+- 알 수 없는 비어 있지 않은 권한 코드는 허용한다. 권한 enum을 멤버에 복제하지 않는다. 현행 공개 상세 joinedAt·pricing은 nullable이며 실제 그룹 상세의 6개 필드는 필수다. permissionName은 반환하지 않는다. 내부 HTTP 소비자가 모르는 원격 필드를 무시하는 것과, 공개 응답에 정의되지 않은 필드를 추가하는 것은 별개다. 공개 필드 제한의 강화는 [개정안](api-review.md)과 REVIEW-002 검증 대상이다.
 - 조회 트랜잭션은 저장소 경계에서 종료한다. fixture/HTTP 선택과 무관하게 그룹 포트 호출 시 활성 트랜잭션이 없어야 한다.
 
 ## POL-MEMBER-002 임시 그룹 공급자

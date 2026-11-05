@@ -2,6 +2,8 @@
 
 | 항목 | 내용 |
 | --- | --- |
+| 분류 | 공통 기준 |
+| 상태 | 현재 · 적용 예정 사항은 해당 절에서 구분 |
 | 목적 | Kotlin·Spring·JPA 코드를 같은 방식으로 쓰기 위한 규칙 |
 | 범위 | `services/**/*.kt`, `build-logic/**/*.kt` |
 | 관련 코드 | `build-logic/src/main/kotlin/task.spring-service.gradle.kts`(컴파일 옵션·allOpen) |

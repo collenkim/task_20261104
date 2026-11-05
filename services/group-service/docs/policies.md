@@ -1,5 +1,10 @@
 # 그룹 서비스 정책
 
+| 항목 | 내용 |
+| --- | --- |
+| 분류 | 서비스 정의 |
+| 상태 | 현재 · 적용 예정 사항은 해당 절에서 구분 |
+
 그룹 서비스는 자기 DB의 그룹과 소속 관계를 소유한다. 멤버 API·DB를 역조회하지 않는다. 그룹 명세는 멤버를 경유한다.
 공통 기준은 [보안](../../../docs/common/security.md), [통신](../../../docs/common/service-communication.md), [API](api.md), [데이터](../../../docs/common/data-conventions.md)다.
 
