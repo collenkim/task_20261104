@@ -114,3 +114,10 @@ node scripts/verification/swagger-browser.mjs
 - XML 결과 합계는 멤버 일반 128건·계약 8건, 그룹 일반 28건·계약 1건으로 총 165건이며 실패·오류·건너뜀은 모두 0이다. 변경 없는 일부 Gradle 작업은 UP-TO-DATE로 기존 성공 결과를 재사용했다.
 - 현재 `feature/GROUP-001`에서 그룹 조회·멤버 연동, Swagger 실행 중계, 문서 정리를 구분해 커밋한다. 실제 커밋은 모든 AI 턴이 끝난 뒤 예약 작업으로 실행한다.
 - develop 병합 후 빌드·실제 Compose·Swagger 재검증은 별도 단계다. 이 절의 성공 결과를 develop 검증 완료로 간주하지 않는다. master 병합과 원격 push도 아직 수행하지 않았다.
+
+## develop 병합 후 개행 보완 (2026-11-05)
+
+- 최초 develop 병합 bdcf06e 이후 전체 재실행에서 테스트 165건은 통과했으나 그룹 OpenAPI 바이트 비교가 실패했다.
+- Windows core.autocrlf=true와 그룹 명세의 LF 속성 누락으로 CRLF 302개가 생겼다. 생성 결과와 JSON 내용 및 LF 정규화 결과는 동일했다.
+- feature/GROUP-001에서 공유 OpenAPI의 LF 속성을 모든 서비스에 적용하고 개행만 복구했다. API 계약은 변경하지 않았다.
+- 보완 후 feature 전체 build를 통과한 뒤 커밋한다. develop 재병합 후 전체 빌드·Compose·Swagger 검증은 인계 스크립트의 후속 단계다.
