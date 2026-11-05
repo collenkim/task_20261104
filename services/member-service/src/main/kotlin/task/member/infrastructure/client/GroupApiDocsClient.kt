@@ -68,9 +68,10 @@ class GroupApiDocsClient(
       }
     }
     (spec.get("components") as? ObjectNode)?.remove("securitySchemes")
+    spec.putArray("servers").addObject().put("url", GroupApiProxyClient.BASE_PATH)
     (spec.get("info") as? ObjectNode)?.put(
       "description",
-      "그룹 내부 API 참고 명세. 실제 호출은 멤버 서버가 내부 키를 추가해 수행합니다.",
+      "그룹 API는 멤버 서비스를 경유해 실행합니다. 내부 호출 키는 멤버 서버에서 추가합니다.",
     )
     return spec
   }

@@ -18,17 +18,14 @@ class GroupMembershipDecoderTests {
   private val decoder = GroupMembershipDecoder(mapper)
 
   @Test
-  fun `다중 소속과 새 권한 과금 코드를 허용하고 그룹 ID 순서와 마이크로초를 보존한다`() {
+  fun `단일 소속과 새 권한 과금 코드를 허용하고 그룹 ID 순서와 마이크로초를 보존한다`() {
     val result = decoder.decode(GroupMembershipSamples.RESPONSE.toByteArray())
     val groups = result.getValue("member0001")
-    assertEquals(listOf("group00001", "group00002"), groups.map { it.groupId })
-    assertEquals("FutureOwner", groups[1].permission)
-    assertEquals("새 권한", groups[1].permissionName)
-    assertEquals("NewPlan", groups[1].pricing)
-    assertEquals(Instant.parse("2026-11-04T23:59:59.123456Z"), groups[1].joinedAt)
+    assertEquals(listOf("group00002"), groups.map { it.groupId })
+    assertEquals("FutureOwner", groups[0].permission)
+    assertEquals("NewPlan", groups[0].pricing)
+    assertEquals(Instant.parse("2026-11-04T23:59:59.123456Z"), groups[0].joinedAt)
     assertEquals(emptyList(), result.getValue("member0002"))
-    assertNull(groups[0].pricing)
-    assertNull(groups[0].joinedAt)
   }
 
   @Test
@@ -48,7 +45,7 @@ class GroupMembershipDecoderTests {
     for (pricing in listOf("", " ", "\t")) {
       val root = sample()
       group(root).put("pricing", pricing).putNull("joinedAt")
-      val value = decoder.decode(mapper.writeValueAsBytes(root)).getValue("member0001")[1]
+      val value = decoder.decode(mapper.writeValueAsBytes(root)).getValue("member0001")[0]
       assertNull(value.pricing)
       assertNull(value.joinedAt)
     }
@@ -56,7 +53,7 @@ class GroupMembershipDecoderTests {
     group(root).put("joinedAt", "2026-11-04T23:59:59.123456+00:00").putNull("pricing")
     assertEquals(
       Instant.parse("2026-11-04T23:59:59.123456Z"),
-      decoder.decode(mapper.writeValueAsBytes(root)).getValue("member0001")[1].joinedAt,
+      decoder.decode(mapper.writeValueAsBytes(root)).getValue("member0001")[0].joinedAt,
     )
   }
 
@@ -87,7 +84,7 @@ class GroupMembershipDecoderTests {
 
   @Test
   fun `필수 그룹 필드는 누락 null 공백 숫자 불리언 배열 객체를 문자열로 바꾸지 않는다`() {
-    for (field in listOf("groupId", "groupName", "permission", "permissionName")) {
+    for (field in listOf("groupId", "groupName", "permission")) {
       val omitted = sample()
       group(omitted).remove(field)
       rejected(mapper.writeValueAsBytes(omitted))

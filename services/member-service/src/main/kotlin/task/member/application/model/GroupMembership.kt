@@ -7,7 +7,6 @@ data class GroupMembership(
   val groupId: String,
   val groupName: String,
   val permission: String,
-  val permissionName: String,
   val joinedAt: Instant?,
   val pricing: String?,
 )

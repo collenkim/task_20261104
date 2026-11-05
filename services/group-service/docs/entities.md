@@ -1,18 +1,39 @@
-# 그룹 서비스 엔티티
+# 그룹 엔티티와 데이터
 
-| 항목 | 내용 |
-| --- | --- |
-| 목적 | 현재 스키마와 엔티티 구현 여부를 명확히 한다 |
-| 범위 | MariaDB DB·스키마 `group_service` |
-| 관련 코드 | `src/main/resources/db/migration/mariadb/`, `src/main/resources/application.yaml` |
+그룹 서비스 소유 DB는 group_service다. 그룹 V2에서 아래 테이블을 생성한다.
+[공통 데이터 규칙](../../../docs/common/data-conventions.md)과 [소속 정책](policies.md)을 따른다.
 
-| 대상 | 현재 상태 |
-| --- | --- |
-| 업무 JPA 엔티티·Repository | 미구현. 프로젝트 구성 단계에서 업무 필드·키·관계를 임의로 확정하지 않는다 |
-| 업무 테이블 | 없음 |
-| `flyway_schema_history` | Flyway가 생성·관리하는 이력 테이블. 업무 엔티티로 매핑하지 않음 |
-| `jpa_probe` / `JpaProbe` | 테스트 전용. 운영 스키마·jar에 포함하지 않음 |
+## user_group
 
-Spring Data JPA 스타터, Hibernate, Kotlin JPA 기본 생성자·프록시 지원은 구성돼 있다. `ddl-auto=validate`로 검증하고 Flyway만 DDL을 적용한다.
+| 열 | 타입 | 제약/의미 |
+| --- | --- | --- |
+| id | CHAR(10), ascii_bin | PK, NOT NULL |
+| name | VARCHAR(100) | NOT NULL, 그룹 이름 |
+| pricing | VARCHAR(20), ascii_bin | NOT NULL, 과금 code |
+| created_at | TIMESTAMP(6) | NOT NULL, UTC 생성 시각 |
+| created_by | VARCHAR(50) | NOT NULL, 생성 주체 |
 
-후속 설계에서는 엔티티별 목적·열/타입·null 허용·기본값·키·인덱스·고유성·변경 이력·관련 정책을 기록한다. 타 서비스 데이터는 ID로만 참조한다. 자료형·UTC·문자셋은 [공통 데이터 규칙](../../../docs/common/data-conventions.md)을 따른다.
+## group_membership
+
+| 열 | 타입 | 제약/의미 |
+| --- | --- | --- |
+| id | BIGINT AUTO_INCREMENT | PK |
+| group_id | CHAR(10), ascii_bin | NOT NULL, user_group FK |
+| member_id | CHAR(10), ascii_bin | NOT NULL, 외부 멤버 ID |
+| permission | VARCHAR(20), ascii_bin | NOT NULL, 권한 code |
+| joined_at | TIMESTAMP(6) | NOT NULL, UTC 그룹 가입 시각 |
+| created_at | TIMESTAMP(6) | NOT NULL, UTC 생성 시각 |
+| created_by | VARCHAR(50) | NOT NULL, 생성 주체 |
+
+UNIQUE(member_id)는 한 멤버의 다른 그룹 가입도 차단한다. UNIQUE(group_id, member_id)는 같은 그룹의 중복 소속을 제한한다. 두 인덱스로 멤버별 조회와 그룹 인원 집계를 지원한다. 다른 서비스 DB에 FK나 JPA 관계를 만들지 않는다.
+
+## local 시드
+
+R__seed_group.sql은 local 프로필의 migration + seed/local 검색 위치에서만 실행한다. 최초와 체크섬 변경 시 재적용하며 단순 재기동에서는 다시 실행하지 않는다.
+
+- arutjf9348/Test1/Premium: tu3fgxd45k(Editor), dj8fy4bewk(Viewer).
+- demo000002/프로젝트팀/Advanced: q1w2e3r4t5(Admin).
+- demo000003/무료팀/Free: 0명.
+- k2m9x0p1q3, j0n8k2m4p6은 미소속이다.
+
+고정 합성 값만 사용한다. created_by가 정확히 seed인 행의 업무 값만 변경하며 생성 시각·생성자는 보존한다. 비시드 행은 덮어쓰지 않고 충돌 검증 대상으로 보고한다. 시드에서 사라진 항목을 자동 삭제하지 않는다. 기본 프로필에는 적용하지 않는다.

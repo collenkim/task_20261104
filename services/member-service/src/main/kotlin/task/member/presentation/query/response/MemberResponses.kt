@@ -3,7 +3,7 @@ package task.member.presentation.query.response
 import com.fasterxml.jackson.annotation.JsonInclude
 import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED
-import java.time.Instant
+import task.member.presentation.query.mapper.ApiTime
 
 /** 공개 목록 봉투. Spring Data Page의 직렬화 구조에 의존하지 않는다(POL-API-003·004). */
 @Schema(description = "멤버 요약 목록과 멤버 수 기준의 페이지 정보")
@@ -28,16 +28,15 @@ data class MemberSummaryResponse(
   val groups: List<GroupMembershipSummaryResponse>,
 )
 
-/** 권한 코드는 그룹이 소유하는 열린 문자열이며 코드명은 표시용이다(POL-API-004). */
+/** 권한 코드는 그룹이 소유하는 열린 문자열이며 코드만 노출한다(POL-API-004). */
 data class GroupMembershipSummaryResponse(
   @field:Schema(requiredMode = REQUIRED) val id: String,
   @field:Schema(requiredMode = REQUIRED) val name: String,
   @field:Schema(requiredMode = REQUIRED, description = "그룹 권한 코드. 새 코드 추가 가능")
   val permission: String,
-  @field:Schema(requiredMode = REQUIRED, description = "표시용 권한 코드명") val permissionName: String,
 )
 
-/** 감사 정보와 소속을 포함한 상세 계약. 시각은 UTC·마이크로초를 보존한다(POL-API-004). */
+/** 감사 정보와 소속을 포함한 상세 계약. 시각은 한국 시간의 분 단위로 표시한다(POL-API-004). */
 data class MemberDetailResponse(
   @field:Schema(requiredMode = REQUIRED, pattern = "^[a-z0-9]{10}$") val id: String,
   @field:Schema(requiredMode = REQUIRED) val name: String,
@@ -46,17 +45,21 @@ data class MemberDetailResponse(
   @field:Schema(
     requiredMode = REQUIRED,
     type = "string",
-    format = "date-time",
-    description = "멤버 가입 시각 UTC",
+    pattern = ApiTime.PATTERN,
+    minLength = 16,
+    maxLength = 16,
+    description = "멤버 가입 시각 한국 시간(Asia/Seoul), 분 단위",
   )
-  val registeredDate: Instant,
+  val registeredDate: String,
   @field:Schema(
     requiredMode = REQUIRED,
     type = "string",
-    format = "date-time",
-    description = "행 생성 시각 UTC",
+    pattern = ApiTime.PATTERN,
+    minLength = 16,
+    maxLength = 16,
+    description = "행 생성 시각 한국 시간(Asia/Seoul), 분 단위",
   )
-  val createdAt: Instant,
+  val createdAt: String,
   @field:Schema(requiredMode = REQUIRED, description = "행 생성 주체") val createdBy: String,
   @field:Schema(requiredMode = REQUIRED, description = "미소속은 빈 배열, group ID 오름차순")
   val groups: List<GroupMembershipDetailResponse>,
@@ -69,14 +72,15 @@ data class GroupMembershipDetailResponse(
   @field:Schema(requiredMode = REQUIRED) val name: String,
   @field:Schema(requiredMode = REQUIRED, description = "그룹 권한 코드. 새 코드 추가 가능")
   val permission: String,
-  @field:Schema(requiredMode = REQUIRED, description = "표시용 권한 코드명") val permissionName: String,
   @field:Schema(
     requiredMode = REQUIRED,
     types = ["string", "null"],
-    format = "date-time",
-    description = "그룹 소속 시각 UTC. 모르면 null",
+    pattern = ApiTime.PATTERN,
+    minLength = 16,
+    maxLength = 16,
+    description = "그룹 소속 시각 한국 시간(Asia/Seoul), 분 단위. 모르면 null",
   )
-  val joinedAt: Instant?,
+  val joinedAt: String?,
   @field:Schema(
     requiredMode = REQUIRED,
     types = ["string", "null"],

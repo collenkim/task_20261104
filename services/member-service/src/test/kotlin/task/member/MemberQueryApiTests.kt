@@ -66,6 +66,16 @@ class MemberQueryApiTests {
       }
       .`when`(memberships)
       .findByMemberIds(org.mockito.ArgumentMatchers.anyList())
+    doAnswer { call ->
+        observations +=
+          Thread.currentThread().threadId() to
+            TransactionSynchronizationManager.isActualTransactionActive()
+        assertFalse(TransactionSynchronizationManager.isSynchronizationActive())
+        call.callRealMethod()
+      }
+      .`when`(memberships)
+      .findByMemberId(org.mockito.ArgumentMatchers.anyString())
+
     clearInvocations(memberships, members)
   }
 
@@ -75,7 +85,7 @@ class MemberQueryApiTests {
   }
 
   @Test
-  fun `기본 목록은 멤버 다섯 명과 다중 소속을 한 번의 일괄 조회로 결합한다`() {
+  fun `기본 목록은 멤버 다섯 명과 단일 소속을 한 번의 일괄 조회로 결합한다`() {
     mvc.get("/api/members").andExpect {
       status { isOk() }
       jsonPath("$.members.length()") { value(5) }
@@ -87,8 +97,7 @@ class MemberQueryApiTests {
       jsonPath("$.members[0].id") { value("tu3fgxd45k") }
       jsonPath("$.members[0].groups[0].id") { value("arutjf9348") }
       jsonPath("$.members[0].groups[0].permission") { value("Editor") }
-      jsonPath("$.members[0].groups[0].permissionName") { value("편집자") }
-      jsonPath("$.members[0].groups[1].permission") { value("Viewer") }
+      jsonPath("$.members[0].groups[0].permissionName") { doesNotExist() }
       jsonPath("$.members[0].groups[0].joinedAt") { doesNotExist() }
       jsonPath("$.members[0].groups[0].pricing") { doesNotExist() }
       jsonPath("$.members[0].email") { doesNotExist() }
@@ -188,7 +197,7 @@ class MemberQueryApiTests {
   }
 
   @Test
-  fun `상세는 감사 정보 UTC 마이크로초 다중 소속과 null 키 및 no-store를 유지한다`() {
+  fun `상세는 감사 정보 한국 시간 분 단위 단일 소속과 null 키 및 no-store를 유지한다`() {
     val body =
       mvc
         .get("/api/member/tu3fgxd45k")
@@ -197,20 +206,20 @@ class MemberQueryApiTests {
           header { string("Cache-Control", "no-store") }
           jsonPath("$.email") { value("tu3fgxd45k@example.invalid") }
           jsonPath("$.address") { value("가상 주소 1") }
-          jsonPath("$.registeredDate") { value("2026-08-15T04:00:59.123456Z") }
-          jsonPath("$.createdAt") { value("2026-08-15T04:01:00.654321Z") }
+          jsonPath("$.registeredDate") { value("2026-08-15 13:00") }
+          jsonPath("$.createdAt") { value("2026-08-15 13:01") }
           jsonPath("$.createdBy") { value("seed") }
-          jsonPath("$.groups.length()") { value(2) }
-          jsonPath("$.groups[0].joinedAt") { value("2026-08-15T04:00:00.123456Z") }
+          jsonPath("$.groups.length()") { value(1) }
+          jsonPath("$.groups[0].joinedAt") { value("2026-08-15 13:00") }
           jsonPath("$.groups[0].pricing") { value("Premium") }
         }
         .andReturn()
         .response
         .contentAsString
-    val optional = json.readTree(body).path("groups").path(1)
-    assertTrue(optional.has("joinedAt") && optional.path("joinedAt").isNull)
-    assertTrue(optional.has("pricing") && optional.path("pricing").isNull)
-    verify(memberships).findByMemberIds(listOf("tu3fgxd45k"))
+    val optional = json.readTree(body).path("groups").path(0)
+    assertTrue(optional.has("joinedAt") && optional.path("joinedAt").isString)
+    assertTrue(optional.has("pricing") && optional.path("pricing").isString)
+    verify(memberships).findByMemberId("tu3fgxd45k")
     mvc.get("/api/member/k2m9x0p1q3").andExpect {
       status { isOk() }
       jsonPath("$.groups") { isEmpty() }
@@ -250,6 +259,7 @@ class MemberQueryApiTests {
         Triple(GroupServiceConfigurationException(), 500, "INTERNAL_ERROR"),
       )) {
       doThrow(failure).`when`(memberships).findByMemberIds(org.mockito.ArgumentMatchers.anyList())
+      doThrow(failure).`when`(memberships).findByMemberId(org.mockito.ArgumentMatchers.anyString())
       for (path in listOf("/api/members", "/api/member/tu3fgxd45k")) {
         mvc.get(path).andExpect {
           status { isEqualTo(status) }
@@ -269,7 +279,7 @@ class MemberQueryApiTests {
       jsonPath("$.paths['/api/member/{id}'].get.operationId") { value("getMemberDetail") }
       jsonPath("$.components.schemas.MemberSummaryPageResponse.properties.members") { exists() }
       jsonPath("$.components.schemas.MemberDetailResponse.properties.registeredDate.format") {
-        value("date-time")
+        doesNotExist()
       }
       jsonPath("$.components.schemas.GroupMembershipDetailResponse.properties.permission.enum") {
         doesNotExist()

@@ -1,0 +1,101 @@
+package task.group
+
+import java.time.Instant
+import kotlin.test.*
+import org.junit.jupiter.api.Test
+import task.group.application.exception.*
+import task.group.application.model.*
+import task.group.application.port.output.*
+import task.group.application.query.detail.*
+import task.group.application.query.summary.*
+import task.group.domain.*
+
+/** 순수 조회와 다건 방어, 입력 범위를 검증한다(POL-GROUP-001·002). */
+class GroupQueryTests {
+  private fun row(member: String = "member0001", group: String = "group00001") =
+    GroupMembershipRecord(
+      member,
+      group,
+      "합성 그룹",
+      Instant.parse("2026-08-15T04:00:59.123456Z"),
+      GroupPricingType.FREE,
+      GroupPermissionType.VIEWER,
+    )
+
+  @Test
+  fun `상세는 미소속 단일 다건을 구분하고 대표 행을 임의로 고르지 않는다`() {
+    val query = MemberGroupDetailQuery("member0001")
+    assertFailsWith<GroupMembershipNotFoundException> {
+      MemberGroupDetailQueryHandler(MemberGroupReader { emptyList() }).execute(query)
+    }
+    assertEquals(
+      row(),
+      MemberGroupDetailQueryHandler(MemberGroupReader { listOf(row()) }).execute(query),
+    )
+    assertFailsWith<GroupMembershipAmbiguousException> {
+      MemberGroupDetailQueryHandler(MemberGroupReader { listOf(row(), row(group = "group00002")) })
+        .execute(query)
+    }
+  }
+
+  @Test
+  fun `요청 멤버만 묶고 전체 인원과 정렬은 별도로 보존한다`() {
+    val rows = listOf(row("member0002"), row("member0001"))
+    val result =
+      GroupSummaryQueryHandler(
+          GroupSummaryReader { GroupReadSnapshot(rows, mapOf("group00001" to 9L)) }
+        )
+        .execute(GroupSummaryQuery(listOf("member0002", "member0001")))
+    assertEquals(9, result.single().totalMemberCount)
+    assertEquals(listOf("member0001", "member0002"), result.single().members.map { it.memberId })
+  }
+
+  @Test
+  fun `summary도 같은 멤버의 서로 다른 그룹 소속을 오류로 인지한다`() {
+    assertFailsWith<GroupMembershipAmbiguousException> {
+      GroupSummaryQueryHandler(
+          GroupSummaryReader {
+            GroupReadSnapshot(listOf(row(), row(group = "group00002")), emptyMap())
+          }
+        )
+        .execute(GroupSummaryQuery(listOf("member0001")))
+    }
+  }
+
+  @Test
+  fun `누락 공백 중복 잘못된 식별자와 101개를 보정하지 않는다`() {
+    val invalid =
+      listOf(
+        emptyList(),
+        listOf(""),
+        listOf(" "),
+        listOf("MEMBER0001"),
+        listOf("member0001", "member0001"),
+        (1..101).map { "m" + it.toString().padStart(9, '0') },
+      )
+    invalid.forEach { ids ->
+      assertFailsWith<InvalidGroupQueryException> { GroupSummaryQuery(ids) }
+    }
+    assertEquals(
+      100,
+      GroupSummaryQuery((1..100).map { "m" + it.toString().padStart(9, '0') }).memberIds.size,
+    )
+  }
+
+  @Test
+  fun `코드의 내부 메타데이터와 정확한 문자열 변환을 검증한다`() {
+    GroupPermissionType.entries.forEach {
+      assertEquals(it, GroupPermissionType.fromCode(it.code))
+      assertTrue(it.codeName.isNotBlank())
+      assertTrue(it.description.isNotBlank())
+      assertEquals("ACTIVE", it.status)
+    }
+    GroupPricingType.entries.forEach {
+      assertEquals(it, GroupPricingType.fromCode(it.code))
+      assertTrue(it.codeName.isNotBlank())
+      assertTrue(it.description.isNotBlank())
+    }
+    assertFailsWith<IllegalArgumentException> { GroupPricingType.fromCode("free") }
+    assertFailsWith<IllegalArgumentException> { GroupPermissionType.fromCode("unknown") }
+  }
+}

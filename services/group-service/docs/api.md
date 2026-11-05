@@ -2,71 +2,83 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 목적 | 현재 HTTP 경로와 후속 업무 계약 소유 |
-| 범위 | 내부 그룹 IP:8082. 통합 구성 172.30.104.3:8082 |
-| 관련 코드 | infrastructure/configuration/, presentation/error/, application.yaml |
+| 소유 | group-service, GROUP-001 |
+| 접근 | 내부 숫자 IP:포트. X-Internal-Service-Id + 해당 호출자의 X-Internal-Service-Key 필요 |
+| 명세 | openapi.json, 멤버의 /internal-docs/group을 경유한 Swagger 명세·실행 |
+| 시각 | Asia/Seoul의 yyyy-MM-dd HH:mm. 저장은 UTC TIMESTAMP(6) |
 
-## 현재 제공 경로
+## GET /api/groups/summary
 
-| 방법·경로 | 호출 조건 | 응답 |
-| --- | --- | --- |
-| GET `/actuator/health` | 키 없음 | 상태 JSON |
-| GET `/actuator/health/liveness` | 키 없음 | 생존 상태 |
-| GET `/actuator/health/readiness` | 키 없음 | 자기 DB 포함 준비 상태 |
-| GET `/v3/api-docs` | X-Internal-Service-Key 필요 | 그룹 OpenAPI JSON |
+operationId: getGroupSummaries. 성공 200 application/json.
 
-그룹 업무 API와 명세의 내부 키 누락·불일치·중복은 403 INTERNAL_ACCESS_DENIED다. Swagger UI는 제공하지 않는다. 키가 없는 UI 요청은 필터에서 403, 정상 키 요청은 미존재 경로 404다.
+~~~text
+/api/groups/summary?memberIds=tu3fgxd45k&memberIds=dj8fy4bewk
+~~~
 
-## 멤버 소속 일괄 조회 계약 (제공자 미구현)
+- memberIds는 반복 파라미터 1~100개, ID는 소문자 영숫자 10자리다.
+- 누락·빈 값·공백·대문자·형식 위반·중복·101개 이상·콤마 결합은 400 VALIDATION_FAILED.
+- group 배열은 그룹 ID 순, members는 멤버 ID 순이다. members에는 요청한 ID만 들어간다.
+- totalMemberCount는 요청 ID 수와 관계없는 그룹 전체 인원(int64)이다.
+- 미소속 ID는 결과 행이 없으며 모두 미소속이면 group은 빈 배열이다.
+- 현재 멤버당 최대 한 소속이므로 결과 그룹도 최대 100개다. 결과를 임의로 절삭하지 않는다.
 
-2026-11-05 MEMBER-001 소비자 선행 개발의 기준 계약이다. 그룹의 업무 Controller·DB·시드·원본 OpenAPI paths는 아직 없다. 멤버는 local fixture 또는 테스트 HTTP 서버로 소비자 동작을 검증한다. 이 문서는 그룹이 소유하며 실제 제공자 구현 때 아래 계약을 검증해야 한다.
-
-`GET /internal/group-memberships?memberIds=tu3fgxd45k&memberIds=k2m9x0p1q3`
-
-- 내부 키 `X-Internal-Service-Key`가 필요하다. GET 본문은 사용하지 않는다.
-- `memberIds`는 반복 파라미터(form/explode)로 1~100개다. 각 ID는 `^[a-z0-9]{10}$`, 중복·빈 값·형식 위반은 400이다. 공개 멤버 API의 page/size 반복 금지와 구분한다.
-- 소속 관계만 조회하므로 멤버 DB의 존재 여부를 확인하지 않는다. 조회한 소속이 없으면 해당 ID의 `memberships: []`다.
-
-```json
+~~~json
 {
-  "members": [
+  "group": [
     {
-      "memberId": "tu3fgxd45k",
-      "memberships": [
-        {
-          "groupId": "arutjf9348",
-          "groupName": "개발팀",
-          "permission": "Editor",
-          "permissionName": "편집자",
-          "joinedAt": "2026-08-15T04:00:00Z",
-          "pricing": "Premium"
-        },
-        {
-          "groupId": "demo000002",
-          "groupName": "프로젝트팀",
-          "permission": "Viewer",
-          "permissionName": "조회자"
-        }
+      "groupId": "arutjf9348",
+      "groupName": "Test1",
+      "totalMemberCount": 2,
+      "members": [
+        { "memberId": "dj8fy4bewk", "permission": "Viewer" },
+        { "memberId": "tu3fgxd45k", "permission": "Editor" }
       ]
-    },
-    { "memberId": "k2m9x0p1q3", "memberships": [] }
+    }
   ]
 }
-```
+~~~
 
-| 필드 | 계약 |
+## GET /api/group/{memberId}
+
+operationId: getMemberGroupDetail. 아래 6개 필드만 있는 단일 객체다. 모든 필드는 필수·비null이다.
+
+~~~json
+{
+  "memberId": "tu3fgxd45k",
+  "groupId": "arutjf9348",
+  "groupName": "Test1",
+  "registeredDate": "2026-08-15 13:00",
+  "pricing": "Premium",
+  "permission": "Editor"
+}
+~~~
+
+- registeredDate는 멤버가 이 그룹에 가입한 시각이다. 멤버 서비스의 가입일과 다르다.
+- permission은 Viewer/Editor/Admin, pricing은 Free/Advanced/Premium의 code다. 표시명·설명·코드 상태를 응답에 넣지 않는다.
+- 0건은 404 GROUP_MEMBERSHIP_NOT_FOUND, 1건은 200, 2건 이상이면 예외·500 GROUP_MEMBERSHIP_AMBIGUOUS와 ERROR 로그다.
+- DB UNIQUE(member_id)로 복수 입력을 먼저 차단한다. 다건 조회는 별도 방어 규칙이며 첫 행을 선택하지 않는다.
+- 상세는 Cache-Control: no-store다.
+
+## 오류와 기타 경로
+
+오류는 application/problem+json이며 type/title/status/detail/instance/code를 포함한다.
+
+| 상황 | HTTP / code |
 | --- | --- |
-| members | 필수·비null 배열. 요청 ID마다 정확히 한 항목. 순서는 보장하지 않음 |
-| memberId | 필수·비null. 요청한 ID 집합과 정확히 일치 |
-| memberships | 필수·비null 배열, 0~N개. 같은 멤버에서 groupId 중복 불가 |
-| groupId | 필수·비어 있지 않은 10자리 소문자 영숫자 문자열 |
-| groupName | 필수·공백만으로 구성할 수 없음 |
-| permission / permissionName | 필수·비어 있지 않은 코드/표시명. 소비자는 새로운 코드를 허용 |
-| joinedAt | 선택·null 허용. 있으면 UTC RFC 3339(Z 또는 +00:00), 소수점 아래 최대 6자리 |
-| pricing | 선택·null 허용 코드 문자열. 소속 여부·기본 권한 조회의 전제 조건이 아님 |
+| 입력 오류 | 400 VALIDATION_FAILED |
+| 내부 호출 인증 실패 | 403 INTERNAL_ACCESS_DENIED |
+| 상세 미소속 | 404 GROUP_MEMBERSHIP_NOT_FOUND |
+| 없는 경로 | 404 NOT_FOUND |
+| 다건 소속 조회 | 500 GROUP_MEMBERSHIP_AMBIGUOUS |
+| 저장 코드·기타 내부 오류 | 500 INTERNAL_ERROR |
+| DB 연결/가용성 실패 | 503 SERVICE_UNAVAILABLE |
 
-알 수 없는 추가 필드는 소비자가 무시한다. 선택 정보 부재는 핵심 소속 계약 위반이 아니다. `joinedAt`이 존재하지만 형식이 잘못된 경우는 계약 오류다. `pricing`의 빈 문자열은 소비자에서 null로 정규화한다. 필수 필드 부재를 Kotlin 기본값 `emptyList()` 등으로 숨기지 않는다.
+GET/HEAD health는 키 없이 접근한다. /error는 오류 처리 경로다. /v3/api-docs에는 내부 인증이 필요하며 그룹 Swagger UI는 제공하지 않는다. 405/406 등은 [공통 API 규칙](../../../docs/common/api-conventions.md)을 따른다.
 
-정상은 200 application/json, 요청 위반 400, 내부 키 거부 403, 서버 장애 5xx다. 권한·상태 코드의 정의는 그룹 정책이 소유하며 멤버에 enum 클래스를 배포하지 않는다. 멤버의 HTTP 어댑터는 그룹 4xx/리다이렉트/잘못된 본문을 500, 통신 실패·그룹 5xx를 503으로 매핑한다.
+X-Request-Id는 허용된 값이면 이어 사용하고 없거나 잘못되면 생성한다. 두 서비스의 요청·업무·의존 호출 로그를 연결한다. 키·본문·실제 멤버 ID는 로그에 남기지 않는다.
 
-실제 그룹 API 구현 후 원본 OpenAPI와 멤버 소비자 예제·모의 HTTP 테스트를 대조하고 실제 두 서비스 조회를 검증한다. 현재 문서·fixture만으로 제공자 적합성 검사를 완료했다고 기록하지 않는다.
+기존 /internal/group-memberships 계약은 GROUP-001에서 위 두 API로 대체한다. 멤버 목록은 summary 한 번, 상세는 detail 한 번을 호출한다. 그룹 5xx는 멤버 503이며 미소속 전용 404만 빈 groups로 바꾼다.
+
+## 멤버 경유 Swagger 실행
+
+멤버 Swagger에서 그룹 서비스를 선택하고 Try it out / Execute를 사용한다. 브라우저는 /internal-api/group 아래의 같은 경로를 호출하고 멤버 서버가 내부 키를 추가한다. 그룹 원본 OpenAPI·응답·호스트 포트 정책은 유지한다. 이 기술 중계는 그룹 400/404/500/503과 표준 오류 본문을 유지하므로 실제 그룹 결과를 확인할 수 있다.

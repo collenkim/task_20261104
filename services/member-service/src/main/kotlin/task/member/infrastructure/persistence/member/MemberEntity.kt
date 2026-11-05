@@ -16,9 +16,9 @@ class MemberEntity(
   @Column(nullable = false, length = 100) val name: String,
   @Column(nullable = false, length = 254) val email: String,
   @Column(nullable = false, length = 255) val address: String,
-  @Column(name = "registered_at", nullable = false, columnDefinition = "datetime(6)")
+  @Column(name = "registered_at", nullable = false, columnDefinition = "timestamp(6)")
   val registeredAt: Instant,
-  @Column(name = "created_at", nullable = false, columnDefinition = "datetime(6)")
+  @Column(name = "created_at", nullable = false, columnDefinition = "timestamp(6)")
   val createdAt: Instant,
   @Column(name = "created_by", nullable = false, length = 50) val createdBy: String,
 ) {

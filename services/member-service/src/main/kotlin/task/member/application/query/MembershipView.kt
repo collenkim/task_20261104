@@ -8,7 +8,6 @@ data class MembershipView(
   val id: String,
   val name: String,
   val permission: String,
-  val permissionName: String,
   val joinedAt: Instant?,
   val pricing: String?,
 ) {
@@ -19,7 +18,6 @@ data class MembershipView(
         membership.groupId,
         membership.groupName,
         membership.permission,
-        membership.permissionName,
         membership.joinedAt,
         membership.pricing,
       )

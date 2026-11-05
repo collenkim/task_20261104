@@ -13,7 +13,7 @@ class OpenApiConfiguration {
     OpenAPI()
       .info(
         Info()
-          .version("0.1.0")
+          .version("0.2.0")
           .title("멤버 서비스 API")
           .description("사용자 인증 없이 제공하는 멤버 API. 그룹 데이터는 서버 간 호출로 조회합니다.")
       )

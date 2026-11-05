@@ -20,7 +20,7 @@ import task.member.presentation.query.response.MemberProblemResponse
 import task.member.presentation.query.response.MemberSummaryPageResponse
 
 /** HTTP 계약을 컨트롤러 처리와 분리한다. 소비자는 생성 OpenAPI를 공유한다(POL-API-004). */
-@Tag(name = "멤버 조회", description = "멤버 기본 정보와 다중 그룹 소속 조회")
+@Tag(name = "멤버 조회", description = "멤버 기본 정보와 그룹 소속 조회. 현재 멤버당 0~1개")
 interface MemberQueryApi {
   @Operation(
     operationId = "getMemberSummaries",
@@ -124,7 +124,8 @@ interface MemberQueryApi {
   @Operation(
     operationId = "getMemberDetail",
     summary = "멤버 상세 조회",
-    description = "기본 정보·생성 감사 정보·다중 그룹 소속. 응답은 no-store, 시각은 UTC이며 마이크로초를 보존합니다.",
+    description =
+      "기본 정보·생성 감사 정보·현재 최대 한 그룹 소속. 응답은 no-store, 시각은 한국 시간(Asia/Seoul) yyyy-MM-dd HH:mm입니다.",
   )
   @ApiResponses(
     ApiResponse(

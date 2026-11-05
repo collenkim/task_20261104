@@ -43,7 +43,7 @@ class GroupMembershipConfigurationTests {
       assertThat(it).hasNotFailed().hasSingleBean(GroupMembershipReader::class.java)
       val reader = it.getBean(GroupMembershipReader::class.java)
       assertThat(reader).isInstanceOf(FixtureGroupMembershipReader::class.java)
-      assertThat(reader.findByMemberIds(listOf("tu3fgxd45k")).getValue("tu3fgxd45k")).hasSize(2)
+      assertThat(reader.findByMemberIds(listOf("tu3fgxd45k")).getValue("tu3fgxd45k")).hasSize(1)
     }
   }
 
