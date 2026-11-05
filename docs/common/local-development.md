@@ -105,11 +105,11 @@ IntelliJ에서 Application 클래스를 직접 실행할 때는 다음 환경변
 
 ## MEMBER-001 선행 개발 실행 상태
 
-source 선택·소속 fixture, 공개 멤버 API와 local 시드를 구현했다(M-04·M-05·M-06). API·프로필·실제 MariaDB 검증은 [3단계 기록](member-query-stage-3-verification.md)을 따른다. 실제 Compose/Swagger 업무 실행은 M-11에서 검증한다.
+source 선택·소속 fixture, 공개 멤버 API와 local 시드를 구현했다(M-04·M-05·M-06). API·프로필·실제 MariaDB 검증은 [3단계 기록](member-query-stage-3-verification.md)을 따른다. 실제 Compose/Swagger 업무 실행·그룹 중단·서비스별 단독 실행은 [5단계 기록](member-query-stage-5-verification.md)에서 확인했다.
 
 - local 프로필은 `task.group-membership.source=fixture`로 멤버 내부 합성 소속 데이터를 사용한다. 기본 프로필은 http다. fixture는 local 외에서 선택할 수 없다.
-- 루트 Compose와 멤버 단독 Compose 모두 `TASK_GROUP_MEMBERSHIP_SOURCE`를 컨테이너에 전달한다. 생략 시 fixture이고 http 지정 시 HTTP로 전환한다. 프로필·설정 바인딩은 테스트했고 실제 컨테이너 업무 API 검증은 후속이다.
-- 기존 `docker compose up -d --build --wait`로 local 시드와 fixture를 적용한 멤버 API를 실행한다. 목록은 `/api/members?page=0&size=20&sort=name,asc`, 상세 예시는 `/api/member/tu3fgxd45k`다. Swagger 실행 검증은 M-11에서 기록한다. 그룹 서비스가 아직 업무 API를 제공하지 않아도 fixture 기반 조회는 200이어야 한다.
+- 루트 Compose와 멤버 단독 Compose 모두 `TASK_GROUP_MEMBERSHIP_SOURCE`를 컨테이너에 전달한다. 생략 시 fixture이고 http 지정 시 HTTP로 전환한다. 프로필·설정 바인딩과 두 실행 방식의 실제 fixture 업무 API를 검증했다.
+- 기존 `docker compose up -d --build --wait`로 local 시드와 fixture를 적용한 멤버 API를 실행한다. 목록은 `/api/members?page=0&size=20&sort=name,asc`, 상세 예시는 `/api/member/tu3fgxd45k`다. Swagger에서 실제 목록·상세 Try it out을 검증했다. 그룹 서비스가 아직 업무 API를 제공하지 않아도 fixture 기반 조회는 200이어야 한다.
 - http 선택 시 실제 그룹 주소·키를 사용한다. 실패하면 500/503을 반환하며 fixture로 대체하지 않는다. 실제 그룹 업무 API가 없는 현재 구성에서는 http의 정상 업무 연동을 완료로 표시하지 않는다.
 - 기존 그룹 명세 전달은 실제 HTTP를 유지한다. 그룹 정지 시 명세 드롭다운 조회 실패와 fixture 멤버 API 성공을 별도로 확인한다.
 - local Flyway 경로는 `db/migration/mariadb` + `db/seed/local`이다. 기본 프로필은 migration 경로만 적용한다. 시드 재실행 조건·보호 규칙은 [POL-DATA-004](data-conventions.md#pol-data-004-local-시드), ID·소속 예시는 [멤버 엔티티](../../services/member-service/docs/entities.md#local-시드-m-06-적용)를 따른다.

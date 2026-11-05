@@ -4,9 +4,9 @@
 | --- | --- |
 | 목적 | 다중 소속·낮은 결합도·임시 그룹 데이터로 멤버 조회를 선행 개발한다 |
 | 범위 | 멤버 API 2개, DB 조회, local 임시 공급자, HTTP 어댑터, 검증·문서 |
-| 상태 | 2026-11-05 M-01~M-06·M-09 커밋 확인. M-08 지수 백오프·Full Jitter 구현. 공유 명세·Compose/Swagger 업무 검증은 후속 단계 |
+| 상태 | 2026-11-05 M-01~M-09 구현·검증 완료. 공유 명세·실제 Compose/Swagger 업무 검증 완료. 5단계 커밋 실행·develop 통합 검증·사용자 master 반영 대기 |
 | 기준 | 문서 검토 시 master `1bfa20f`. 이후에는 아래 소유 문서의 검토된 최신 리비전을 따른다 |
-| 작업 브랜치 | master `1bfa20f`에서 생성한 `feature/MEMBER-001`. 문서 `478026f`, 저장소 `ef03e16`, 공급자 `e5a8c6b`, 공개 조회/시드 `c350e54`의 경로·내용 확인. 4단계는 작업 폴더 검증 후 예약 |
+| 작업 브랜치 | master `1bfa20f`에서 생성한 `feature/MEMBER-001`. 문서 `478026f`, 저장소 `ef03e16`, 공급자 `e5a8c6b`, 공개 조회/시드 `c350e54`, 재시도 `5a0452c`의 경로·내용 확인. 5단계는 작업 폴더 검증 후 예약 |
 | 실행 요청 | [MEMBER-001 구현 요청서](requests/MEMBER-001.md) |
 
 ## 1. 범위와 완료의 의미
@@ -94,17 +94,17 @@ task.member
 | M-01 | V2 member 테이블·인덱스·엔티티 | MariaDB 마이그레이션·스키마 검증 | 완료, `ef03e16` |
 | M-02 | 조회 포트·정렬·페이지·트랜잭션 | 실제 DB 조회·offset·경계 테스트 | 완료, `ef03e16`. HTTP 원시 입력은 M-05 |
 | M-03 | HTTP 그룹 소속 어댑터 | 계약 서버·실패·키·알 수 없는 코드/추가 필드 테스트 | 완료, `e5a8c6b`의 소비자 어댑터 검증. 실제 제공자 미구현 |
-| M-04 | local fixture 공급자·선택 설정 | 실제 멤버 API 성공·프로필 격리·공급자 단일성 | 완료, `e5a8c6b`. 공개 API 200은 3단계 MockMvc + 실제 DB 검증. Compose는 M-11 대기 |
+| M-04 | local fixture 공급자·선택 설정 | 실제 멤버 API 성공·프로필 격리·공급자 단일성 | 완료, `e5a8c6b`. 공개 API 200은 3단계 MockMvc + 실제 DB 검증. Compose·단독/그룹 중단 검사는 5단계 통과 |
 | M-05 | 목록·상세·다중 소속 결합 | 공개 계약·논리 호출 횟수·상세 감사 정보 테스트 | 완료, `c350e54`. MockMvc + 실제 DB 검증 |
 | M-06 | local R__ 시드 | 최초·재기동·체크섬 변경·기본 프로필 미적용 | 완료, `c350e54`. 실제 MariaDB·프로필 검증 |
-| M-07 | OpenAPI 스냅샷·갱신/검사 명령 | 운영 경로만 포함·결정적 비교·실제 응답 스키마 검증 | 미적용 |
-| M-08 | 지수 백오프·Full Jitter | 고정 난수/대기 대역·상한·중단·기존 명세 호출 회귀 | 4단계 구현·검증. 커밋 실행 후 SHA 확인 |
+| M-07 | OpenAPI 스냅샷·갱신/검사 명령 | 운영 경로만 포함·결정적 비교·실제 응답 스키마 검증 | 5단계 완료. 공유 JSON·8개 계약 검사·고의 불일치 거부 |
+| M-08 | 지수 백오프·Full Jitter | 고정 난수/대기 대역·상한·중단·기존 명세 호출 회귀 | 완료, `5a0452c`. 지수 지연·지터·중단·동시 요청·명세 본문 실패 회귀 |
 | M-09 | 계층·실제 트랜잭션 검사 | 금지 의존 0·그룹 진입 시 트랜잭션 없음 | 완료, `c350e54`. ArchUnit 금지 의존·위반 대조군, 실제 DB/HTTP 호출 스레드 검사 |
-| M-10 | 공통·서비스 문서 일치 | 링크·정책 ID·현재/목표 구분 | 4단계 구현 상태 반영, 이후 단계마다 갱신 |
-| M-11 | Compose·Swagger·독립 기동 | fixture 모드 실제 200·그룹 정지 상태 멤버 조회 성공 | 미적용 |
-| M-12 | 단계 커밋 검증·인계 | 각 커밋 SHA의 검사 기록, 실제 그룹 연동 미검증 표시 | 0~3단계 커밋 내용 일치 확인. 4단계는 예약 실행 후 SHA 확인 |
+| M-10 | 공통·서비스 문서 일치 | 링크·정책 ID·현재/목표 구분 | 5단계 구현·검증 결과와 소비자 공유 안내 반영 |
+| M-11 | Compose·Swagger·독립 기동 | fixture 모드 실제 200·그룹 정지 상태 멤버 조회 성공 | 5단계 완료. 실제 Compose·독립 실행·Edge Swagger 통과 |
+| M-12 | 단계 커밋 검증·인계 | 각 커밋 SHA의 검사 기록, 실제 그룹 연동 미검증 표시 | 0~4단계 커밋 내용 일치 확인. 5단계 예약 실행 후 SHA 확인과 develop 검증 필요 |
 
-증거: [1단계 저장소](member-query-stage-1-verification.md), [2단계 공급자](member-query-stage-2-verification.md), [3단계 공개 조회·시드](member-query-stage-3-verification.md), [4단계 재시도](member-query-stage-4-verification.md). MockMvc·테스트 HTTP 서버의 성공을 실제 그룹 제공자·Compose 통합 성공으로 대체하지 않는다.
+증거: [1단계 저장소](member-query-stage-1-verification.md), [2단계 공급자](member-query-stage-2-verification.md), [3단계 공개 조회·시드](member-query-stage-3-verification.md), [4단계 재시도](member-query-stage-4-verification.md), [5단계 계약·실행](member-query-stage-5-verification.md). MockMvc·테스트 HTTP 서버의 성공을 실제 그룹 제공자·Compose 통합 성공으로 대체하지 않는다.
 
 ## 6. 임시 데이터와 교체 조건
 

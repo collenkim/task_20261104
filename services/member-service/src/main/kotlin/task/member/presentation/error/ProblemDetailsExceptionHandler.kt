@@ -34,10 +34,12 @@ class ProblemDetailsExceptionHandler : ResponseEntityExceptionHandler() {
   fun handleMemberNotFound(): ProblemDetail = memberProblem(ErrorCode.NOT_FOUND)
 
   private fun memberProblem(code: ErrorCode): ProblemDetail =
-    ProblemDetail.forStatusAndDetail(HttpStatusCode.valueOf(code.status), code.description).apply {
-      title = code.codeName
-      setProperty(CODE, code.code)
-    }
+    ProblemDetail.forStatusAndDetail(HttpStatusCode.valueOf(code.status), code.description)
+      .apply {
+        title = code.codeName
+        setProperty(CODE, code.code)
+      }
+      .let(::MemberProblemDetail)
 
   override fun handleExceptionInternal(
     ex: Exception,
@@ -59,7 +61,13 @@ class ProblemDetailsExceptionHandler : ResponseEntityExceptionHandler() {
       problem.title = code.codeName
       if (problem.detail == null) problem.detail = code.description
     }
-    return response
+    return response?.let {
+      ResponseEntity(
+        if (problem != null) MemberProblemDetail(problem) else it.body,
+        it.headers,
+        it.statusCode,
+      )
+    }
   }
 
   @ExceptionHandler(GroupServiceUnavailableException::class)
@@ -75,6 +83,7 @@ class ProblemDetailsExceptionHandler : ResponseEntityExceptionHandler() {
         title = code.codeName
         setProperty(CODE, code.code)
       }
+      .let(::MemberProblemDetail)
   }
 
   @ExceptionHandler(Exception::class)
@@ -88,6 +97,7 @@ class ProblemDetailsExceptionHandler : ResponseEntityExceptionHandler() {
         title = ErrorCode.INTERNAL_ERROR.codeName
         setProperty(CODE, ErrorCode.INTERNAL_ERROR.code)
       }
+      .let(::MemberProblemDetail)
   }
 
   companion object {
