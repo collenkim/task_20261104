@@ -11,6 +11,6 @@ gradlew text eol=lf
 *.bat text eol=crlf
 *.jar binary
 # 공유 API 계약은 생성 결과와 바이트 비교하므로 LF 유지
-services/member-service/docs/openapi.json text eol=lf
+services/*/docs/openapi.json text eol=lf
 # 공식 메타스키마와 라이선스는 내려받은 바이트 그대로 유지
 services/member-service/src/test/resources/openapi-meta/** -text
