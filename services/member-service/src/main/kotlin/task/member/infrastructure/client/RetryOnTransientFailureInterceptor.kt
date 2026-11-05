@@ -6,6 +6,7 @@ import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.http.HttpTimeoutException
 import org.slf4j.LoggerFactory
+import org.slf4j.MDC
 import org.springframework.http.HttpMethod
 import org.springframework.http.HttpRequest
 import org.springframework.http.client.ClientHttpRequestExecution
@@ -35,34 +36,51 @@ class RetryOnTransientFailureInterceptor(
     body: ByteArray,
     execution: ClientHttpRequestExecution,
   ): ClientHttpResponse {
-    var retries = 0
-    while (true) {
-      stopIfInterrupted()
-      try {
-        return execution.execute(request, body)
-      } catch (e: IOException) {
+    val oldAttempt = MDC.get("attempt")
+    try {
+      var retries = 0
+      while (true) {
         stopIfInterrupted()
-        if (retries >= maxRetries || !isRetryable(request, e)) throw e
-        retries++
-        val upper = backoff.upperBoundMillis(retries)
-        val delay = jitter.sample(upper)
-        check(delay in 0..upper) { "재시도 난수 결과가 허용 범위를 벗어났습니다." }
+        request.headers.set("X-Internal-Attempt", (retries + 1).toString())
+        MDC.put("attempt", (retries + 1).toString())
+        log.info("event=remote.attempt.started attempt={}", retries + 1)
         try {
-          sleeper.sleep(delay)
-        } catch (_: InterruptedException) {
-          Thread.currentThread().interrupt()
-          throw interrupted()
+          return execution.execute(request, body).also {
+            log.info(
+              "event=remote.attempt.completed attempt={} status={}",
+              retries + 1,
+              it.statusCode.value(),
+            )
+          }
+        } catch (e: IOException) {
+          log.error(
+            "event=remote.failed attempt={} exception={}",
+            retries + 1,
+            e.javaClass.simpleName,
+          )
+          stopIfInterrupted()
+          if (retries >= maxRetries || !isRetryable(request, e)) throw e
+          retries++
+          val upper = backoff.upperBoundMillis(retries)
+          val delay = jitter.sample(upper)
+          check(delay in 0..upper) { "재시도 난수 결과가 허용 범위를 벗어났습니다." }
+          log.info(
+            "event=remote.retry.scheduled nextAttempt={} delayMs={} reason={}",
+            retries + 1,
+            delay,
+            e.javaClass.simpleName,
+          )
+          try {
+            sleeper.sleep(delay)
+          } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw interrupted()
+          }
+          stopIfInterrupted()
         }
-        stopIfInterrupted()
-        log.warn(
-          "그룹 서비스 호출 재시도 {}/{}: {} {} ({})",
-          retries,
-          maxRetries,
-          request.method,
-          request.uri.path,
-          e.javaClass.simpleName,
-        )
       }
+    } finally {
+      if (oldAttempt == null) MDC.remove("attempt") else MDC.put("attempt", oldAttempt)
     }
   }
 

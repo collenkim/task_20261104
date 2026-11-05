@@ -180,7 +180,7 @@ class MemberOpenApiContractTests {
       if (query.isEmpty()) {
         assertEquals(5, body.path("members").size())
         assertEquals("tu3fgxd45k", body.path("members").path(0).path("id").stringValue())
-        assertEquals(2, body.path("members").path(0).path("groups").size())
+        assertEquals(1, body.path("members").path(0).path("groups").size())
         assertEquals(0, body.path("members").path(2).path("groups").size())
       }
       if (query == "?sort=name,desc&size=1")
@@ -191,12 +191,12 @@ class MemberOpenApiContractTests {
   }
 
   @Test
-  fun `실제 상세는 UTC 마이크로초와 null 소속 정보를 계약대로 반환한다`() {
+  fun `실제 상세는 한국 시간 분 단위와 null 소속 정보를 계약대로 반환한다`() {
     val detail = response("/api/member/tu3fgxd45k", "/api/member/{id}", 200)
-    assertEquals("2026-08-15T04:00:59.123456Z", detail.path("registeredDate").stringValue())
-    assertEquals(2, detail.path("groups").size())
-    assertTrue(detail.path("groups").path(1).has("joinedAt"))
-    assertTrue(detail.path("groups").path(1).path("joinedAt").isNull)
+    assertEquals("2026-08-15 13:00", detail.path("registeredDate").stringValue())
+    assertEquals(1, detail.path("groups").size())
+    assertTrue(detail.path("groups").path(0).has("joinedAt"))
+    assertTrue(detail.path("groups").path(0).path("joinedAt").isString)
     assertEquals(
       0,
       response("/api/member/k2m9x0p1q3", "/api/member/{id}", 200).path("groups").size(),
@@ -234,6 +234,7 @@ class MemberOpenApiContractTests {
         Triple(503, GroupServiceUnavailableException(), "GROUP_SERVICE_UNAVAILABLE"),
       )) {
       doThrow(error).`when`(memberships).findByMemberIds(org.mockito.ArgumentMatchers.anyList())
+      doThrow(error).`when`(memberships).findByMemberId(org.mockito.ArgumentMatchers.anyString())
       for ((url, path) in
         listOf("/api/members" to "/api/members", "/api/member/tu3fgxd45k" to "/api/member/{id}")) {
         assertEquals(code, response(url, path, status).path("code").stringValue())
@@ -252,7 +253,7 @@ class MemberOpenApiContractTests {
         { it.putNull("name") },
         { it.put("registeredDate", "not-a-date") },
         { it.put("email", "invalid-email") },
-        { (it.path("groups").path(1) as ObjectNode).remove("joinedAt") },
+        { (it.path("groups").path(0) as ObjectNode).remove("joinedAt") },
       )
     for (change in changes) {
       val broken = valid.deepCopy() as ObjectNode

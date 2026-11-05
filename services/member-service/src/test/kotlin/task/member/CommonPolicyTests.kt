@@ -91,7 +91,7 @@ class CommonPolicyTests {
   fun `멤버 명세와 Swagger는 키 없이 열리고 내부 문서 전달 경로는 명세에서 제외한다`() {
     mockMvc.get("/v3/api-docs").andExpect {
       status { isOk() }
-      jsonPath("$.info.version") { value("0.1.0") }
+      jsonPath("$.info.version") { value("0.2.0") }
       jsonPath("$.security") { doesNotExist() }
       jsonPath("$.paths['/internal-docs/group']") { doesNotExist() }
     }

@@ -74,6 +74,15 @@ class MemberQueryHttpIntegrationTests {
       }
       .`when`(memberships)
       .findByMemberIds(org.mockito.ArgumentMatchers.anyList())
+    doAnswer { call ->
+        observations +=
+          Thread.currentThread().threadId() to
+            TransactionSynchronizationManager.isActualTransactionActive()
+        assertFalse(TransactionSynchronizationManager.isSynchronizationActive())
+        call.callRealMethod()
+      }
+      .`when`(memberships)
+      .findByMemberId(org.mockito.ArgumentMatchers.anyString())
   }
 
   @AfterEach
@@ -83,21 +92,19 @@ class MemberQueryHttpIntegrationTests {
   }
 
   @Test
-  fun `HTTP 공급자로도 같은 유스케이스가 다중 소속과 빈 소속을 정렬해 반환한다`() {
+  fun `HTTP 공급자로도 같은 유스케이스가 단일 소속과 빈 소속을 정렬해 반환한다`() {
     mvc.get("/api/members").andExpect {
       status { isOk() }
       jsonPath("$.page.totalElements") { value(5) }
       jsonPath("$.members[0].groups[0].id") { value("arutjf9348") }
-      jsonPath("$.members[0].groups[1].id") { value("demo000002") }
       jsonPath("$.members[2].groups") { isEmpty() }
     }
     assertEquals(1, hits.get())
     assertEquals(5, received.single().size)
     mvc.get("/api/member/tu3fgxd45k").andExpect {
       status { isOk() }
-      jsonPath("$.registeredDate") { value("2026-08-15T04:00:59.123456Z") }
+      jsonPath("$.registeredDate") { value("2026-08-15 13:00") }
       jsonPath("$.groups[0].permission") { value("Editor") }
-      jsonPath("$.groups[1].permission") { value("Viewer") }
       header { string("Cache-Control", "no-store") }
     }
     assertEquals(2, hits.get())
@@ -144,16 +151,21 @@ class MemberQueryHttpIntegrationTests {
       )
     private val server =
       HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
-        createContext("/internal/group-memberships") { exchange ->
+        createContext("/api/") { exchange ->
           hits.incrementAndGet()
+          val detail = exchange.requestURI.path.startsWith("/api/group/")
           val ids =
-            exchange.requestURI.rawQuery.split("&").map {
-              URLDecoder.decode(it.substringAfter("="), Charsets.UTF_8)
-            }
+            if (detail) listOf(exchange.requestURI.path.substringAfterLast('/'))
+            else
+              exchange.requestURI.rawQuery.split("&").map {
+                URLDecoder.decode(it.substringAfter("="), Charsets.UTF_8)
+              }
           received += ids
-          val selected =
-            fixture.path("members").filter { it.path("memberId").asString() in ids }.reversed()
-          val payload = json.writeValueAsBytes(mapOf("members" to selected))
+          val payload =
+            (if (detail)
+                task.member.support.GroupMembershipSamples.detail(fixture.toString(), ids.single())
+              else task.member.support.GroupMembershipSamples.summary(fixture.toString(), ids))
+              .toByteArray()
           val responseStatus =
             if (
               exchange.requestHeaders.getFirst("X-Internal-Service-Key") ==

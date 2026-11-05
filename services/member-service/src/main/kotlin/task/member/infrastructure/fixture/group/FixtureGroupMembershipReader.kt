@@ -25,6 +25,18 @@ class FixtureGroupMembershipReader(resource: Resource, decoder: GroupMembershipD
   override fun findByMemberIds(memberIds: List<String>): Map<String, List<GroupMembership>> {
     GroupMembershipContract.validateRequest(memberIds)
     if (!memberships.keys.containsAll(memberIds)) throw GroupServiceConfigurationException()
-    return memberIds.associateWith { memberships.getValue(it) }
+    return memberIds.associateWith { id ->
+      java.util.Collections.unmodifiableList(
+        memberships.getValue(id).map { it.copy(joinedAt = null, pricing = null) }
+      )
+    }
+  }
+
+  override fun findByMemberId(memberId: String): GroupMembership? {
+    GroupMembershipContract.validateRequest(listOf(memberId))
+    val groups = memberships[memberId] ?: throw GroupServiceConfigurationException()
+    return groups.singleOrNull()?.let {
+      it.copy(joinedAt = it.joinedAt?.truncatedTo(java.time.temporal.ChronoUnit.MINUTES))
+    }
   }
 }

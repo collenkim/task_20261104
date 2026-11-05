@@ -38,7 +38,7 @@ class HttpGroupMembershipTests {
   private val status = AtomicInteger(200)
   private val headerDelay = AtomicInteger()
   private val bodyDelay = AtomicInteger()
-  private val body = AtomicReference(GroupMembershipSamples.RESPONSE)
+  private val body = AtomicReference(GroupMembershipSamples.SUMMARY)
   private val contentType = AtomicReference("application/json")
   private val requests = ConcurrentLinkedQueue<Request>()
   private val executor = Executors.newCachedThreadPool()
@@ -97,13 +97,13 @@ class HttpGroupMembershipTests {
     val result = reader().findByMemberIds(listOf("member0001", "member0002"))
     assertEquals(listOf("member0001", "member0002"), result.keys.toList())
     assertEquals(
-      listOf("group00001", "group00002"),
+      listOf("group00002"),
       result.getValue("member0001").map { it.groupId },
     )
     assertEquals(emptyList(), result.getValue("member0002"))
     val request = requests.single()
     assertEquals("GET", request.method)
-    assertEquals("/internal/group-memberships", request.path)
+    assertEquals("/api/groups/summary", request.path)
     assertEquals(
       listOf("memberIds=member0001", "memberIds=member0002"),
       request.query.split('&').map { URLDecoder.decode(it, StandardCharsets.UTF_8) },
@@ -115,11 +115,7 @@ class HttpGroupMembershipTests {
   @Test
   fun `100개 경계까지 단일 일괄 요청을 허용하고 요청 위반은 전송 전에 거부한다`() {
     val ids = (0 until 100).map { "m" + it.toString().padStart(9, '0') }
-    body.set(
-      "{\"members\":[" +
-        ids.reversed().joinToString(",") { "{\"memberId\":\"$it\",\"memberships\":[]}" } +
-        "]}"
-    )
+    body.set("""{"group":[]}""")
     assertEquals(ids.toSet(), reader().findByMemberIds(ids).keys)
     assertEquals(100, requests.single().query.split('&').size)
     requests.clear()
@@ -168,7 +164,7 @@ class HttpGroupMembershipTests {
       assertEquals("그룹 호출 설정 또는 응답 계약 오류", error.message)
       assertNull(error.cause)
       assertEquals(1, requests.size)
-      assertEquals("/internal/group-memberships", requests.single().path)
+      assertEquals("/api/groups/summary", requests.single().path)
     }
   }
 
@@ -233,13 +229,14 @@ class HttpGroupMembershipTests {
   @Test
   fun `같은 포트에서 HTTP와 fixture를 교체해도 소속 의미와 반환 모델은 같다`() {
     val resource = ClassPathResource("fixtures/local/group-memberships.json")
-    body.set(resource.inputStream.use { it.readAllBytes().toString(Charsets.UTF_8) })
+    val fixtureText = resource.getContentAsString(Charsets.UTF_8)
     val ids = listOf("q1w2e3r4t5", "j0n8k2m4p6", "k2m9x0p1q3", "dj8fy4bewk", "tu3fgxd45k")
+    body.set(GroupMembershipSamples.summary(fixtureText, ids))
     val fixture: GroupMembershipReader = FixtureGroupMembershipReader(resource, decoder)
     val http: GroupMembershipReader = reader()
     val result = http.findByMemberIds(ids)
     assertEquals(fixture.findByMemberIds(ids), result)
-    assertEquals(listOf(1, 0, 0, 1, 2), ids.map { result.getValue(it).size })
+    assertEquals(listOf(1, 0, 0, 1, 1), ids.map { result.getValue(it).size })
     assertEquals(1, requests.size)
   }
 
@@ -270,4 +267,59 @@ class HttpGroupMembershipTests {
     val keys: List<String>,
     val bodySize: Int,
   )
+
+  @Test
+  fun `상세는 단일 경로와 여섯 필드 계약을 해석하고 목록 한명도 summary를 사용한다`() {
+    body.set(
+      """{"memberId":"member0001","groupId":"group00001","groupName":"합성 그룹","registeredDate":"2026-08-16 00:30","pricing":"Premium","permission":"Editor"}"""
+    )
+    val result = kotlin.test.assertNotNull(reader().findByMemberId("member0001"))
+    assertEquals(java.time.Instant.parse("2026-08-15T15:30:00Z"), result.joinedAt)
+    assertEquals("Editor", result.permission)
+    assertEquals("/api/group/member0001", requests.single().path)
+    requests.clear()
+    body.set("""{"group":[]}""")
+    assertTrue(reader().findByMemberIds(listOf("member0001")).getValue("member0001").isEmpty())
+    assertEquals("/api/groups/summary", requests.single().path)
+  }
+
+  @Test
+  fun `상세의 전용 미소속 404만 빈 목록으로 바꾸며 다른 상태와 계약 위반은 숨기지 않는다`() {
+    status.set(404)
+    contentType.set("application/problem+json")
+    body.set("""{"status":404,"code":"GROUP_MEMBERSHIP_NOT_FOUND"}""")
+    assertNull(reader().findByMemberId("member0001"))
+    for (invalid in
+      listOf(
+        """{"status":404,"code":"NOT_FOUND"}""",
+        """{"status":4294967700,"code":"GROUP_MEMBERSHIP_NOT_FOUND"}""",
+        """{"status":"404","code":"GROUP_MEMBERSHIP_NOT_FOUND"}""",
+      )) {
+      requests.clear()
+      body.set(invalid)
+      assertFailsWith<GroupServiceConfigurationException> { reader().findByMemberId("member0001") }
+      assertEquals(1, requests.size)
+    }
+    status.set(200)
+    contentType.set("application/json")
+    val valid =
+      """{"memberId":"member0001","groupId":"group00001","groupName":"합성","registeredDate":"2026-08-15 13:00","pricing":"Premium","permission":"Editor"}"""
+    for (invalid in
+      listOf(
+        valid.replace("member0001", "member0002"),
+        valid.replace("2026-08-15 13:00", "2026-02-30 13:00"),
+        valid.replace("2026-08-15 13:00", "2026-08-15T04:00:00Z"),
+        valid.replace("2026-08-15 13:00", "2026-08-15 13:00:00"),
+        "[$valid]",
+        valid.replace("\"permission\":\"Editor\"", "\"permission\":null"),
+      )) {
+      requests.clear()
+      body.set(invalid)
+      assertFailsWith<GroupServiceConfigurationException> { reader().findByMemberId("member0001") }
+      assertEquals(1, requests.size)
+    }
+    status.set(500)
+    body.set("""{"status":500,"code":"GROUP_MEMBERSHIP_AMBIGUOUS"}""")
+    assertFailsWith<GroupServiceUnavailableException> { reader().findByMemberId("member0001") }
+  }
 }

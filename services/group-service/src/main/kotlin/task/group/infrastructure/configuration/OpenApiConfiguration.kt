@@ -8,7 +8,7 @@ import io.swagger.v3.oas.models.security.SecurityScheme
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 
-/** 그룹 서비스 소유 OpenAPI 계약(POL-API-004). 업무 API는 구현 시 이 명세에 추가된다. */
+/** 그룹 서비스 소유 OpenAPI 계약(POL-API-004). 그룹 요약과 단일 상세를 공유한다. */
 @Configuration(proxyBeanMethods = false)
 class OpenApiConfiguration {
   @Bean
@@ -23,6 +23,13 @@ class OpenApiConfiguration {
       .components(
         Components()
           .addSecuritySchemes(
+            "internalServiceId",
+            SecurityScheme()
+              .type(SecurityScheme.Type.APIKEY)
+              .`in`(SecurityScheme.In.HEADER)
+              .name("X-Internal-Service-Id"),
+          )
+          .addSecuritySchemes(
             "internalServiceKey",
             SecurityScheme()
               .type(SecurityScheme.Type.APIKEY)
@@ -30,5 +37,7 @@ class OpenApiConfiguration {
               .name("X-Internal-Service-Key"),
           )
       )
-      .addSecurityItem(SecurityRequirement().addList("internalServiceKey"))
+      .addSecurityItem(
+        SecurityRequirement().addList("internalServiceId").addList("internalServiceKey")
+      )
 }

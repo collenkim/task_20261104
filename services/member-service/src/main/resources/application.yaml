@@ -66,3 +66,9 @@ task:
     max-retries: 1
     retry-base-delay: 200ms
     retry-max-delay: 2s
+
+logging:
+  level:
+    root: INFO
+  pattern:
+    level: "%5p [service:%X{service} request:%X{requestId} call:%X{callId} attempt:%X{attempt}]"

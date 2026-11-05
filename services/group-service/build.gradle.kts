@@ -1,5 +1,8 @@
 // 그룹 서비스. 공통 규칙은 build-logic의 task.spring-service. 다른 서비스와 project 의존을 두지 않는다.
-plugins { id("task.spring-service") }
+plugins {
+  id("task.spring-service")
+  id("task.openapi-contract")
+}
 
 dependencies {
   implementation(libs.spring.boot.starter.webmvc)
@@ -18,5 +21,7 @@ dependencies {
   testImplementation(libs.testcontainers.junit.jupiter)
   testImplementation(libs.testcontainers.mariadb)
   testImplementation(libs.kotlin.test.junit5)
+  testImplementation(libs.archunit)
+  testImplementation(libs.json.schema.validator)
   testRuntimeOnly(libs.junit.platform.launcher)
 }

@@ -33,13 +33,15 @@ class ProblemDetailsExceptionHandler : ResponseEntityExceptionHandler() {
   @ExceptionHandler(MemberNotFoundException::class)
   fun handleMemberNotFound(): ProblemDetail = memberProblem(ErrorCode.NOT_FOUND)
 
-  private fun memberProblem(code: ErrorCode): ProblemDetail =
-    ProblemDetail.forStatusAndDetail(HttpStatusCode.valueOf(code.status), code.description)
+  private fun memberProblem(code: ErrorCode): ProblemDetail {
+    SafeErrorLog.record(code)
+    return ProblemDetail.forStatusAndDetail(HttpStatusCode.valueOf(code.status), code.description)
       .apply {
         title = code.codeName
         setProperty(CODE, code.code)
       }
       .let(::MemberProblemDetail)
+  }
 
   override fun handleExceptionInternal(
     ex: Exception,
@@ -57,6 +59,7 @@ class ProblemDetailsExceptionHandler : ResponseEntityExceptionHandler() {
           is HandlerMethodValidationException -> ErrorCode.VALIDATION_FAILED
           else -> ErrorCode.of(statusCode)
         }
+      SafeErrorLog.record(code, ex)
       problem.setProperty(CODE, code.code)
       problem.title = code.codeName
       if (problem.detail == null) problem.detail = code.description
@@ -77,7 +80,7 @@ class ProblemDetailsExceptionHandler : ResponseEntityExceptionHandler() {
   fun handleGroupConfiguration(): ProblemDetail = groupProblem(ErrorCode.INTERNAL_ERROR)
 
   private fun groupProblem(code: ErrorCode): ProblemDetail {
-    log.warn("그룹 호출 실패: {}", code.code)
+    SafeErrorLog.record(code)
     return ProblemDetail.forStatusAndDetail(HttpStatusCode.valueOf(code.status), code.description)
       .apply {
         title = code.codeName
@@ -88,7 +91,7 @@ class ProblemDetailsExceptionHandler : ResponseEntityExceptionHandler() {
 
   @ExceptionHandler(Exception::class)
   fun handleUnexpected(ex: Exception): ProblemDetail {
-    log.error("처리되지 않은 오류", ex)
+    SafeErrorLog.record(ErrorCode.INTERNAL_ERROR, ex)
     return ProblemDetail.forStatusAndDetail(
         HttpStatus.INTERNAL_SERVER_ERROR,
         ErrorCode.INTERNAL_ERROR.description,
