@@ -31,7 +31,9 @@ Swagger: [멤버 서비스](http://127.0.0.1:8081/swagger-ui.html)에서 두 명
 
 공통 문서는 [문서 시작점](docs/README.md)에서 기술 스택·코드/enum 규칙·CQRS·데이터·API·보안·실행 정책 순서로 확인한다. 서비스별 정책·엔티티·API 계약은 각 서비스의 `docs/`가 소유한다.
 
-현재는 서비스 실행 골격이며 업무 조회 API·엔티티는 후속 작업이다. [요구사항 재검증](docs/common/setup-verification.md)에 구현·미구현을 구분했다.
+멤버 목록·상세 조회 API와 다중 소속 결합, 조회 저장소, HTTP/fixture 어댑터, local 시드를 구현했다. [요구사항 재검증](docs/common/setup-verification.md)에 구현·미구현을 구분했다.
+
+MEMBER-001은 [통합 계획](docs/common/member-query-plan.md)과 [구현 요청서](docs/common/requests/MEMBER-001.md)를 따른다. 소속 공급자는 local에서 fixture, 기본 프로필에서 http이며 `TASK_GROUP_MEMBERSHIP_SOURCE`로 선택한다. 공개 API·local 시드·계층/트랜잭션 경계는 [3단계 기록](docs/common/member-query-stage-3-verification.md)을 따른다. 지수 백오프·Full Jitter는 [4단계 기록](docs/common/member-query-stage-4-verification.md)을 따른다. [공유 OpenAPI](services/member-service/docs/openapi.json)·[소비자 안내](services/member-service/docs/contracts.md)를 제공하며 명세·실제 Compose/Swagger 업무 검증은 [5단계 기록](docs/common/member-query-stage-5-verification.md)에 있다. 실제 그룹 업무 API 연동은 미검증이다.
 
 실행 방식·포트·종료 방법은 [로컬 실행](docs/common/local-development.md)을 본다.
 

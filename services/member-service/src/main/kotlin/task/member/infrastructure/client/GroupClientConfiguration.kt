@@ -8,6 +8,7 @@ import java.net.InetAddress
 import java.net.URI
 import java.net.http.HttpClient
 import java.time.Duration
+import java.util.concurrent.ThreadLocalRandom
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.EnableConfigurationProperties
@@ -21,12 +22,36 @@ import org.springframework.web.client.RestClient
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(GroupClientProperties::class, InternalServiceProperties::class)
 class GroupClientConfiguration {
+  /** 요청 스레드에서 상한을 포함하는 정수 밀리초를 추출한다(POL-COMM-003). */
+  @Bean
+  fun retryJitter(): RetryJitter = RetryJitter { upper ->
+    ThreadLocalRandom.current().nextLong(upper + 1)
+  }
+
+  /** 인터럽트 의미를 유지하는 실제 대기 경계(POL-COMM-003). */
+  @Bean fun retrySleeper(): RetrySleeper = RetrySleeper { millis -> Thread.sleep(millis) }
+
+  /** 같은 재시도 정책을 소속 API와 명세 조회에 조립한다(POL-COMM-003). */
+  @Bean
+  fun groupRetryInterceptor(
+    properties: GroupClientProperties,
+    jitter: RetryJitter,
+    sleeper: RetrySleeper,
+  ) =
+    RetryOnTransientFailureInterceptor(
+      properties.maxRetries,
+      ExponentialRetryBackoff(properties.retryBaseDelay, properties.retryMaxDelay),
+      jitter,
+      sleeper,
+    )
+
   @Bean
   @Qualifier(GROUP_REST_CLIENT)
   fun groupRestClient(
     builder: RestClient.Builder,
     properties: GroupClientProperties,
     internal: InternalServiceProperties,
+    retry: RetryOnTransientFailureInterceptor,
   ): RestClient {
     val httpClient =
       HttpClient.newBuilder()
@@ -44,7 +69,7 @@ class GroupClientConfiguration {
         request.headers.set(INTERNAL_HEADER, requireNotNull(internal.key))
         execution.execute(request, body)
       }
-      .requestInterceptor(RetryOnTransientFailureInterceptor(properties.maxRetries))
+      .requestInterceptor(retry)
       .build()
   }
 
@@ -61,8 +86,14 @@ class GroupClientProperties(
   @field:NotBlank(message = "그룹 주소가 필요합니다(TASK_GROUP_CLIENT_BASE_URL)") val baseUrl: String?,
   val connectTimeout: Duration = Duration.ofSeconds(2),
   val readTimeout: Duration = Duration.ofSeconds(3),
-  @field:Min(0) @field:Max(1) val maxRetries: Int = 1,
+  @field:Min(0) @field:Max(3) val maxRetries: Int = 1,
+  val retryBaseDelay: Duration = Duration.ofMillis(200),
+  val retryMaxDelay: Duration = Duration.ofSeconds(2),
 ) {
+  @get:AssertTrue(message = "재시도 지연은 정수 밀리초 1~60000이며 기본 지연이 최대 지연 이하여야 합니다")
+  val isRetryDelayValid: Boolean
+    get() = ExponentialRetryBackoff.validDelays(retryBaseDelay, retryMaxDelay)
+
   @get:AssertTrue(message = "그룹 주소는 http(s)://숫자IP:포트 형식이어야 합니다")
   val isAddressValid: Boolean
     get() = runCatching {

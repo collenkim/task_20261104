@@ -22,6 +22,8 @@
 | springdoc-openapi | 3.2.0 | `libs.versions.toml`(`springdoc`) | Spring Boot 4 대응 버전대 |
 | Spotless | 8.9.0 | `libs.versions.toml`(`spotless`) | |
 | ktfmt | 0.64 | `libs.versions.toml`(`ktfmt`) | Google 스타일 |
+| ArchUnit | 1.4.2 | `libs.versions.toml`(`archunit`) | 멤버 테스트 전용 계층 의존 검사. 운영 jar에는 없음 |
+| NetworkNT JSON Schema Validator | 3.0.6 | `libs.versions.toml`(`json-schema-validator`) | OpenAPI 3.1·응답 검사 전용. 운영 jar에는 없음 |
 
 Spring Boot BOM이 관리하는 버전(직접 고정하지 않음, 4.1.2 기준). 런타임 라이브러리는 이번 bootJar의 `BOOT-INF/lib/`에서도 확인했다.
 
@@ -37,6 +39,8 @@ Spring Boot BOM이 관리하는 버전(직접 고정하지 않음, 4.1.2 기준)
 - 라이브러리는 Spring Boot BOM 버전을 우선 쓴다. BOM 밖의 플러그인·라이브러리만 `libs.versions.toml`에 고정한다.
 - 버전을 올리면 이 표와 `libs.versions.toml`을 함께 고치고, 두 서비스를 모두 빌드·테스트한다.
 
+MEMBER-001의 계층 검사는 ArchUnit 1.4.2를 고정하고 JDK 21·Kotlin 2.3.21·Spring Boot 4.1.2에서 금지 의존 검출까지 검증한다([3단계 기록](member-query-stage-3-verification.md)). OpenAPI 스키마 검사는 NetworkNT 3.0.6으로 고정했다. [공식 POM](https://github.com/networknt/json-schema-validator/blob/3.0.6/pom.xml)의 Jackson 3.1 계열과 Boot BOM을 사용해 운영·테스트가 모두 3.1.7로 해석되는지 확인했다. 실제 JDK 21·Kotlin·Spring Boot에서 계약 검사를 통과했다. 지수 백오프·Full Jitter는 기존 Spring HTTP 인터셉터와 JDK ThreadLocalRandom/Thread.sleep으로 구현했다. 별도 재시도 라이브러리는 추가하지 않았다([4단계 기록](member-query-stage-4-verification.md)).
+
 ## 확인 근거 (2026-11-04)
 
 - Gradle 배포 목록(`services.gradle.org`): 9.3.0 배포 파일과 SHA-256.
@@ -47,8 +51,8 @@ Spring Boot BOM이 관리하는 버전(직접 고정하지 않음, 4.1.2 기준)
 
 | 항목 | 이 저장소에서 쓰는 것 |
 | --- | --- |
-| 스타터 이름 | `spring-boot-starter-webmvc`, `spring-boot-starter-security-oauth2-resource-server`, `spring-boot-starter-restclient`, `spring-boot-starter-flyway` |
-| 테스트 스타터 | `spring-boot-starter-webmvc-test`(`AutoConfigureMockMvc`는 `org.springframework.boot.webmvc.test.autoconfigure`), `spring-boot-starter-security-test` |
+| 스타터 이름 | `spring-boot-starter-webmvc`, `spring-boot-starter-restclient`, `spring-boot-starter-data-jpa`, `spring-boot-starter-flyway` |
+| 테스트 스타터 | `spring-boot-starter-webmvc-test`(`AutoConfigureMockMvc`는 `org.springframework.boot.webmvc.test.autoconfigure`) |
 | Jackson 3 | 패키지 `tools.jackson`, Kotlin 모듈 `tools.jackson.module:jackson-module-kotlin`, `JsonMapper` 주입 |
 | Flyway | DB별 모듈 필요: `flyway-mysql` |
 | Testcontainers 2 | `org.testcontainers:testcontainers-mariadb`, 클래스 `org.testcontainers.mariadb.MariaDBContainer` |
