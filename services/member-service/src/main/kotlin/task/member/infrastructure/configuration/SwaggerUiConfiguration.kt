@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.core.io.ClassPathResource
 import org.springframework.web.filter.OncePerRequestFilter
 
-/** 같은 화면에서 멤버 실행 명세와 그룹 읽기 전용 명세를 선택한다(POL-API-004). */
+/** 같은 화면에서 멤버 API와 멤버 경유 그룹 API를 실행한다(POL-API-004). */
 @Configuration(proxyBeanMethods = false)
 class SwaggerUiConfiguration {
   @Bean
