@@ -6,6 +6,54 @@
       {
         "value": "noreply@anthropic.com",
         "reason": "Claude 커밋 공동 작성자 표기용 공개 주소(개인정보 아님)"
+      },
+      {
+        "value": "noreply@openai.com",
+        "reason": "Codex 공동 작성자의 공개 noreply 주소 (GROUP-001 보류 검토)"
+      },
+      {
+        "value": "user1@example.invalid",
+        "reason": "멤버 API 문서의 예약 도메인 이메일 예시 (GROUP-001 보류 검토)"
+      },
+      {
+        "value": "member@example.invalid",
+        "reason": "멤버 영속성 테스트의 예약 도메인 이메일 (GROUP-001 보류 검토)"
+      },
+      {
+        "value": "this@HttpGroupMembershipTests.executor",
+        "reason": "Kotlin this@HttpGroupMembershipTests.executor 수신자 표현식 (GROUP-001 보류 검토)"
+      },
+      {
+        "value": "tu3fgxd45k@example.invalid",
+        "reason": "로컬 멤버 시드의 예약 도메인 이메일 (GROUP-001 보류 검토)"
+      },
+      {
+        "value": "dj8fy4bewk@example.invalid",
+        "reason": "로컬 멤버 시드의 예약 도메인 이메일 (GROUP-001 보류 검토)"
+      },
+      {
+        "value": "k2m9x0p1q3@example.invalid",
+        "reason": "로컬 멤버 시드의 예약 도메인 이메일 (GROUP-001 보류 검토)"
+      },
+      {
+        "value": "j0n8k2m4p6@example.invalid",
+        "reason": "로컬 멤버 시드의 예약 도메인 이메일 (GROUP-001 보류 검토)"
+      },
+      {
+        "value": "q1w2e3r4t5@example.invalid",
+        "reason": "로컬 멤버 시드의 예약 도메인 이메일 (GROUP-001 보류 검토)"
+      },
+      {
+        "value": "kept@example.invalid",
+        "reason": "멤버 시드 재실행 테스트의 예약 도메인 이메일 (GROUP-001 보류 검토)"
+      },
+      {
+        "value": "this@GroupRetryHttpTests.executor",
+        "reason": "Kotlin this@GroupRetryHttpTests.executor 수신자 표현식 (GROUP-001 보류 검토)"
+      },
+      {
+        "value": "a@example.invalid",
+        "reason": "TIMESTAMP 전환 테스트의 예약 도메인 이메일 (GROUP-001 보류 검토)"
       }
     ],
     "domains": [
@@ -36,6 +84,38 @@
       {
         "pattern": "ai-logs/snapshots/claude/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[0-9a-f]{12}/L[0-9]{20}-[0-9a-f]{16}/files/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/tool-results/toolu_[A-Za-z0-9]{20,40}",
         "reason": "저장소에 커밋된 Claude 스냅샷의 부속 파일 경로(ai-logs/snapshots/claude/<세션>/<정책>/<스냅샷>/files/<세션>/tool-results/<도구 호출 ID>). git 출력(stat·커밋 결과 등)에 나오는 저장소 파일 경로이며 비밀값이 아님. 앞 항목과 같은 ID에 저장소 경로가 붙은 형태만 허용"
+      },
+      {
+        "pattern": "distributionSha256Sum=0d585f69da091fc5b2beced877feab55a3064d43b8a1d46aeb07996b0915e0e0",
+        "reason": "저장소 Gradle wrapper와 일치하는 distributionSha256Sum 대입 문구 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "\\+distributionSha256Sum=0d585f69da091fc5b2beced877feab55a3064d43b8a1d46aeb07996b0915e0e0",
+        "reason": "Gradle wrapper 체크섬 대입 문구 앞에 패치 추가 기호가 붙은 형태 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "com/channel/UCHCRMWJVXw8iB7zKxF55Byw",
+        "reason": "외부 도구 결과의 공개 문서 링크 경로 식별자; 사용자 정보·쿼리·인증 필드 없음 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "com/networknt/schema/format/IPv6AwareEmailValidator",
+        "reason": "JAR 파일 목록의 Java 클래스 경로이며 class 확장자 앞 식별자 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "ncom/networknt/schema/format/IPv6AwareEmailValidator",
+        "reason": "JAR 클래스 경로 앞에 JSON 개행 이스케이프 글자가 붙은 형태 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "ndistributionSha256Sum=0d585f69da091fc5b2beced877feab55a3064d43b8a1d46aeb07996b0915e0e0",
+        "reason": "Gradle wrapper 체크섬 앞에 JSON 개행 이스케이프 글자가 붙은 형태 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "pdfRoot=832470d42097c20b28e60aa4a830b4502f1d5630",
+        "reason": "사용자가 마스킹 불필요로 확인한 YDB 공개 PDF 문서 식별자. 확인한 값과 정확히 일치할 때만 허용 (GROUP-001)"
+      },
+      {
+        "pattern": "pdfRoot=832470d42097c20b28e60aa4a830b4502f1d5630/en",
+        "reason": "사용자가 허용한 YDB PDF 식별자의 URL 디코딩 표현(/en 포함). 원 URL과 같은 값만 정확히 허용 (GROUP-001)"
       }
     ],
     "url_contexts": [
@@ -54,6 +134,106 @@
       {
         "pattern": "committed_[A-Za-z_*]*",
         "reason": "pre-push 검사 결과 이름(secret:committed_ 접두어 규칙 이름). 수집기 코드·테스트·출력에 쓰는 이름이며 비밀값이 아님"
+      },
+      {
+        "pattern": "abcdef12345",
+        "reason": "외부 API 문서의 명시적인 짧은 가짜 API 키 예시 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "AtomicReference",
+        "reason": "java.util.concurrent.atomic.AtomicReference 타입·import 식별자 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "some\\-token\\-value",
+        "reason": "외부 Authorization 문서의 점으로 구분된 가짜 토큰 예시 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "r:4840",
+        "reason": "외부 검증 표의 pass 뒤 언어별 성공 건수 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "r:1227",
+        "reason": "외부 검증 표의 pass 뒤 언어별 성공 건수 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "r:1261",
+        "reason": "외부 검증 표의 pass 뒤 언어별 성공 건수 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "\\$APP_PASSWORD",
+        "reason": "셸 명령의 DB 비밀번호 환경 변수 참조 이름이며 값이 아님 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "app_password",
+        "reason": "Compose 비밀 파일 경로 중 db-admin-password 파일명 부분 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "flags\\.append",
+        "reason": "검증 코드의 예외 처리 호출 표현식이며 비밀번호 리터럴이 아님 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "\\$MARIADB_ROOT_PASSWORD",
+        "reason": "문서의 비밀번호 환경 변수 참조 이름이며 값이 아님 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "password",
+        "reason": "configtree 비밀 파일 경로에서 password 뒤에 이어지는 파일명 부분 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "my\\-secret\\-pw",
+        "reason": "외부 DB 컨테이너 문서의 가짜 비밀번호 예시 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "\\-\\-database",
+        "reason": "외부 CLI 문서에서 password 옵션 다음에 오는 다른 옵션 이름 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "factory\\.generatePrivate",
+        "reason": "JDK KeyFactory의 generatePrivate 호출 표현식이며 개인키 값이 아님 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "String",
+        "reason": "Kotlin token 매개변수의 String 타입 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "test\\-swagger\\-token",
+        "reason": "JWT 클라이언트 테스트에서 명시적으로 사용하는 유효하지 않은 토큰 예시 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "String\\?",
+        "reason": "Kotlin token 매개변수의 nullable String 타입 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "task\\.member\\-client\\.token=test\\-member\\-client\\-token",
+        "reason": "과거 그룹 클라이언트 테스트의 설정 프로퍼티 대입 문구이며 토큰 값이 아님 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "test\\-member\\-client\\-token",
+        "reason": "클라이언트 설정 테스트에서 사용하는 유효하지 않은 고정 토큰 예시 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "m\\.group",
+        "reason": "정규식 매치 객체의 group 호출 표현식 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "Get\\-Content",
+        "reason": "PowerShell Get-Content 명령 이름이며 읽은 토큰 값이 아님 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "\\|TOKEN\\|token",
+        "reason": "토큰 관련 코드 검색에 쓴 정규식 패턴 조각 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "TestProperties\\.memberClientToken",
+        "reason": "테스트 프로퍼티 객체에서 가짜 접근 토큰을 참조하는 코드 식별자 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "TestProperties\\.internalKey",
+        "reason": "TestProperties.internalKey 참조 표현식이며 실제 키 값이 아님 (GROUP-001 보류 검토)"
+      },
+      {
+        "pattern": "<CANDIDATE>",
+        "reason": "GROUP-001 보류 검토에서 원래 값을 숨기기 위해 출력한 진단 대체 표식. 실제 후보 값이 아님"
       }
     ]
   },
