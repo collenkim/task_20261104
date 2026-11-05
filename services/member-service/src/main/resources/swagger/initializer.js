@@ -1,8 +1,8 @@
-// POL-API-004: 그룹 명세는 조회만 한다. 브라우저에 내부 키를 전달하지 않는다.
+// POL-API-004: 그룹 조회는 멤버의 고정 중계 경로에서 실행한다. 내부 키는 서버만 사용한다.
 window.onload = function () {
   const specifications = [
-    { name: "멤버 서비스", url: "/v3/api-docs", readOnly: false },
-    { name: "그룹 서비스 (내부 · 읽기 전용)", url: "/internal-docs/group", readOnly: true }
+    { name: "멤버 서비스", url: "/v3/api-docs", group: false },
+    { name: "그룹 서비스 (멤버 경유)", url: "/internal-docs/group", group: true }
   ];
   const container = document.getElementById("swagger-ui");
   const toolbar = document.createElement("div");
@@ -31,15 +31,19 @@ window.onload = function () {
       queryConfigEnabled: false,
       validatorUrl: null,
       persistAuthorization: false,
-      supportedSubmitMethods: specification.readOnly
-        ? [] : ["get", "head", "post", "put", "patch", "delete", "options", "trace"],
+      supportedSubmitMethods: ["get"],
       requestInterceptor: function (request) {
-        // 읽기 전용 화면에서는 명세 GET 외의 요청을 보내지 않는다.
-        if (specification.readOnly &&
-            (new URL(request.url, window.location.origin).href !==
-              new URL(specification.url, window.location.origin).href ||
-              (request.method || "GET").toUpperCase() !== "GET")) {
-          throw new Error("그룹 API는 멤버 서버를 통해 호출합니다.");
+        const target = new URL(request.url, window.location.origin);
+        if (target.origin !== window.location.origin) {
+          throw new Error("API는 멤버 서비스 주소를 통해 호출합니다.");
+        }
+        if (specification.group) {
+          const allowed = target.pathname === specification.url ||
+            target.pathname === "/internal-api/group/api/groups/summary" ||
+            /^\/internal-api\/group\/api\/group\/[^/]+$/.test(target.pathname);
+          if (!allowed || (request.method || "GET").toUpperCase() !== "GET") {
+            throw new Error("등록된 그룹 조회 API만 멤버 서비스를 경유해 실행할 수 있습니다.");
+          }
         }
         return request;
       },

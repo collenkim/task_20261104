@@ -16,11 +16,11 @@
 | GET /api/members | getMemberSummaries | MemberSummaryPageResponse |
 | GET /api/member/{id} | getMemberDetail | MemberDetailResponse |
 
-- 멤버는 0개 이상 그룹에 소속된다. `groups`는 항상 배열이며 미소속은 빈 배열이다.
+- 현재 멤버당 소속은 0~1개다. `groups`는 항상 배열이며 미소속은 빈 배열이다.
 - 상세 소속의 `joinedAt`·`pricing`은 키가 항상 있고 값은 null일 수 있다. 선택 정보 부재와 그룹 미소속을 구분한다.
-- `permission`·`pricing`은 열린 문자열이다. 소비자는 새 코드를 수용하고 표시할 때 `permissionName`을 사용한다.
+- `permission`·`pricing`은 열린 문자열이다. 소비자는 새 코드를 수용한다. 표시명은 API로 반환하지 않는다.
 - page/size/sort는 반복하지 않는다. 원시 문자열·정수 범위·offset 제한은 [API 정의서](api.md#get-apimembers)의 기준을 따른다.
-- UTC 시각은 마이크로초를 보존한다. 화면에서 필요한 시간대·표시 정밀도는 소비자가 변환한다.
+- 업무 응답은 Asia/Seoul yyyy-MM-dd HH:mm 문자열이다. DB는 UTC TIMESTAMP(6)을 보존한다. OpenAPI는 date-time 대신 pattern 있는 string이다.
 - 실패는 ProblemDetail + `code`다. 오류 본문으로 내부 주소·키·그룹 응답·개인정보를 전달하지 않는다. 상세는 `Cache-Control: no-store`다.
 - 클라이언트 SDK는 이 작업에 포함하지 않는다. 소비자 언어·도구를 정할 때 같은 스냅샷으로 생성하고 호환성을 검증한다.
 
@@ -39,4 +39,8 @@
 
 ## 검증 범위
 
-계약 검사는 실제 멤버 Controller·DB와 local fixture 응답, 오류 상황을 대상으로 한다. HTTP 그룹 소비자 검증과 실제 그룹 제공자 검증은 별개다. 아직 그룹 업무 API가 없으므로 실제 그룹 업무 통합·제공자 명세 호환성을 검증했다고 해석하지 않는다.
+계약 검사는 실제 멤버 Controller·DB와 local fixture 응답, 오류 상황을 대상으로 한다. HTTP 그룹 소비자 검증과 실제 그룹 제공자 검증은 별개다. 실제 제공자 연결의 증거는 GROUP-001 Compose 검증으로 구분한다.
+
+## 0.2.0 변경
+
+permissionName 제거와 시각 문자열 변경은 소비자 수정이 필요한 계약 변경이다. 경로·페이지·groups 배열은 유지하지만 현재 최대 소속 수는 1이다. 이전 RFC 3339 파서와 permissionName 사용을 수정해야 한다.

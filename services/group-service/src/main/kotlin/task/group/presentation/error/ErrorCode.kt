@@ -18,6 +18,13 @@ enum class ErrorCode(
   NOT_ACCEPTABLE("NOT_ACCEPTABLE", 406, "응답 형식 불일치", "요청한 형식으로 응답할 수 없습니다."),
   CONFLICT("CONFLICT", 409, "상태 충돌", "현재 자원의 상태와 요청이 충돌합니다."),
   UNSUPPORTED_MEDIA_TYPE("UNSUPPORTED_MEDIA_TYPE", 415, "지원하지 않는 본문 형식", "요청 본문의 형식을 지원하지 않습니다."),
+  GROUP_MEMBERSHIP_NOT_FOUND("GROUP_MEMBERSHIP_NOT_FOUND", 404, "그룹 소속 없음", "그룹 소속을 찾을 수 없습니다."),
+  GROUP_MEMBERSHIP_AMBIGUOUS(
+    "GROUP_MEMBERSHIP_AMBIGUOUS",
+    500,
+    "소속 정합성 오류",
+    "단일 그룹 소속 조건에 맞지 않습니다.",
+  ),
   INTERNAL_ERROR("INTERNAL_ERROR", 500, "내부 처리 오류", "요청을 처리하지 못했습니다."),
   INTERNAL_ACCESS_DENIED("INTERNAL_ACCESS_DENIED", 403, "내부 호출 거부", "내부 서비스 호출 키를 확인할 수 없습니다."),
   SERVICE_UNAVAILABLE("SERVICE_UNAVAILABLE", 503, "서비스 이용 불가", "일시적으로 요청을 처리할 수 없습니다.");
@@ -26,7 +33,14 @@ enum class ErrorCode(
     /** 상태 코드에 맞는 일반 코드. 목록에 없는 상태는 4xx면 BAD_REQUEST, 5xx면 INTERNAL_ERROR. */
     fun of(status: HttpStatusCode): ErrorCode =
       entries.firstOrNull {
-        it.status == status.value() && it !in setOf(VALIDATION_FAILED, INTERNAL_ACCESS_DENIED)
+        it.status == status.value() &&
+          it !in
+            setOf(
+              VALIDATION_FAILED,
+              INTERNAL_ACCESS_DENIED,
+              GROUP_MEMBERSHIP_NOT_FOUND,
+              GROUP_MEMBERSHIP_AMBIGUOUS,
+            )
       } ?: if (status.is5xxServerError) INTERNAL_ERROR else BAD_REQUEST
   }
 }

@@ -10,7 +10,7 @@
 
 - 경로·헤더·미디어 타입에 버전을 두지 않는다(예: `/v1/...`를 쓰지 않음).
 - 호환되지 않는 변경은 소비 서비스와 함께 바꾼다. 계약 호환성 검증 방식은 기능 개발 단계에서 정한다.
-- OpenAPI 문서의 필수 항목 `info.version`은 `0.1.0`으로 명시한다. 명세 문서 버전이며 API 경로·헤더 버전과 다르다([OpenAPI 규격](https://spec.openapis.org/oas/v3.1.0#info-object)).
+- OpenAPI 문서의 필수 항목 `info.version`은 서비스가 관리한다(현재 멤버 0.2.0, 그룹 0.1.0). 명세 문서 버전이며 API 경로·헤더 버전과 다르다([OpenAPI 규격](https://spec.openapis.org/oas/v3.1.0#info-object)).
 
 ## POL-API-002 오류 응답
 
@@ -68,21 +68,21 @@
 
 ## POL-API-004 API 문서
 
-- springdoc-openapi가 각 서비스의 코드에서 OpenAPI 3 명세를 생성한다. 버전은 `0.1.0`이다.
-- 멤버 `/swagger-ui.html`에서 멤버·그룹 명세를 선택한다. 멤버는 실행 가능, 그룹은 읽기 전용(`supportedSubmitMethods=[]`)이다. 선택 시 UI 인스턴스를 새 설정으로 만든다.
+- springdoc-openapi가 각 서비스의 코드에서 OpenAPI 3 명세를 생성한다. 명세 버전은 서비스가 소유한다(현재 멤버 0.2.0, 그룹 0.1.0).
+- 멤버 `/swagger-ui.html`에서 멤버·그룹 명세를 선택한다. 두 서비스 조회 모두 Try it out으로 실행 가능하며 그룹 요청은 멤버의 고정 중계 경로를 통과한다. 선택 시 UI 인스턴스를 새 설정으로 만든다.
 - 멤버 `/v3/api-docs`는 사용자 인증 없이 제공하며 사용자 Bearer 보안 스킴이 없다.
-- 그룹 `/v3/api-docs`는 내부 키가 필요하다. 원본에는 `internalServiceKey` apiKey 헤더 스킴을 정의한다.
+- 그룹 `/v3/api-docs`는 내부 키가 필요하다. 원본에는 internalServiceId와 internalServiceKey의 AND 헤더 스킴을 정의한다.
 - 멤버 GET `/internal-docs/group`은 고정된 그룹 명세만 조회하고 `Cache-Control: no-store`로 반환한다. 이 기술 컨트롤러는 `@Hidden`으로 멤버 업무 명세에서 제외한다.
-- 브라우저 전달본은 내부 `servers`와 인증 요구·securitySchemes를 제거하고 참고용 설명을 붙인다. 실제 그룹 원본 계약은 그룹이 소유한다.
+- 브라우저 전달본은 내부 servers·인증 요구·securitySchemes를 제거하고 서버 주소를 /internal-api/group으로 지정한다. 실제 그룹 원본 계약은 그룹이 소유한다.
 - 그룹 Swagger UI는 제공하지 않는다. 외부 온라인 validator와 브라우저의 그룹 직접 요청도 사용하지 않는다.
 - 명세 전달에는 내부 키가 서버에서 추가되며 사용자에게 키를 입력받거나 전달하지 않는다. 사용자 지정 URL을 전달하는 범용 프록시는 제공하지 않는다.
 - 그룹 명세 장애는 503, 내부 키 거부·명세 계약 오류는 500이다. 멤버 자기 명세와 readiness는 계속 제공한다.
 - 위 명세 노출 정책은 local과 기본 프로필에 동일하게 적용한다. local 업무 조회는 임시 그룹 fixture를 기본으로 사용하지만 그룹 명세 전달은 실제 HTTP를 유지한다.
-- 멤버 업무 명세는 목록·상세 경로와 스키마를 제공한다. 그룹 업무 API는 아직 미구현이다. 기능을 만들 때 서비스 `docs/api.md`와 구현·명세를 함께 갱신한다.
+- 멤버 업무 명세는 목록·상세 경로와 스키마를 제공한다. 그룹은 summary·단일 상세 명세를 제공한다. 각 서비스 docs/api.md·구현·스냅샷을 함께 갱신한다.
 
 ## POL-API-005 시각·배열·코드 계약
 
-- 신규 업무 API의 시각은 UTC RFC 3339 문자열과 OpenAPI `format: date-time`을 사용한다. DB 마이크로초 정밀도를 보존하고 서버에서 화면 표시용 분 단위로 절삭하지 않는다. [OpenAPI 시각 형식](https://spec.openapis.org/registry/format/date-time)
+- 업무 API 시각은 Asia/Seoul의 yyyy-MM-dd HH:mm 문자열이다. DB에는 UTC TIMESTAMP(6)으로 마이크로초를 보존하고 응답 mapper에서만 분 단위로 표시한다. OpenAPI는 string/pattern/길이/예제로 정의하며 format: date-time은 사용하지 않는다. HTTP 표준 헤더·실행 로그·AI 원본 시각에는 적용하지 않는다.
 - 가입 시각·소속 시각·생성 시각은 의미를 구분한다. 필드 이름·필수/선택·null 의미는 서비스 계약에 고정한다.
 - 다중 관계는 배열이다. 관계가 없으면 빈 배열이며 선택 부가 정보가 없으면 정의된 null 규칙을 따른다. 장애를 빈 배열로 바꾸지 않는다.
 - 외부 소유 코드의 정의를 소비자 enum으로 복제하지 않는다. 문자열 코드와 표시명을 분리하고 알 수 없는 유효 코드를 수용한다. 코드명은 분기 조건으로 사용하지 않는다.
@@ -93,3 +93,11 @@
 - operationId·스키마명·입력 범위·필수/null·오류·성공 예제를 고정한다. 상세 시그니처 공유는 OpenAPI로 하며 공유 런타임 DTO 모듈을 만들지 않는다.
 - 환경별 서버 주소와 테스트 전용 API가 스냅샷에 섞이지 않도록 [테스트 규칙](testing.md#pol-test-007-openapi-스냅샷과-계약)을 적용한다.
 - 일반 빌드는 읽기 전용으로 비교한다. 갱신은 별도 명령이며 필드 삭제·필수화·타입 변경은 소비자 영향 검토를 거친다. 스냅샷 일치와 실제 제공자 적합성 검증을 구분한다.
+
+GROUP-001 그룹 전용 코드: GROUP_MEMBERSHIP_NOT_FOUND(404), GROUP_MEMBERSHIP_AMBIGUOUS(500). 권한 응답은 code만 노출하고 표시명은 그룹 enum 내부에서 관리한다.
+
+### 그룹 API 실행 중계
+
+멤버 GET /internal-api/group/api/groups/summary와 /internal-api/group/api/group/{memberId}만 그룹으로 전달한다. 내부 키·ID는 서버가 주입하며 원격 주소나 임의 경로는 사용자에게 받지 않는다. 기술 중계는 @Hidden이며 멤버 업무 스냅샷에 포함하지 않는다. 두 조회는 Swagger 밖에서도 멤버 주소로 접근할 수 있다.
+
+이 중계는 그룹 테스트를 위해 정상 JSON·표준 6필드 ProblemDetail의 상태/본문을 유지한다. 멤버 업무 조합 API의 오류 변환 정책과 다르다. 연결 실패/시간 초과는 503 GROUP_SERVICE_UNAVAILABLE, JSON·매체·계약 오류/리다이렉트는 500 INTERNAL_ERROR다. 응답 상한은 1MiB이며 내부 헤더는 전달하지 않고 no-store를 적용한다.

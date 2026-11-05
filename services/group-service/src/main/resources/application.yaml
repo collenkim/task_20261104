@@ -55,3 +55,9 @@ management:
 springdoc:
   swagger-ui:
     enabled: false
+
+logging:
+  level:
+    root: INFO
+  pattern:
+    level: "%5p [service:%X{service} request:%X{requestId} call:%X{callId} attempt:%X{attempt}]"

@@ -38,7 +38,7 @@
 
 - 테이블·열은 소문자 snake_case, 테이블은 단수형이다. 예약어 `group` 대신 업무 문맥이 드러나는 이름을 정한다.
 - 기본 키는 `id`, 외부 서비스 식별자는 `<대상>_id`다. 실제 키 자료형은 서비스 엔티티 문서에서 확정한다.
-- 시각은 UTC `Instant` ↔ `DATETIME(6)` 기준이다. DB 기본 시간대와 `hibernate.jdbc.time_zone`을 UTC로 맞춘다. 저장 정밀도는 마이크로초다.
+- 시각은 UTC `Instant` ↔ `TIMESTAMP(6)` 기준이다. DB 기본 시간대와 `hibernate.jdbc.time_zone`을 UTC로 맞춘다. 저장 정밀도는 마이크로초다.
 - `utf8mb4_unicode_ci`는 기본적으로 대소문자를 구분하지 않는다. 이메일·식별자의 비교 및 고유성은 업무 정책을 먼저 정하고 열 정렬·인덱스에 반영한다.
 - 엔티티는 일반 클래스이며 Kotlin `plugin.jpa`와 `allOpen`을 사용한다. 조회 트랜잭션은 `readOnly=true`, API에는 엔티티 대신 조회 DTO를 반환한다.
 - 실제 업무 엔티티 현황은 [멤버 엔티티](../../services/member-service/docs/entities.md)·[그룹 엔티티](../../services/group-service/docs/entities.md)를 따른다.
@@ -55,3 +55,7 @@
 - `src/main/resources/db/seed/local`과 fixture는 jar에 포함되지만 기본 프로필에서 로드하지 않는다. 이 범위는 **운영 실행에서 격리**이며 jar에 물리적으로 없다는 주장은 하지 않는다.
 - 일반 통합 테스트는 local 시드를 로드하지 않고 독립 fixture를 넣는다. 별도 local 시드 테스트는 실제 MariaDB에서 최초 적용·무변경 재기동·내용 변경 재적용·감사 정보 보존·비시드 데이터 보호를 검증한다.
 - 기본 프로필에서 시드 행이 생성되지 않고 fixture 공급자 선택이 거부되는지 검증한다. 검증한 환경·프로젝트·볼륨을 기록한다.
+
+## GROUP-001 기존 시각 타입 전환
+
+멤버 V2는 변경하지 않고 V3에서 registered_at/created_at을 TIMESTAMP(6)으로 전환한다. UTC 세션에서 적용하고 원본 행 수·키·초·마이크로초를 비교한다. 적용 전 백업과 타입 지원 범위/zero date/NULL 검사를 수행하며 잘못된 값은 자동 보정하지 않는다. MariaDB DDL의 롤백을 가정하지 않는다. 실패 시 자동 재실행·볼륨 초기화 대신 원인과 스키마 상태를 확인하고 백업 복구 또는 전진 수정 절차를 사용한다. 그룹은 V2부터 TIMESTAMP(6)을 사용한다.

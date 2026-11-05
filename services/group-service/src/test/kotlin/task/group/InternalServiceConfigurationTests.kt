@@ -21,7 +21,15 @@ class InternalServiceConfigurationTests {
       }
     val response = MockHttpServletResponse()
     val chain = MockFilterChain()
-    InternalServiceFilter(TestProperties.internalKey, JsonMapper.builder().build())
+    InternalServiceFilter(
+        mapOf(
+          "member-service" to
+            task.group.infrastructure.configuration.InternalCallerProperties(
+              TestProperties.internalKey
+            )
+        ),
+        JsonMapper.builder().build(),
+      )
       .doFilter(request, response, chain)
     assertThat(response.status).isEqualTo(403)
     assertThat(chain.request).isNull()
@@ -34,8 +42,79 @@ class InternalServiceConfigurationTests {
         .withUserConfiguration(InternalServiceConfiguration::class.java)
         .withBean(JsonMapper::class.java, { JsonMapper.builder().build() })
     runner.run { assertThat(it).hasFailed() }
-    runner.withPropertyValues("task.internal-service.key=${TestProperties.internalKey}").run {
-      assertThat(it).hasNotFailed().hasBean("internalServiceFilter")
+    runner
+      .withPropertyValues(
+        "task.internal-service.clients.member-service.key=${TestProperties.internalKey}"
+      )
+      .run {
+        assertThat(it).hasNotFailed().hasBean("internalServiceFilter")
+      }
+  }
+
+  @Test
+  fun `호출자와 키를 함께 검사하고 중복 헤더 및 선택 IP 범위를 거부한다`() {
+    val otherKey = TestProperties.internalKey.reversed()
+    val filter =
+      InternalServiceFilter(
+        mapOf(
+          "member-service" to
+            task.group.infrastructure.configuration.InternalCallerProperties(
+              TestProperties.internalKey,
+              listOf("10.20.0.0/16"),
+            ),
+          "other-service" to
+            task.group.infrastructure.configuration.InternalCallerProperties(
+              otherKey,
+              listOf("2001:db8::/32"),
+            ),
+        ),
+        JsonMapper.builder().build(),
+      )
+    fun request(ids: List<String>, keys: List<String>, remote: String): Int {
+      val request =
+        MockHttpServletRequest("GET", "/api/group/member0001").apply {
+          remoteAddr = remote
+          ids.forEach { addHeader("X-Internal-Service-Id", it) }
+          keys.forEach { addHeader("X-Internal-Service-Key", it) }
+          addHeader("X-Forwarded-For", "10.20.1.2")
+        }
+      val response = MockHttpServletResponse()
+      filter.doFilter(request, response, MockFilterChain())
+      return response.status
+    }
+    assertThat(request(listOf("member-service"), listOf(TestProperties.internalKey), "10.20.1.2"))
+      .isEqualTo(200)
+    assertThat(request(listOf("member-service"), listOf(TestProperties.internalKey), "10.21.1.2"))
+      .isEqualTo(403)
+    assertThat(request(listOf("other-service"), listOf(otherKey), "2001:db8::1")).isEqualTo(200)
+    assertThat(request(listOf("other-service"), listOf(TestProperties.internalKey), "2001:db8::1"))
+      .isEqualTo(403)
+    assertThat(request(listOf("unknown"), listOf(TestProperties.internalKey), "10.20.1.2"))
+      .isEqualTo(403)
+    assertThat(request(emptyList(), listOf(TestProperties.internalKey), "10.20.1.2")).isEqualTo(403)
+    assertThat(
+        request(
+          listOf("member-service", "member-service"),
+          listOf(TestProperties.internalKey),
+          "10.20.1.2",
+        )
+      )
+      .isEqualTo(403)
+    assertThat(
+        request(
+          listOf("member-service"),
+          listOf(TestProperties.internalKey, TestProperties.internalKey),
+          "10.20.1.2",
+        )
+      )
+      .isEqualTo(403)
+    for (bad in listOf("localhost/32", "256.0.0.1/32", "10.0.0.1/33", "::1/129", "10.0.0.1")) {
+      kotlin.test.assertFailsWith<IllegalArgumentException> {
+        task.group.infrastructure.configuration.InternalCallerProperties(
+          TestProperties.internalKey,
+          listOf(bad),
+        )
+      }
     }
   }
 }

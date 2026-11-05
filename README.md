@@ -27,13 +27,13 @@ docker compose ps                       # 상태 확인
 docker compose down                     # 종료, 데이터 볼륨 유지
 ```
 
-Swagger: [멤버 서비스](http://127.0.0.1:8081/swagger-ui.html)에서 두 명세를 선택한다. 멤버 명세는 실행 가능하고 그룹 명세는 읽기 전용이다. 그룹 명세는 멤버 서버가 내부 키로 받아 전달하며 브라우저에 키를 주지 않는다.
+Swagger: [멤버 서비스](http://127.0.0.1:8081/swagger-ui.html)에서 두 명세를 선택한다. 멤버·그룹 조회를 모두 실행할 수 있다. 그룹 실행은 멤버의 /internal-api/group 중계를 통과한다. 그룹 명세는 멤버 서버가 내부 키로 받아 전달하며 브라우저에 키를 주지 않는다.
 
 공통 문서는 [문서 시작점](docs/README.md)에서 기술 스택·코드/enum 규칙·CQRS·데이터·API·보안·실행 정책 순서로 확인한다. 서비스별 정책·엔티티·API 계약은 각 서비스의 `docs/`가 소유한다.
 
-멤버 목록·상세 조회 API와 다중 소속 결합, 조회 저장소, HTTP/fixture 어댑터, local 시드를 구현했다. [요구사항 재검증](docs/common/setup-verification.md)에 구현·미구현을 구분했다.
+GROUP-001에서 그룹 API와 멤버 HTTP 연동을 구현한다. 현재 멤버당 0~1개, 그룹 상세 6필드 단일 객체, 권한 code만 제공한다. 저장 UTC TIMESTAMP(6), 응답 한국 시간 분 문자열이다. 루트 Compose는 http, 멤버 단독 local은 fixture다.
 
-MEMBER-001은 [통합 계획](docs/common/member-query-plan.md)과 [구현 요청서](docs/common/requests/MEMBER-001.md)를 따른다. 소속 공급자는 local에서 fixture, 기본 프로필에서 http이며 `TASK_GROUP_MEMBERSHIP_SOURCE`로 선택한다. 공개 API·local 시드·계층/트랜잭션 경계는 [3단계 기록](docs/common/member-query-stage-3-verification.md)을 따른다. 지수 백오프·Full Jitter는 [4단계 기록](docs/common/member-query-stage-4-verification.md)을 따른다. [공유 OpenAPI](services/member-service/docs/openapi.json)·[소비자 안내](services/member-service/docs/contracts.md)를 제공하며 명세·실제 Compose/Swagger 업무 검증은 [5단계 기록](docs/common/member-query-stage-5-verification.md)에 있다. 실제 그룹 업무 API 연동은 미검증이다.
+[그룹 계획](docs/common/group-query-plan.md)·[검증 기록](docs/common/group-query-verification.md)을 기준으로 확인한다. MEMBER-001 기록은 과거 증거로 보존하며 현재 소속·시각·표시명 계약은 GROUP-001이 대체한다.
 
 실행 방식·포트·종료 방법은 [로컬 실행](docs/common/local-development.md)을 본다.
 

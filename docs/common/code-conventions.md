@@ -57,7 +57,7 @@
 - 코드명·설명은 내부 예외 메시지나 민감값을 포함하지 않는다. 내부 오류 설명은 고정 문구를 사용한다.
 - 업무 상태 코드의 `status`는 해당 도메인의 상태 의미와 자료형을 서비스 정책서에 정의한다. HTTP 상태와 업무 상태를 혼용하지 않는다.
 - enum 코드가 DB에 저장되면 문자열 코드와의 명시적 변환을 정의한다. 순번 저장은 금지한다. 코드 추가·폐기·이름 변경의 계약 영향도 검토한다.
-- 현재 구현은 각 서비스의 `presentation/error/ErrorCode.kt`다. 공유 런타임 모듈을 만들지 않고 공통 정책·코드 목록을 두 서비스가 동일하게 적용한다.
+- 오류 구현은 각 서비스의 `presentation/error/ErrorCode.kt`이며, 그룹 권한·과금 코드는 그룹 domain enum이 소유한다. 공유 런타임 모듈을 만들지 않고 공통 정책·코드 목록을 두 서비스가 동일하게 적용한다.
 - 오류 응답의 `title`은 `codeName`, 기본 `detail`은 `description`이다. MVC가 제공하는 구체적인 입력 검증 설명은 유지한다. 전체 목록은 [API 오류 규칙](api-conventions.md#pol-api-002-오류-응답)에서 관리한다.
 
 ## 이름
@@ -65,3 +65,7 @@
 - 패키지: `task.<서비스>.<계층>...` (예: `task.member.infrastructure.configuration`).
 - 클래스: 역할이 드러나게 쓴다. 조회·변경 경로의 이름 규칙은 [cqrs](cqrs.md#이름-규칙)를 따른다.
 - 테스트 함수 이름은 한국어 문장으로 쓴다(백틱 이름).
+
+## GROUP-001 요청 흐름 로그
+
+기본 INFO로 request.received/completed, business.started/progress/completed, query.started/completed, remote.started/completed/attempt/retry를 기록한다. 예외 발생·처리는 ERROR이며 같은 예외 스택을 계층마다 반복하지 않는다. requestId를 두 서비스에 전달하고 callId·attempt로 호출과 재시도를 구분한다. MDC는 finally에서 정리한다. 로그는 시간대와 밀리초를 유지하고 SQL·바인딩·원문 URL·키·본문·식별자·개인정보를 기록하지 않는다. 예외 message/cause를 무조건 출력하지 않고 분류와 정제된 프레임으로 기록한다.

@@ -10,7 +10,7 @@
 
 - HTTP API와 Spring RestClient(JDK HttpClient)만 사용한다. 다른 서비스 코드·DTO·DB를 직접 참조하지 않는다.
 - 빈 이름은 `groupRestClient`다. 멤버 소속 조회는 application의 `GroupMembershipReader`와 HTTP 어댑터를 사용한다.
-- 실제 그룹과의 연동은 OpenAPI 명세 조회다. 업무 소속 조회는 HTTP 소비자 어댑터까지 구현했으며 그룹 제공자 API·실제 통합은 아직 없다.
+- 그룹 summary·단일 상세와 OpenAPI를 HTTP로 조회한다. 루트 Compose는 http 모드, 멤버 단독 local은 fixture 모드다.
 
 ## POL-COMM-002 주소와 기동
 
@@ -37,7 +37,7 @@
 
 - 양수 제한 시간을 요구한다. 위 시간은 각 시도 기준이며 재시도까지 포함한 전체 3초 제한이 아니다.
 - GET/HEAD의 연결 실패·시간 초과만 다시 시도한다. 응답을 받은 4xx·5xx와 변경 요청은 재시도하지 않는다.
-- 리다이렉트는 따라가지 않는다. 로그에는 방법·경로·예외 종류만 남긴다.
+- 리다이렉트는 따라가지 않는다. 로그에는 안전한 operation·callId·attempt·상태·예외 종류만 남긴다. 경로의 ID·쿼리·본문은 남기지 않는다.
 
 ### 지수 백오프와 Full Jitter
 
@@ -60,15 +60,19 @@ delay(n) = UniformInteger(0, upper(n) 밀리초)
 
 ## POL-COMM-004 인증과 실패 처리
 
-- `X-Internal-Service-Key`를 서버 설정값으로 추가한다([보안](security.md#pol-sec-003-내부-호출-키)). 사용자 인증은 없다.
+- `X-Internal-Service-Id: member-service`와 해당 호출자의 `X-Internal-Service-Key`를 서버 설정값으로 추가한다([보안](security.md#pol-sec-003-내부-호출-키)). 사용자 인증은 없다.
 - 명세 조회 연결 실패·시간 초과·그룹 5xx: 503 `GROUP_SERVICE_UNAVAILABLE`.
 - 그룹의 401·403, 리다이렉트·잘못된 명세·명세 404: 호출 설정/계약 오류이므로 500 `INTERNAL_ERROR`.
-- 그룹 업무 API의 404·업무 오류는 해당 업무 계약에서 매핑한다. 명세 조회의 404 규칙을 일괄 적용하지 않는다.
+- 상세의 404 + GROUP_MEMBERSHIP_NOT_FOUND + ProblemDetail status=404만 미소속이다. 다른 4xx·리다이렉트·계약 오류는 멤버 500이다. 그룹 500(다건 포함)·503은 멤버 503이다.
 - 실패를 빈 결과로 숨기지 않는다. 사용자 응답은 공통 ProblemDetail이며 내부 응답·주소·키를 공개하지 않는다.
 
 ## POL-COMM-005 계약 소유
 
-그룹 내부 계약은 `services/group-service/docs/api.md`가 소유한다. 멤버는 자기 코드의 모델로 읽는다. 현재 명세 전달 테스트는 실제 HTTP를 사용하지만 업무 조회 계약의 증거는 아니다. 기능 개발 때 그룹 명세와 소비자 테스트로 호환성을 확인한다.
+그룹 내부 계약은 `services/group-service/docs/api.md`가 소유한다. 멤버는 자기 코드의 모델로 읽는다. 제공자 OpenAPI와 소비자 HTTP 테스트를 별도 검증하고 실제 제공자 연동을 Compose에서 검사한다.
+
+- 목록은 /api/groups/summary를 페이지당 1회 호출한다. 1명 페이지도 summary다. sparse 응답에 없는 요청 ID만 미소속으로 변환한다.
+- 상세는 /api/group/{memberId}를 1회 호출한다. 6개 필드에서 구성하며 추가 이름 조회는 없다.
+- 중복 그룹·멤버 중복 소속·요청 밖 ID·잘못된 타입·필수값 누락은 계약 오류다. 비어 있지 않은 새 code와 추가 필드는 수용한다.
 
 ## POL-COMM-006 선행 개발용 공급자 교체
 
@@ -76,5 +80,7 @@ delay(n) = UniformInteger(0, upper(n) 밀리초)
 - `GroupMembershipReader`가 application 계약을 소유하고 fixture/HTTP 구현이 이를 따른다. 구체 선택·프로필 격리는 [멤버 정책](../../services/member-service/docs/policies.md#pol-member-002-임시-그룹-공급자)에 따른다.
 - Controller·QueryHandler는 공급자 종류를 모르며 둘의 반환 모델과 의미는 같다. 순수 소속 계약 검증을 재사용한다. 원격 전송 DTO와 공개 DTO는 분리한다.
 - HTTP 모드는 키를 서버에서 추가하고 현재 숫자 IP:포트 설정을 재사용한다. 키·쿼리 ID 목록·응답 본문을 로그에 넣지 않는다.
-- source 설정만 바꿔 공급자를 교체하고 실제 그룹 구현 후 제공자 계약·통합 실행을 별도로 검증한다. HTTP 실패를 fixture/빈 결과로 대체하지 않는다. 명세 전달은 계속 실제 HTTP를 사용한다.
-- HTTP 응답은 200 application/json이어야 한다. 필수 타입을 강제 변환하지 않으며 중복 JSON 키·후행 문서도 계약 오류다. 선택 시각은 UTC Z 또는 +00:00, 소수점 아래 최대 6자리다. 내부 값은 Instant로 통일한다.
+- source 설정으로 공급자를 교체한다. 루트 Compose는 http를 명시한다. HTTP 실패를 fixture/빈 결과로 대체하지 않는다. 명세 전달은 계속 실제 HTTP를 사용한다.
+- HTTP 응답은 200 application/json이어야 한다. 필수 타입을 강제 변환하지 않으며 중복 JSON 키·후행 문서도 계약 오류다. 원격 상세 시각은 Asia/Seoul yyyy-MM-dd HH:mm이며 실제 날짜까지 검증한다. 내부 Instant의 원격 정밀도는 분이다. local fixture의 UTC 마이크로초는 저장용 형식이며 공개 응답은 분 형식으로 변환한다.
+
+Swagger 실행 중계는 같은 RestClient·키·재시도·추적을 재사용한다. 그룹 응답을 시험하는 경로이므로 정상 JSON/표준 ProblemDetail의 상태와 본문을 유지한다. 멤버 업무 API의 오류 매핑을 적용하지 않는다. 자세한 경로·제한은 공통 API 정책을 따른다.

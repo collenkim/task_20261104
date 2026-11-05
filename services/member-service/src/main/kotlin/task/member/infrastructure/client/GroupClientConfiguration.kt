@@ -67,8 +67,10 @@ class GroupClientConfiguration {
       .requestFactory(factory)
       .requestInterceptor { request, body, execution ->
         request.headers.set(INTERNAL_HEADER, requireNotNull(internal.key))
+        request.headers.set("X-Internal-Service-Id", properties.serviceId)
         execution.execute(request, body)
       }
+      .requestInterceptor(OutgoingTraceInterceptor())
       .requestInterceptor(retry)
       .build()
   }
@@ -89,6 +91,8 @@ class GroupClientProperties(
   @field:Min(0) @field:Max(3) val maxRetries: Int = 1,
   val retryBaseDelay: Duration = Duration.ofMillis(200),
   val retryMaxDelay: Duration = Duration.ofSeconds(2),
+  @field:jakarta.validation.constraints.Pattern(regexp = "[a-z][a-z0-9-]{1,49}")
+  val serviceId: String = "member-service",
 ) {
   @get:AssertTrue(message = "재시도 지연은 정수 밀리초 1~60000이며 기본 지연이 최대 지연 이하여야 합니다")
   val isRetryDelayValid: Boolean

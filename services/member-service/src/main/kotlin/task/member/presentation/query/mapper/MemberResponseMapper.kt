@@ -19,7 +19,7 @@ object MemberResponseMapper {
           member.id,
           member.name,
           member.groups.map {
-            GroupMembershipSummaryResponse(it.id, it.name, it.permission, it.permissionName)
+            GroupMembershipSummaryResponse(it.id, it.name, it.permission)
           },
         )
       },
@@ -32,16 +32,15 @@ object MemberResponseMapper {
       view.name,
       view.email,
       view.address,
-      view.registeredDate,
-      view.createdAt,
+      ApiTime.format(view.registeredDate),
+      ApiTime.format(view.createdAt),
       view.createdBy,
       view.groups.map {
         GroupMembershipDetailResponse(
           it.id,
           it.name,
           it.permission,
-          it.permissionName,
-          it.joinedAt,
+          it.joinedAt?.let(ApiTime::format),
           it.pricing,
         )
       },

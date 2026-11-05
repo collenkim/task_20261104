@@ -18,6 +18,7 @@ import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
+import org.springframework.test.web.servlet.post
 import task.member.support.TestProperties
 import task.member.support.TestcontainersConfiguration
 
@@ -35,6 +36,9 @@ class GroupApiDocsTests {
     bodyDelay.set(0)
     hits.set(0)
     receivedKey.set(null)
+    receivedCaller.set(null)
+    receivedPath.set(null)
+    receivedQuery.set(null)
     body.set(SPEC)
     contentType.set("application/json")
   }
@@ -50,7 +54,7 @@ class GroupApiDocsTests {
           status { isOk() }
           header { string("Cache-Control", "no-store") }
           jsonPath("$.paths['/groups'].get.summary") { value("그룹 조회") }
-          jsonPath("$.servers") { doesNotExist() }
+          jsonPath("$.servers[0].url") { value("/internal-api/group") }
           jsonPath("$.security") { doesNotExist() }
           jsonPath("$.paths['/groups'].servers") { doesNotExist() }
           jsonPath("$.paths['/groups'].get.security") { doesNotExist() }
@@ -151,19 +155,156 @@ class GroupApiDocsTests {
     assertThat(hits.get()).isEqualTo(3)
   }
 
+  @Test
+  fun `그룹 요약은 멤버의 고정 경로와 서버 키로 실행하며 반복 파라미터를 유지한다`() {
+    body.set(SUMMARY)
+    mockMvc
+      .get("/internal-api/group/api/groups/summary") {
+        param("memberIds", "tu3fgxd45k", "dj8fy4bewk")
+        param("url", "http://127.0.0.1:1/forbidden")
+        header("X-Internal-Service-Id", "browser")
+        header("X-Internal-Service-Key", "user-supplied")
+      }
+      .andExpect {
+        status { isOk() }
+        content { json(SUMMARY) }
+        header { string("Cache-Control", "no-store") }
+        header { doesNotExist("Set-Cookie") }
+        header { doesNotExist("Location") }
+        header { doesNotExist("X-Internal-Service-Key") }
+      }
+    assertThat(receivedPath.get()).isEqualTo("/api/groups/summary")
+    assertThat(receivedQuery.get()).isEqualTo("memberIds=tu3fgxd45k&memberIds=dj8fy4bewk")
+    assertThat(receivedCaller.get()).isEqualTo("member-service")
+    assertThat(receivedKey.get()).isEqualTo(TestProperties.internalKey)
+    assertThat(hits.get()).isEqualTo(1)
+  }
+
+  @Test
+  fun `그룹 상세 여섯 필드와 그룹 오류 상태 본문은 중계에서 변환하지 않는다`() {
+    body.set(DETAIL)
+    mockMvc.get("/internal-api/group/api/group/tu3fgxd45k").andExpect {
+      status { isOk() }
+      content { json(DETAIL) }
+    }
+    assertThat(receivedPath.get()).isEqualTo("/api/group/tu3fgxd45k")
+    for ((code, error) in
+      listOf(
+        400 to "VALIDATION_FAILED",
+        403 to "INTERNAL_ACCESS_DENIED",
+        404 to "GROUP_MEMBERSHIP_NOT_FOUND",
+        500 to "GROUP_MEMBERSHIP_AMBIGUOUS",
+        503 to "SERVICE_UNAVAILABLE",
+      )) {
+      status.set(code)
+      contentType.set("application/problem+json")
+      val problem =
+        """{"type":"about:blank","title":"합성 오류","status":$code,"detail":"합성 설명","instance":"/api/group/tu3fgxd45k","code":"$error"}"""
+      body.set(problem)
+      mockMvc.get("/internal-api/group/api/group/tu3fgxd45k").andExpect {
+        status { isEqualTo(code) }
+        content { json(problem) }
+      }
+    }
+    assertThat(hits.get()).isEqualTo(6)
+  }
+
+  @Test
+  fun `그룹 중계는 임의 경로와 변경 메서드를 제공하지 않고 공개 멤버 명세에도 들어가지 않는다`() {
+    mockMvc.get("/internal-api/group/actuator/env").andExpect { status { isNotFound() } }
+    mockMvc.get("/internal-api/group/api/other").andExpect { status { isNotFound() } }
+    mockMvc.post("/internal-api/group/api/groups/summary").andExpect {
+      status { isMethodNotAllowed() }
+    }
+    mockMvc.get("/v3/api-docs").andExpect {
+      jsonPath("$.paths['/internal-api/group/api/groups/summary']") { doesNotExist() }
+      jsonPath("$.paths['/internal-api/group/api/group/{memberId}']") { doesNotExist() }
+    }
+    assertThat(hits.get()).isZero()
+  }
+
+  @Test
+  fun `중계의 비JSON 응답 손상 오류 리다이렉트는 내부 원문을 노출하지 않는다`() {
+    for (invalid in
+      listOf(
+        "not-json",
+        "[]",
+        "{} {}",
+        "{\"group\":[],\"group\":[]}",
+        "x".repeat(1024 * 1024 + 1),
+      )) {
+      body.set(invalid)
+      mockMvc.get("/internal-api/group/api/groups/summary").andExpect {
+        status { isInternalServerError() }
+        jsonPath("$.code") { value("INTERNAL_ERROR") }
+      }
+    }
+    body.set("upstream-private-detail")
+    contentType.set("text/html")
+    mockMvc.get("/internal-api/group/api/group/tu3fgxd45k").andExpect {
+      status { isInternalServerError() }
+      content {
+        string(
+          org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("upstream-private-detail"))
+        )
+      }
+    }
+    status.set(302)
+    mockMvc.get("/internal-api/group/api/group/tu3fgxd45k").andExpect {
+      status { isInternalServerError() }
+    }
+    status.set(500)
+    contentType.set("application/problem+json")
+    body.set("{\"status\":404,\"code\":\"NOT_FOUND\"}")
+    mockMvc.get("/internal-api/group/api/group/tu3fgxd45k").andExpect {
+      status { isInternalServerError() }
+    }
+    assertThat(hits.get()).isEqualTo(8)
+  }
+
+  @Test
+  fun `중계도 기존 제한 시간과 조회 재시도를 적용하고 연결 장애는 503이다`() {
+    body.set(SUMMARY)
+    delay.set(800)
+    mockMvc.get("/internal-api/group/api/groups/summary").andExpect {
+      status { isServiceUnavailable() }
+      jsonPath("$.code") { value("GROUP_SERVICE_UNAVAILABLE") }
+    }
+    assertThat(hits.get()).isEqualTo(2)
+  }
+
+  @Test
+  fun `중계는 잘못된 입력의 특수문자도 URL 구조로 해석하지 않고 그룹 검증에 전달한다`() {
+    body.set(SUMMARY)
+    val invalidId = "bad /?&+{}"
+    mockMvc
+      .get("/internal-api/group/api/groups/summary") { param("memberIds", invalidId) }
+      .andExpect { status { isOk() } }
+    assertThat(receivedPath.get()).isEqualTo("/api/groups/summary")
+    assertThat(java.net.URLDecoder.decode(receivedQuery.get(), Charsets.UTF_8))
+      .isEqualTo("memberIds=" + invalidId)
+    assertThat(hits.get()).isEqualTo(1)
+  }
+
   companion object {
     private val status = AtomicInteger(200)
     private val delay = AtomicInteger()
     private val bodyDelay = AtomicInteger()
     private val hits = AtomicInteger()
     private val receivedKey = AtomicReference<String?>()
+    private val receivedCaller = AtomicReference<String?>()
+    private val receivedPath = AtomicReference<String?>()
+    private val receivedQuery = AtomicReference<String?>()
     private val body = AtomicReference<String>()
     private val contentType = AtomicReference("application/json")
     private val executor = Executors.newCachedThreadPool()
     private val server =
       HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
-        createContext("/v3/api-docs") { exchange ->
+        createContext("/") { exchange ->
           hits.incrementAndGet()
+          receivedCaller.set(exchange.requestHeaders.getFirst("X-Internal-Service-Id"))
+          receivedPath.set(exchange.requestURI.path)
+          receivedQuery.set(exchange.requestURI.rawQuery)
           receivedKey.set(exchange.requestHeaders.getFirst("X-Internal-Service-Key"))
           val responseStatus = status.get()
           val responseBody = (body.get() ?: SPEC).toByteArray(Charsets.UTF_8)
@@ -172,6 +313,8 @@ class GroupApiDocsTests {
             Thread.sleep(pause.toLong())
             exchange.responseHeaders.set("Content-Type", contentType.get())
             exchange.responseHeaders.set("Location", "/unexpected-redirect")
+            exchange.responseHeaders.set("Set-Cookie", "upstream=private")
+            exchange.responseHeaders.set("X-Internal-Service-Key", TestProperties.internalKey)
             exchange.sendResponseHeaders(responseStatus, responseBody.size.toLong())
             exchange.responseBody.use {
               if (bodyDelay.get() > 0) {
@@ -202,6 +345,11 @@ class GroupApiDocsTests {
       registry.add("task.group-client.base-url") { "http://127.0.0.1:${server.address.port}" }
       registry.add("task.group-client.read-timeout") { Duration.ofMillis(200) }
     }
+
+    private const val SUMMARY =
+      """{"group":[{"groupId":"arutjf9348","groupName":"Test1","totalMemberCount":2,"members":[{"memberId":"tu3fgxd45k","permission":"Editor"}]}]}"""
+    private const val DETAIL =
+      """{"memberId":"tu3fgxd45k","groupId":"arutjf9348","groupName":"Test1","registeredDate":"2026-08-15 13:00","pricing":"Premium","permission":"Editor"}"""
 
     private const val SPEC =
       """{

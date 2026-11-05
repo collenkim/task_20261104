@@ -41,7 +41,7 @@ object TestProperties {
   val internalKey: String = listOf("test", "internal", "service", "key").joinToString("-")
 
   fun register(registry: DynamicPropertyRegistry) {
-    registry.add("task.internal-service.key") { internalKey }
+    registry.add("task.internal-service.clients.member-service.key") { internalKey }
     registry.add("spring.flyway.locations") {
       "classpath:db/migration/mariadb,classpath:db/test-migration"
     }

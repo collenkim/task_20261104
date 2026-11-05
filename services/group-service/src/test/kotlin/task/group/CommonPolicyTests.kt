@@ -47,10 +47,16 @@ class CommonPolicyTests {
   fun `내부 키 누락 불일치 중복은 403이고 응답에 키가 없다`() {
     mockMvc.get("/test-probe/page").problem(403, "INTERNAL_ACCESS_DENIED")
     mockMvc
-      .get("/test-probe/page") { header(KEY_HEADER, "invalid") }
+      .get("/test-probe/page") {
+        header("X-Internal-Service-Id", "member-service")
+        header(KEY_HEADER, "invalid")
+      }
       .problem(403, "INTERNAL_ACCESS_DENIED")
     mockMvc
-      .get("/v3/api-docs") { header(KEY_HEADER, TestProperties.internalKey, "duplicate") }
+      .get("/v3/api-docs") {
+        header("X-Internal-Service-Id", "member-service")
+        header(KEY_HEADER, TestProperties.internalKey, "duplicate")
+      }
       .problem(403, "INTERNAL_ACCESS_DENIED")
     mockMvc.get("/v3/api-docs").problem(403, "INTERNAL_ACCESS_DENIED").andExpect {
       jsonPath("$.title") { value("내부 호출 거부") }
@@ -67,37 +73,56 @@ class CommonPolicyTests {
   @Test
   fun `요청이 통과하고 페이지 크기는 기본 20, 최대 100이다`() {
     mockMvc
-      .get("/test-probe/page") { header(KEY_HEADER, TestProperties.internalKey) }
+      .get("/test-probe/page") {
+        header("X-Internal-Service-Id", "member-service")
+        header(KEY_HEADER, TestProperties.internalKey)
+      }
       .andExpect {
         status { isOk() }
         jsonPath("$.page") { value(0) }
         jsonPath("$.size") { value(20) }
       }
     mockMvc
-      .get("/test-probe/page?size=1000") { header(KEY_HEADER, TestProperties.internalKey) }
+      .get("/test-probe/page?size=1000") {
+        header("X-Internal-Service-Id", "member-service")
+        header(KEY_HEADER, TestProperties.internalKey)
+      }
       .andExpect { jsonPath("$.size") { value(100) } }
   }
 
   @Test
   fun `오류 응답은 ProblemDetail과 code를 갖고 내부 정보를 넣지 않는다`() {
     mockMvc
-      .get("/test-probe/none") { header(KEY_HEADER, TestProperties.internalKey) }
+      .get("/test-probe/none") {
+        header("X-Internal-Service-Id", "member-service")
+        header(KEY_HEADER, TestProperties.internalKey)
+      }
       .problem(404, "NOT_FOUND")
     mockMvc
-      .put("/test-probe/page") { header(KEY_HEADER, TestProperties.internalKey) }
+      .put("/test-probe/page") {
+        header("X-Internal-Service-Id", "member-service")
+        header(KEY_HEADER, TestProperties.internalKey)
+      }
       .problem(405, "METHOD_NOT_ALLOWED")
     mockMvc
-      .get("/test-probe/number?value=abc") { header(KEY_HEADER, TestProperties.internalKey) }
+      .get("/test-probe/number?value=abc") {
+        header("X-Internal-Service-Id", "member-service")
+        header(KEY_HEADER, TestProperties.internalKey)
+      }
       .problem(400, "BAD_REQUEST")
     mockMvc
       .post("/test-probe/validated") {
+        header("X-Internal-Service-Id", "member-service")
         header(KEY_HEADER, TestProperties.internalKey)
         contentType = MediaType.APPLICATION_JSON
         content = """{"name": ""}"""
       }
       .problem(400, "VALIDATION_FAILED")
     mockMvc
-      .get("/test-probe/boom") { header(KEY_HEADER, TestProperties.internalKey) }
+      .get("/test-probe/boom") {
+        header("X-Internal-Service-Id", "member-service")
+        header(KEY_HEADER, TestProperties.internalKey)
+      }
       .problem(500, "INTERNAL_ERROR")
       .andExpect {
         content { string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("내부 상세"))) }
@@ -109,14 +134,20 @@ class CommonPolicyTests {
   @Test
   fun `그룹 명세는 키가 필요하고 Swagger 화면은 제공하지 않는다`() {
     mockMvc
-      .get("/v3/api-docs") { header(KEY_HEADER, TestProperties.internalKey) }
+      .get("/v3/api-docs") {
+        header("X-Internal-Service-Id", "member-service")
+        header(KEY_HEADER, TestProperties.internalKey)
+      }
       .andExpect {
         status { isOk() }
         jsonPath("$.info.version") { value("0.1.0") }
         jsonPath("$.components.securitySchemes.internalServiceKey.name") { value(KEY_HEADER) }
       }
     mockMvc
-      .get("/swagger-ui/index.html") { header(KEY_HEADER, TestProperties.internalKey) }
+      .get("/swagger-ui/index.html") {
+        header("X-Internal-Service-Id", "member-service")
+        header(KEY_HEADER, TestProperties.internalKey)
+      }
       .problem(404, "NOT_FOUND")
   }
 

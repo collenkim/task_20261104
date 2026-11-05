@@ -25,6 +25,7 @@ internal object GroupMembershipContract {
     val mapped = members.associate { member ->
       if (
         !idPattern.matches(member.memberId) ||
+          member.memberships.size > 1 ||
           member.memberships.map { it.groupId }.distinct().size != member.memberships.size
       )
         throw GroupServiceConfigurationException()
@@ -34,15 +35,13 @@ internal object GroupMembershipContract {
             if (
               !idPattern.matches(group.groupId) ||
                 group.groupName.isBlank() ||
-                group.permission.isBlank() ||
-                group.permissionName.isBlank()
+                group.permission.isBlank()
             )
               throw GroupServiceConfigurationException()
             GroupMembership(
               group.groupId,
               group.groupName,
               group.permission,
-              group.permissionName,
               group.joinedAt,
               group.pricing?.takeUnless { it.isBlank() },
             )

@@ -21,13 +21,13 @@ class FixtureGroupMembershipTests {
     )
 
   @Test
-  fun `계획된 다섯 멤버를 포함하며 미소속과 단일 다중 소속을 구분한다`() {
+  fun `계획된 다섯 멤버를 포함하며 미소속과 단일 소속을 구분한다`() {
     val ids = listOf("tu3fgxd45k", "dj8fy4bewk", "k2m9x0p1q3", "j0n8k2m4p6", "q1w2e3r4t5")
     val result = reader.findByMemberIds(ids)
     assertEquals(ids.toSet(), result.keys)
-    assertEquals(listOf(2, 1, 0, 0, 1), ids.map { result.getValue(it).size })
-    assertEquals(listOf("Editor", "Viewer"), result.getValue("tu3fgxd45k").map { it.permission })
-    assertEquals("개발팀", result.getValue("dj8fy4bewk").single().groupName)
+    assertEquals(listOf(1, 1, 0, 0, 1), ids.map { result.getValue(it).size })
+    assertEquals(listOf("Editor"), result.getValue("tu3fgxd45k").map { it.permission })
+    assertEquals("Test1", result.getValue("dj8fy4bewk").single().groupName)
     assertEquals("프로젝트팀", result.getValue("q1w2e3r4t5").single().groupName)
     assertEquals(
       listOf("q1w2e3r4t5", "tu3fgxd45k"),
@@ -68,6 +68,6 @@ class FixtureGroupMembershipTests {
     assertFailsWith<UnsupportedOperationException> {
       (result.getValue("tu3fgxd45k") as MutableList).clear()
     }
-    assertEquals(2, reader.findByMemberIds(listOf("tu3fgxd45k")).getValue("tu3fgxd45k").size)
+    assertEquals(1, reader.findByMemberIds(listOf("tu3fgxd45k")).getValue("tu3fgxd45k").size)
   }
 }
