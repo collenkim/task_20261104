@@ -1,15 +1,21 @@
 # MEMBER-001 멤버 조회 API 통합 계획
 
-> 과거 작업 기준 문서다. 현재 그룹 제공자·멤버 연동·단일 소속·시각 계약은 [GROUP-001 계획](group-query-plan.md)과 [검증](group-query-verification.md)을 따른다.
+| 항목 | 내용 |
+| --- | --- |
+| 분류 | 작업 기록 |
+| 상태 | 이력 · 당시 요청·계획·검증 내용을 보존. 현재 구현 완료 선언이 아님 |
+| 현재 기준 | [문서 색인](../../README.md)의 공통·서비스 정의를 따른다 |
+
+> 과거 작업 기준 문서다. 현재 그룹 제공자·멤버 연동·단일 소속·시각 계약은 [GROUP-001 계획](../GROUP-001/plan.md)과 [검증](../../verification/GROUP-001/group-query-verification.md)을 따른다.
 
 | 항목 | 내용 |
 | --- | --- |
 | 목적 | 다중 소속·낮은 결합도·임시 그룹 데이터로 멤버 조회를 선행 개발한다 |
 | 범위 | 멤버 API 2개, DB 조회, local 임시 공급자, HTTP 어댑터, 검증·문서 |
-| 상태 | 2026-11-05 M-01~M-09 구현·검증 완료. 공유 명세·실제 Compose/Swagger 업무 검증 완료. 5단계 커밋 실행·develop 통합 검증·사용자 master 반영 대기 |
+| 당시 상태 | 2026-11-05 M-01~M-09 구현·검증 완료. 공유 명세·실제 Compose/Swagger 업무 검증 완료. 5단계 커밋 실행·develop 통합 검증·사용자 master 반영 대기 |
 | 기준 | 문서 검토 시 master `1bfa20f`. 이후에는 아래 소유 문서의 검토된 최신 리비전을 따른다 |
 | 작업 브랜치 | master `1bfa20f`에서 생성한 `feature/MEMBER-001`. 문서 `478026f`, 저장소 `ef03e16`, 공급자 `e5a8c6b`, 공개 조회/시드 `c350e54`, 재시도 `5a0452c`의 경로·내용 확인. 5단계는 작업 폴더 검증 후 예약 |
-| 실행 요청 | [MEMBER-001 구현 요청서](requests/MEMBER-001.md) |
+| 실행 요청 | [MEMBER-001 구현 요청서](request.md) |
 
 ## 1. 범위와 완료의 의미
 
@@ -26,15 +32,15 @@
 
 | 내용 | 단일 기준 문서 |
 | --- | --- |
-| 공개 API 입력·응답·오류·필드 의미 | [멤버 API](../../services/member-service/docs/api.md) |
-| 멤버 데이터·시드 식별자 | [멤버 엔티티](../../services/member-service/docs/entities.md) |
-| 다중 소속·임시 공급자 선택·실패 규칙 | [멤버 정책](../../services/member-service/docs/policies.md) |
-| 그룹 내부 HTTP 계약(제공자 미구현) | [그룹 API](../../services/group-service/docs/api.md) |
-| 계층·트랜잭션 | [CQRS](cqrs.md) |
-| 페이지·시각·공개 계약 | [API 규칙](api-conventions.md) POL-API-003·005·006 |
-| 재시도·공급자 교체 | [서비스 통신](service-communication.md) POL-COMM-003·006 |
-| 시드 실행·재실행 | [데이터 규칙](data-conventions.md) POL-DATA-004 |
-| 필수 검증·스냅샷 생성 | [테스트](testing.md) POL-TEST-005~008 |
+| 공개 API 입력·응답·오류·필드 의미 | [멤버 API](../../../services/member-service/docs/api.md) |
+| 멤버 데이터·시드 식별자 | [멤버 엔티티](../../../services/member-service/docs/entities.md) |
+| 다중 소속·임시 공급자 선택·실패 규칙 | [멤버 정책](../../../services/member-service/docs/policies.md) |
+| 그룹 내부 HTTP 계약(제공자 미구현) | [그룹 API](../../../services/group-service/docs/api.md) |
+| 계층·트랜잭션 | [CQRS](../../common/cqrs.md) |
+| 페이지·시각·공개 계약 | [API 규칙](../../common/api-conventions.md) POL-API-003·005·006 |
+| 재시도·공급자 교체 | [서비스 통신](../../common/service-communication.md) POL-COMM-003·006 |
+| 시드 실행·재실행 | [데이터 규칙](../../common/data-conventions.md) POL-DATA-004 |
+| 필수 검증·스냅샷 생성 | [테스트](../../common/testing.md) POL-TEST-005~008 |
 
 이 문서는 여러 소유 문서에 걸친 범위·순서·완료 상태를 관리한다. 상세 계약을 중복 편집하지 않는다. 이전 임시 요청서의 단일 `group`, 다중 소속 500, pageable 설정 삭제, KST 분 단위 시각은 이 계획으로 대체한다. 파일 존재만으로 커밋·구현·검증 완료를 주장하지 않는다.
 
@@ -106,11 +112,11 @@ task.member
 | M-11 | Compose·Swagger·독립 기동 | fixture 모드 실제 200·그룹 정지 상태 멤버 조회 성공 | 5단계 완료. 실제 Compose·독립 실행·Edge Swagger 통과 |
 | M-12 | 단계 커밋 검증·인계 | 각 커밋 SHA의 검사 기록, 실제 그룹 연동 미검증 표시 | 0~4단계 커밋 내용 일치 확인. 5단계 예약 실행 후 SHA 확인과 develop 검증 필요 |
 
-증거: [1단계 저장소](member-query-stage-1-verification.md), [2단계 공급자](member-query-stage-2-verification.md), [3단계 공개 조회·시드](member-query-stage-3-verification.md), [4단계 재시도](member-query-stage-4-verification.md), [5단계 계약·실행](member-query-stage-5-verification.md). MockMvc·테스트 HTTP 서버의 성공을 실제 그룹 제공자·Compose 통합 성공으로 대체하지 않는다.
+증거: [1단계 저장소](../../verification/MEMBER-001/stage-1.md), [2단계 공급자](../../verification/MEMBER-001/stage-2.md), [3단계 공개 조회·시드](../../verification/MEMBER-001/stage-3.md), [4단계 재시도](../../verification/MEMBER-001/stage-4.md), [5단계 계약·실행](../../verification/MEMBER-001/stage-5.md). MockMvc·테스트 HTTP 서버의 성공을 실제 그룹 제공자·Compose 통합 성공으로 대체하지 않는다.
 
 ## 6. 임시 데이터와 교체 조건
 
-시드 ID·소속 사례의 기준 표는 [멤버 엔티티](../../services/member-service/docs/entities.md#local-시드-m-06-적용)에 있다. fixture 파일은 멤버의 개발 자원이며 실제 그룹 DB의 사본이 아니다.
+시드 ID·소속 사례의 기준 표는 [멤버 엔티티](../../../services/member-service/docs/entities.md#local-시드-m-06-적용)에 있다. fixture 파일은 멤버의 개발 자원이며 실제 그룹 DB의 사본이 아니다.
 
 `fixture`는 local 프로필에서만 기동 가능하고 HTTP를 호출하지 않는다. `http` 실패 후 fixture로 바꾸는 fallback은 없다. 같은 Query/View 계약에 두 어댑터를 교체하여 재사용한다. 실제 그룹 API가 준비되면 설정을 `http`로 바꾸고 제공자 계약·실제 연동 검증을 수행한다. 기능 코드에 멤버 ID별 분기나 임시 그룹 하드코딩을 남기지 않는다.
 

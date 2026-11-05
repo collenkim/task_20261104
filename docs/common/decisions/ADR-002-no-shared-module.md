@@ -2,6 +2,7 @@
 
 | 항목 | 내용 |
 | --- | --- |
+| 분류 | 결정 기록 |
 | 상태 | 확정 (2026-11-04) |
 | 범위 | 멀티 모듈 구성, 서비스 간 코드 의존 |
 | 관련 코드 | `settings.gradle.kts`, `build-logic/src/main/kotlin/task.spring-service.gradle.kts`(project 의존 검사) |

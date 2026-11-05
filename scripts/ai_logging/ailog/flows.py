@@ -16,6 +16,7 @@ from contextlib import contextmanager
 # 작업 폴더의 스크립트가 바뀌어도 실행 중인 명령이 깨지지 않도록 필요한 모듈을 먼저 읽어 둔다.
 from . import config, discover, engine, gitops, policy, rules, snapshot, turns  # noqa: F401
 from .common import SNAPSHOTS_REL, Context, GitError, read_json_ro, utc_now, write_json
+from .progress import step, report
 
 
 class FlowStop(Exception):
@@ -177,9 +178,9 @@ def _pick(ctx: Context, onto: str, c: str) -> str | None:
 def _final_log_checks(ctx: Context, commit: str) -> list[str]:
     """커밋된 비밀값은 중단. 원본보다 뒤처진 로그는 경고만 돌려준다(다음 스냅샷·게시 때 이어서 쌓인다)."""
     pol = engine.build_policy(ctx)
-    comp = snapshot.completeness(ctx, commit, pol)
+    comp = step("원본과 최신 스냅샷 완전성 검사", snapshot.completeness, ctx, commit, pol)
     warnings = [f"logs:{f['rule']} {f.get('session', '')}".rstrip() for f in comp["failures"][:20]]
-    leaks = snapshot.scan_tree_secrets(ctx, commit, pol)
+    leaks = step("과거 스냅샷 포함 비밀 검사", snapshot.scan_tree_secrets, ctx, commit, pol)
     if leaks:
         raise FlowStop("committed_secret_found",
                        "이미 커밋된 값은 새 마스킹 커밋으로 지울 수 없음 - 게시 중단, 이력 정리는 사용자 결정",
@@ -241,7 +242,7 @@ def push_develop(ctx: Context, feature: str, guard_held: bool = False, push: boo
     """develop push 시점의 로그 동기화(사용자 실행).
 
     1) develop에 전체 스냅샷 로그 커밋(검토 대화·실패 기록 포함)
-    2) master..develop의 develop 자체(첫 부모 경로) 로그 전용 커밋 중 master에 없는 스냅샷만 골라
+    2) master..develop의 모든 부모 경로에서 로그 전용 커밋 중 master에 없는 스냅샷만 골라
        `cherry-pick -x`와 같은 커밋을 master 위에 만든다
     3) master의 로그 밖 트리가 그대로인지, 로그 완전성·커밋된 비밀값 여부 확인
     4) `git push --atomic <remote> develop master` 후 원격 ref 확인
@@ -256,7 +257,7 @@ def push_develop(ctx: Context, feature: str, guard_held: bool = False, push: boo
         if cur == main:
             raise FlowStop("run_from_feature_or_develop", "master를 체크아웃한 상태에서는 실행하지 않는다")
         run = _load_run(ctx, "push-develop", fid)
-        _fetch(ctx, remote, main, dev)
+        step("원격 브랜치 확인", _fetch, ctx, remote, main, dev)
         om = gitops.remote_ref(root, remote, main)
         od = gitops.remote_ref(root, remote, dev)
         if not om:
@@ -274,7 +275,7 @@ def push_develop(ctx: Context, feature: str, guard_held: bool = False, push: boo
         _align(ctx, main, om, cur, allow_ahead_log_only=True)
         main_before = gitops.rev(root, f"refs/heads/{main}")
         states = turns.effective_states(ctx)
-        r = snapshot.commit_snapshots(ctx, task, "세션 로그 스냅샷 (develop 검토)", branch=dev, states=states,
+        r = step("최신 원본 검증 및 develop 스냅샷", snapshot.commit_snapshots, ctx, task, "세션 로그 스냅샷 (develop 검토)", branch=dev, states=states,
                                       extra_refs=(main_before,))
         if not r.get("ok"):
             raise FlowStop("develop_log_commit_failed", r.get("reason", ""), snapshot=r.get("snapshot"))
@@ -282,13 +283,14 @@ def push_develop(ctx: Context, feature: str, guard_held: bool = False, push: boo
         _save_run(ctx, run)
         dev_head = gitops.rev(root, f"refs/heads/{dev}")
         in_main = _bases(root, main_before)
-        chain = (gitops.git(root, "rev-list", "--reverse", "--first-parent", f"{main_before}..{dev_head}") or "").split()
+        chain = (gitops.git(root, "rev-list", "--reverse", "--topo-order", f"{main_before}..{dev_head}") or "").split()
         picks = [c for c in chain if _is_log_commit(root, c) and len(gitops.parents(root, c)) == 1
                  and not _commit_bases(root, c) <= in_main]
         new_main = main_before
         applied = []
+        report(f"master에 없는 로그 전용 커밋: {len(picks)}개")
         for c in picks:
-            n = _pick(ctx, new_main, c)
+            n = step(f"로그 커밋 동기화 {len(applied) + 1}/{len(picks)}", _pick, ctx, new_main, c)
             if n:
                 new_main = n
                 applied.append({"from": c, "to": n})
@@ -307,7 +309,8 @@ def push_develop(ctx: Context, feature: str, guard_held: bool = False, push: boo
                   "develop_log_commit": r.get("committed", False), "pushed": False, "warnings": warnings}
         if push:
             refspecs = [f"refs/heads/{dev}:refs/heads/{dev}", f"refs/heads/{main}:refs/heads/{main}"]
-            p = gitops.git_run(root, "push", "--atomic", remote, *refspecs, check=False, timeout=600)
+            p = step("pre-push 검사 및 원격 atomic push", gitops.git_run,
+                     root, "push", "--atomic", remote, *refspecs, check=False, timeout=600)
             if p.returncode != 0:
                 raise FlowStop("push_rejected", p.stderr.decode("utf-8", "replace").strip()[-300:],
                                note="로컬 develop·master 커밋은 남아 있다. 원인 해결 후 같은 명령으로 이어서 진행")

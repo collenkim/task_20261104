@@ -2,6 +2,8 @@
 
 | 항목 | 내용 |
 | --- | --- |
+| 분류 | 공통 기준 |
+| 상태 | 현재 · 적용 예정 사항은 해당 절에서 구분 |
 | 목적 | 사용자 무인증 범위와 그룹 내부 호출 키·비밀 파일 관리 기준 |
 | 범위 | 멤버·그룹 HTTP 요청, 로컬 실행 |
 | 관련 코드 | 그룹 InternalServiceConfiguration, 멤버 GroupClientConfiguration, LocalSecretsTask |

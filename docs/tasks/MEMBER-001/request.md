@@ -2,20 +2,26 @@
 
 | 항목 | 내용 |
 | --- | --- |
+| 분류 | 작업 기록 |
+| 상태 | 이력 · 당시 요청·계획·검증 내용을 보존. 현재 구현 완료 선언이 아님 |
+| 현재 기준 | [문서 색인](../../README.md)의 공통·서비스 정의를 따른다 |
+
+| 항목 | 내용 |
+| --- | --- |
 | 목적 | 멤버 조회 API를 다중 소속·교체 가능한 공급자·엄격한 계약으로 선행 구현한다 |
-| 상태 | 2026-11-05 확정 요청. 구현·완료 상태는 통합 계획과 단계별 검증 기록이 관리하며 이 문서는 요구사항 기준 |
+| 당시 상태 | 2026-11-05 확정 요청. 구현·완료 상태는 통합 계획과 단계별 검증 기록이 관리하며 이 문서는 요구사항 기준 |
 | 범위 | 멤버 서비스 코드·공통 정책/검증 문서. 그룹은 계약 문서만 변경 가능 |
 | 정본 | 저장소의 이 파일. 이전 Temp 단일 소속 요청서를 대체 |
-| 전체 계획 | [member-query-plan](../member-query-plan.md) |
+| 전체 계획 | [member-query-plan](plan.md) |
 
-> 후속 변경: 그룹 제공자·단일 소속·시각·permissionName 제거·Swagger 중계는 [GROUP-001 요청서](GROUP-001.md)가 대체한다. 아래는 MEMBER-001 당시 요구를 보존한다.
+> 후속 변경: 그룹 제공자·단일 소속·시각·permissionName 제거·Swagger 중계는 [GROUP-001 요청서](../GROUP-001/request.md)가 대체한다. 아래는 MEMBER-001 당시 요구를 보존한다.
 
 ## 0. 시작 조건과 문서 우선순위
 
 - 작업 저장소는 `C:\IdeaProjects\task_20261104`, 구현 브랜치는 master에서 만든 `feature/MEMBER-001`이다. 실제 브랜치·HEAD·작업 폴더 상태를 먼저 확인하고 보고한다. 문서가 이미 커밋되어 있다고 추정하지 않는다.
 - [AGENTS.md](../../../AGENTS.md)를 따른다. AI 턴 중 Git 변경 금지, 커밋은 예약, secrets/·.env*·인증 파일 미열람, 로그 원본·스냅샷 직접 편집 금지다.
-- 현재 문서 변경을 유지한 브랜치 준비 방법은 [계획의 단계 절차](../member-query-plan.md#8-단계와-커밋-절차)를 따른다. 자동 stash/reset/clean을 하지 않는다.
-- 기준은 [멤버 API](../../../services/member-service/docs/api.md), [멤버 엔티티](../../../services/member-service/docs/entities.md), [멤버 정책](../../../services/member-service/docs/policies.md), [그룹 내부 계약](../../../services/group-service/docs/api.md), [공통 API](../api-conventions.md), [CQRS](../cqrs.md), [통신](../service-communication.md), [데이터](../data-conventions.md), [테스트](../testing.md)다.
+- 현재 문서 변경을 유지한 브랜치 준비 방법은 [계획의 단계 절차](plan.md#8-단계와-커밋-절차)를 따른다. 자동 stash/reset/clean을 하지 않는다.
+- 기준은 [멤버 API](../../../services/member-service/docs/api.md), [멤버 엔티티](../../../services/member-service/docs/entities.md), [멤버 정책](../../../services/member-service/docs/policies.md), [그룹 내부 계약](../../../services/group-service/docs/api.md), [공통 API](../../common/api-conventions.md), [CQRS](../../common/cqrs.md), [통신](../../common/service-communication.md), [데이터](../../common/data-conventions.md), [테스트](../../common/testing.md)다.
 - 최신 사용자 결정이 우선이다. 문서끼리 충돌하면 구현으로 임의 확정하지 말고 차이와 수정안을 보고한다. 미적용 목표와 현재 동작의 차이는 구현 대상이며 그 자체를 문서 충돌로 오인하지 않는다.
 
 ## 1. 포함·제외와 검증 범위
@@ -29,7 +35,7 @@
 - `GET /api/members`: `members` + `page`, 각 멤버는 `id`, `name`, `groups[]`다.
 - `GET /api/member/{id}`: 기본 정보·등록/생성 시각·생성자 + `groups[]`다. 상세는 no-store.
 - 다중 소속을 오류로 처리하지 않는다. 미소속은 빈 배열. 그룹 핵심 필드는 목록/상세 모두 `id`, `name`, `permission`, `permissionName`. 상세만 선택 `joinedAt`, `pricing`을 추가한다.
-- 정확한 요청/응답 JSON과 타입·필수/null·오류 예시는 [멤버 API](../../../services/member-service/docs/api.md#member-001-공개-계약)가 소유한다. 요청서에서 별도의 JSON 복사본을 관리하지 않는다.
+- 정확한 요청/응답 JSON과 타입·필수/null·오류 예시는 [멤버 API](../../../services/member-service/docs/api.md#get-apimembers)가 소유한다. 요청서에서 별도의 JSON 복사본을 관리하지 않는다.
 - page/size 원시 문자열의 공백·빈 값·음수·소수·숫자 외 문자·Int 범위 초과는 거부한다. page/size/sort 반복은 값이 같아도 400이며 중복을 제거해 처리하지 않는다. 생략에만 기본값을 쓴다.
 - size 범위 검증 후 최대 100을 적용하고 Long으로 offset을 계산해 Integer.MAX_VALUE 이하인지 검증한다. 정렬은 이름 ASC/DESC만 허용하며 ID ASC를 내부 보조 정렬로 고정한다.
 - **기존 pageable 설정 블록과 CommonPolicyTests는 유지한다.** 신규 요청 DTO와 별개다.
@@ -56,7 +62,7 @@
 
 ## 5. 재시도
 
-- [POL-COMM-003](../service-communication.md#pol-comm-003-제한-시간과-재시도)의 capped exponential backoff + Full Jitter를 구현한다.
+- [POL-COMM-003](../../common/service-communication.md#pol-comm-003-제한-시간과-재시도)의 capped exponential backoff + Full Jitter를 구현한다.
 - 기본 추가 재시도 1회, base 200ms, cap 2s. n번째 재시도 상한은 min(cap, base × 2^(n-1)), 실제 대기는 0부터 상한까지 균등 난수다.
 - 설정 최대 3회까지 지원하며 지연 상한·설정 범위·overflow를 검증한다. 정상 1회, 기본 실패 시 최대 2회 전송이다.
 - 응답 전 연결 실패·시간 초과의 GET/HEAD만 대상이다. 4xx/5xx·리다이렉트·계약 오류·변경 요청은 재시도하지 않는다. 본문 수신 중 시간 초과는 별도로 503 분류를 확인한다.
@@ -71,7 +77,7 @@
 
 ## 7. 검증
 
-필수 매트릭스는 [POL-TEST-005~008](../testing.md#pol-test-005-계층과-트랜잭션)을 따른다. 특히 아래를 빠뜨리지 않는다.
+필수 매트릭스는 [POL-TEST-005~008](../../common/testing.md#pol-test-005-계층과-트랜잭션)을 따른다. 특히 아래를 빠뜨리지 않는다.
 
 - 공백/범위/중복/offset 입력, 고정 데이터의 정렬·페이지 건수, 미소속/다중 소속, 그룹별 다른 권한.
 - 두 어댑터 교체와 동일 유스케이스 재사용, 알 수 없는 코드/필드 허용, 선택 정보 부재.

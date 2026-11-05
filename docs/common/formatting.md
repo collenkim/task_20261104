@@ -2,6 +2,8 @@
 
 | 항목 | 내용 |
 | --- | --- |
+| 분류 | 공통 기준 |
+| 상태 | 현재 · 적용 예정 사항은 해당 절에서 구분 |
 | 목적 | Kotlin 코드와 빌드 스크립트를 Google 스타일로 맞추고 빌드에서 검사한다 |
 | 범위 | `services/**/src/**/*.kt`, `services/*/*.gradle.kts`, 루트 `*.gradle.kts`, `build-logic/**` |
 | 관련 코드 | `build-logic/src/main/kotlin/task.spring-service.gradle.kts`, `task.root.gradle.kts`, `.editorconfig` |

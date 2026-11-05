@@ -1,5 +1,11 @@
 # MEMBER-001 4단계 재시도 검증
 
+| 항목 | 내용 |
+| --- | --- |
+| 분류 | 검증 기록 |
+| 상태 | 이력 · 당시 요청·계획·검증 내용을 보존. 현재 구현 완료 선언이 아님 |
+| 현재 기준 | [문서 색인](../../README.md)의 공통·서비스 정의를 따른다 |
+
 | 항목 | 상태 |
 | --- | --- |
 | 기준 | 2026-11-05, `feature/MEMBER-001`, HEAD `c350e54` + 작업 폴더 |
@@ -19,7 +25,7 @@
 - 그룹 명세의 전송 바이트 수신과 JSON 해석을 분리했다. 본문 수신 시간 초과는 503 `GROUP_SERVICE_UNAVAILABLE`, 잘못된 JSON·자료형·매체 유형은 500 `INTERNAL_ERROR`다. 기존 JSON 접미사 매체 유형과 브라우저용 내부 주소·호출 설정 제거는 유지한다.
 - 재시도 로그에는 방법·경로·예외 종류와 시도 횟수만 남긴다. 쿼리 ID·키·응답 본문·원본 예외 메시지는 넣지 않는다. 오류 응답에도 내부 값이 전파되지 않는다.
 
-정확한 설정·실패 정책은 [서비스 통신](service-communication.md#pol-comm-003-제한-시간과-재시도)이 소유한다. fixture는 HTTP 재시도를 사용하지 않는다.
+정확한 설정·실패 정책은 [서비스 통신](../../common/service-communication.md#pol-comm-003-제한-시간과-재시도)이 소유한다. fixture는 HTTP 재시도를 사용하지 않는다.
 
 ## 실행 검사
 
@@ -51,8 +57,8 @@
 - 기본 pageable 설정과 README AI 기록 영역을 유지한다. 그룹 실행 코드·DB·Compose·비밀 파일·AI 로그 원본/스냅샷은 이번 단계에서 변경하지 않는다.
 - 두 운영 jar에서 테스트 지원 코드·Probe·재시도 테스트·ArchUnit이 제외되는지 확인했다. 기본 application.yaml은 재시도 지연 두 항목만 추가됐고 README의 AI 기록 영역은 기준 커밋과 같다.
 - M-07 공유 OpenAPI 스냅샷·읽기 전용 비교·응답 스키마 검사, M-11 실제 Compose/Swagger 업무 실행은 다음 단계다. 실제 그룹 업무 API·제공자 명세 적합성은 미검증이다.
-- 단계별 예약 실행·SHA 확인은 [계획의 절차](member-query-plan.md#8-단계와-커밋-절차)를 따른다. API 빌드 성공을 AI 로그 최신화 완료로 간주하지 않는다. 이 단계는 로깅 설정·치환/허용 목록을 바꾸지 않는다.
+- 단계별 예약 실행·SHA 확인은 [계획의 절차](../../tasks/MEMBER-001/plan.md#8-단계와-커밋-절차)를 따른다. API 빌드 성공을 AI 로그 최신화 완료로 간주하지 않는다. 이 단계는 로깅 설정·치환/허용 목록을 바꾸지 않는다.
 
 문서 41개·로컬 링크/앵커 237개·JSON 예제 5개에서 오류 0이며 `git diff --check`도 통과했다. 상세 결과와 검증 대상 파일 해시는 Git 제외 `build/verification/member-001/stage-4.json`에 보관한다.
 
-예약 직전 턴 상태는 Claude `idle (hook_idle)`, Codex `unknown (turn_started_without_hook)`으로 확인했다. 에이전트가 강제로 idle로 바꾸거나 Git 변경을 실행하지 않는다. 사용자는 모든 AI 턴이 끝난 뒤 필요 시 턴 상태를 정리하고 예약을 실행한다([README](../../README.md#턴-보호와-예약-작업)).
+예약 직전 턴 상태는 Claude `idle (hook_idle)`, Codex `unknown (turn_started_without_hook)`으로 확인했다. 에이전트가 강제로 idle로 바꾸거나 Git 변경을 실행하지 않는다. 사용자는 모든 AI 턴이 끝난 뒤 필요 시 턴 상태를 정리하고 예약을 실행한다([AI 로깅 운영](../../common/ai-logging.md#턴-보호와-예약-작업)).

@@ -266,7 +266,7 @@ def _url_matches(value: bytes, ctx: dict) -> bool:
 class Policy:
     """치환 목록(entries)과 허용 목록으로 만든 마스킹·검증기."""
 
-    def __init__(self, entries: list[dict], allow: Allowlist):
+    def __init__(self, entries: list[dict], allow: Allowlist, cache_dir: str | None = None):
         self.allow = allow
         literals: set[bytes] = set()
         self.home_users: list[re.Pattern] = []
@@ -282,6 +282,12 @@ class Policy:
         # 치환에 영향을 주는 (종류, 값)만으로 계산한다. 값 자체는 어디에도 기록하지 않는다.
         pairs = sorted({(e.get("kind") == "home_user", e.get("value")) for e in entries if isinstance(e.get("value"), str)})
         self.mask_digest = sha256(json.dumps(pairs, ensure_ascii=False).encode("utf-8"))
+        self.cache = None
+        if cache_dir is not None:
+            from .validation_cache import ValidationCache, scanner_digest
+
+            namespace = sha256(self.version.encode() + self.mask_digest.encode() + allow.raw + scanner_digest().encode())
+            self.cache = ValidationCache(cache_dir, namespace)
 
     @property
     def version(self) -> str:
@@ -340,8 +346,27 @@ class Policy:
     # -------------------------------------------------------------- detection
     def detect(self, buf: bytes) -> list[Hit]:
         hits: list[Hit] = []
-        for lineno, line in enumerate(buf.splitlines(), 1):
-            hits.extend(self._detect_line(line, lineno))
+        lines = buf.splitlines()
+        if self.cache is None:
+            for lineno, line in enumerate(lines, 1):
+                hits.extend(self._detect_line(line, lineno))
+            return hits
+        # 기존 검출기는 줄 단위다. 줄 번호/순서는 재사용하지 않고 현재 파일에서 계산한다.
+        keys = [sha256(line) for line in lines]
+        passed = self.cache.known("line", keys)
+        learned = set()
+        for lineno, (line, key) in enumerate(zip(lines, keys), 1):
+            if key in passed or key in learned:
+                continue
+            found = self._detect_line(line, lineno)
+            hits.extend(found)
+            if not found:
+                learned.add(key)
+            if len(learned) >= 500:
+                self.cache.remember("line", learned)
+                passed.update(learned)
+                learned.clear()
+        self.cache.remember("line", learned)
         return hits
 
     def _detect_line(self, line: bytes, lineno: int) -> list[Hit]:

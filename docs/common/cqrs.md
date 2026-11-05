@@ -2,9 +2,11 @@
 
 | 항목 | 내용 |
 | --- | --- |
+| 분류 | 공통 기준 |
+| 상태 | 현재 · 적용 예정 사항은 해당 절에서 구분 |
 | 목적 | 서비스 내부 계층과 조회·변경 경로를 나누는 규칙을 정한다 |
 | 범위 | 각 서비스의 `src/main/kotlin/task/<서비스>/` |
-| 관련 코드 | `services/*/src/main/kotlin/task/*/` (현재는 `presentation/error`, `infrastructure/configuration`, 멤버의 `infrastructure/client`) |
+| 관련 코드 | `services/*/src/main/kotlin/task/*/`의 presentation·application·domain·infrastructure와 각 서비스 계층 검사 |
 
 CQRS는 서비스 내부에서만 적용한다. 서비스마다 DB는 하나이고, 조회 모델과 변경 모델은 코드 경로로 나눈다(별도 조회 DB·이벤트 저장소 없음).
 
@@ -45,7 +47,7 @@ task.<서비스>
 
 ## POL-CQRS-004 교체 가능한 경계
 
-M-02 저장소 출력 포트, M-04 소속 공급자 선택, M-05 입력 포트·QueryHandler와 M-09 계층/실제 호출 트랜잭션 검사를 구현했다. [3단계 기록](member-query-stage-3-verification.md)에서 fixture와 테스트 HTTP 서버의 증거를 구분한다.
+M-02 저장소 출력 포트, M-04 소속 공급자 선택, M-05 입력 포트·QueryHandler와 M-09 계층/실제 호출 트랜잭션 검사를 구현했다. [3단계 기록](../verification/MEMBER-001/stage-3.md)에서 fixture와 테스트 HTTP 서버의 증거를 구분한다.
 
 - 입력 포트는 Query/View를 주고받는 기술 독립적인 조회 계약이다. HTTP Controller는 이를 호출한다. 새로운 내부 진입점도 같은 유스케이스를 사용할 수 있다.
 - 출력 포트는 application이 소유하고 infrastructure가 구현한다. application은 JPA/Spring Data/RestClient/HTTP/Servlet/Jackson/OpenAPI/presentation DTO에 의존하지 않는다.
@@ -58,7 +60,7 @@ M-02 저장소 출력 포트, M-04 소속 공급자 선택, M-05 입력 포트·
 
 - 변경 기능은 `application/command`에 `…Command`·`…CommandHandler`로 둔다.
 - 조회 처리기에서 상태를 바꾸지 않는다.
-- 이번 범위(SETUP-001)에는 변경 기능이 없다.
+- 현재 두 서비스의 업무 API에는 변경 기능이 없다. 조회·기술 중계만 제공한다.
 
 ## 이름 규칙
 

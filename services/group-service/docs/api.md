@@ -2,6 +2,8 @@
 
 | 항목 | 내용 |
 | --- | --- |
+| 분류 | 서비스 정의 |
+| 상태 | 현재 · 적용 예정 사항은 해당 절에서 구분 |
 | 소유 | group-service, GROUP-001 |
 | 접근 | 내부 숫자 IP:포트. X-Internal-Service-Id + 해당 호출자의 X-Internal-Service-Key 필요 |
 | 명세 | openapi.json, 멤버의 /internal-docs/group을 경유한 Swagger 명세·실행 |

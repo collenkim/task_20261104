@@ -2,11 +2,17 @@
 
 | 항목 | 내용 |
 | --- | --- |
+| 분류 | 검증 기록 |
+| 상태 | 이력 · 당시 요청·계획·검증 내용을 보존. 현재 구현 완료 선언이 아님 |
+| 현재 기준 | [문서 색인](../../README.md)의 공통·서비스 정의를 따른다 |
+
+| 항목 | 내용 |
+| --- | --- |
 | 검증일 | 2026-11-05 KST |
 | 브랜치·기준 | `feature/MEMBER-001`, `ef03e16` 위 작업 폴더 |
 | 범위 | M-03 HTTP 소비자 어댑터, M-04 local fixture·공급자 선택·계약 검사 |
-| 상태 | 구현·검증 완료, 커밋 `e5a8c6b` 확인. 검증본과 35개 경로·내용 일치 |
-| 기준 | [통합 계획](member-query-plan.md), [그룹 계약](../../services/group-service/docs/api.md), [멤버 정책](../../services/member-service/docs/policies.md) |
+| 당시 상태 | 구현·검증 완료, 커밋 `e5a8c6b` 확인. 검증본과 35개 경로·내용 일치 |
+| 기준 | [통합 계획](../../tasks/MEMBER-001/plan.md), [그룹 계약](../../../services/group-service/docs/api.md), [멤버 정책](../../../services/member-service/docs/policies.md) |
 
 ## 이전 커밋 확인
 
@@ -66,4 +72,4 @@ JUnit 결과는 `services/member-service/build/test-results/test/`, 요약은 Gi
 - 동일 QueryHandler에 두 공급자를 연결하는 유스케이스 검사·그룹 포트 진입 시 트랜잭션 검사와 정적 계층 검사는 후속이다. 이번 반환 모델 비교를 그 검사의 대체로 보지 않는다.
 - 기존 즉시 재시도 정책은 유지했다. 지수 백오프·Full Jitter는 4단계 M-08 대상이다.
 - OpenAPI 스냅샷, 실제 Compose/Swagger 업무 실행, 실제 그룹 API·제공자 명세 적합성은 아직 검증하지 않았다.
-- 예약 `7e0a650739b3`의 실행 완료를 확인했다. `e5a8c6b3afec5160b8184536bdb40f5137368954`의 35개 경로와 검증 당시 내용이 개행 정규화 비교로 일치한다. develop/master 병합·push는 수행하지 않았다. 후속 공개 조회·시드는 [3단계 기록](member-query-stage-3-verification.md)을 따른다.
+- 예약 `7e0a650739b3`의 실행 완료를 확인했다. `e5a8c6b3afec5160b8184536bdb40f5137368954`의 35개 경로와 검증 당시 내용이 개행 정규화 비교로 일치한다. develop/master 병합·push는 수행하지 않았다. 후속 공개 조회·시드는 [3단계 기록](stage-3.md)을 따른다.

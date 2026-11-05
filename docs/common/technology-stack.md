@@ -2,6 +2,8 @@
 
 | 항목 | 내용 |
 | --- | --- |
+| 분류 | 공통 기준 |
+| 상태 | 현재 · 적용 예정 사항은 해당 절에서 구분 |
 | 목적 | 사용하는 기술과 버전, 버전을 고정한 위치와 확인 근거를 남긴다 |
 | 범위 | 두 서비스와 공통 빌드 |
 | 관련 코드 | `gradle/libs.versions.toml`, `gradle/wrapper/gradle-wrapper.properties`, `services/*/Dockerfile`, `services/*/infra/compose.yaml` |
@@ -39,7 +41,7 @@ Spring Boot BOM이 관리하는 버전(직접 고정하지 않음, 4.1.2 기준)
 - 라이브러리는 Spring Boot BOM 버전을 우선 쓴다. BOM 밖의 플러그인·라이브러리만 `libs.versions.toml`에 고정한다.
 - 버전을 올리면 이 표와 `libs.versions.toml`을 함께 고치고, 두 서비스를 모두 빌드·테스트한다.
 
-MEMBER-001의 계층 검사는 ArchUnit 1.4.2를 고정하고 JDK 21·Kotlin 2.3.21·Spring Boot 4.1.2에서 금지 의존 검출까지 검증한다([3단계 기록](member-query-stage-3-verification.md)). OpenAPI 스키마 검사는 NetworkNT 3.0.6으로 고정했다. [공식 POM](https://github.com/networknt/json-schema-validator/blob/3.0.6/pom.xml)의 Jackson 3.1 계열과 Boot BOM을 사용해 운영·테스트가 모두 3.1.7로 해석되는지 확인했다. 실제 JDK 21·Kotlin·Spring Boot에서 계약 검사를 통과했다. 지수 백오프·Full Jitter는 기존 Spring HTTP 인터셉터와 JDK ThreadLocalRandom/Thread.sleep으로 구현했다. 별도 재시도 라이브러리는 추가하지 않았다([4단계 기록](member-query-stage-4-verification.md)).
+MEMBER-001의 계층 검사는 ArchUnit 1.4.2를 고정하고 JDK 21·Kotlin 2.3.21·Spring Boot 4.1.2에서 금지 의존 검출까지 검증한다([3단계 기록](../verification/MEMBER-001/stage-3.md)). OpenAPI 스키마 검사는 NetworkNT 3.0.6으로 고정했다. [공식 POM](https://github.com/networknt/json-schema-validator/blob/3.0.6/pom.xml)의 Jackson 3.1 계열과 Boot BOM을 사용해 운영·테스트가 모두 3.1.7로 해석되는지 확인했다. 실제 JDK 21·Kotlin·Spring Boot에서 계약 검사를 통과했다. 지수 백오프·Full Jitter는 기존 Spring HTTP 인터셉터와 JDK ThreadLocalRandom/Thread.sleep으로 구현했다. 별도 재시도 라이브러리는 추가하지 않았다([4단계 기록](../verification/MEMBER-001/stage-4.md)).
 
 ## 확인 근거 (2026-11-04)
 
@@ -78,7 +80,7 @@ MEMBER-001의 계층 검사는 ArchUnit 1.4.2를 고정하고 JDK 21·Kotlin 2.3
 - Compose 파일은 최신 Compose Specification을 사용하고 최상위 `version:`을 넣지 않는다. 이를 `29.8.2` 또는 `5.5.1`로 적는 것은 호환성 설정이 아니다([Docker 공식 문서](https://docs.docker.com/reference/compose-file/version-and-name/)).
 - Testcontainers는 Gradle 의존성인 Docker Java 클라이언트로 Engine에 접근한다. 설치된 Docker CLI 버전을 Java 라이브러리 버전으로 사용하지 않으며 `DOCKER_API_VERSION`을 임의로 강제하지 않는다. 실제 API 호환성은 컨테이너를 생성하는 통합 테스트로 확인한다.
 - 확인 명령: `docker version`, `docker compose version`. 실패 시 접근 권한·Docker context·daemon 상태를 구분한다.
-- MariaDB 선정과 운영 기준: [ADR-004](decisions/ADR-004-mariadb.md). 현재 실행 검증: [재검증 기록](setup-verification.md).
+- MariaDB 선정과 운영 기준: [ADR-004](decisions/ADR-004-mariadb.md). 현재 실행 검증: [재검증 기록](../verification/SETUP-001/setup-verification.md).
 
 ## Compose 실행과 빌드
 

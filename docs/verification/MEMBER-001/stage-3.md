@@ -1,5 +1,11 @@
 # MEMBER-001 3단계 공개 조회·local 시드 검증
 
+| 항목 | 내용 |
+| --- | --- |
+| 분류 | 검증 기록 |
+| 상태 | 이력 · 당시 요청·계획·검증 내용을 보존. 현재 구현 완료 선언이 아님 |
+| 현재 기준 | [문서 색인](../../README.md)의 공통·서비스 정의를 따른다 |
+
 | 항목 | 상태 |
 | --- | --- |
 | 기준 | 2026-11-05, `feature/MEMBER-001`, HEAD `e5a8c6b` + 작업 폴더 |
@@ -19,7 +25,7 @@
 - `R__seed_member.sql`은 다섯 고정 멤버를 넣고, 생성자가 정확히 `seed`인 행의 조회용 열만 갱신한다. 생성 감사 정보와 비시드 행을 보존한다. 기본 문자열 collation과 별개로 소유자는 이진 비교한다.
 - `application-local.yaml`에는 기본 migration과 local seed 위치를 함께 지정했다. 실제 프로필 파일을 읽는 Flyway·MariaDB 검사에서 local 최초 적용·무변경 재기동·기본 프로필 미적용을 확인했다. 이 검사에서는 테스트가 시드 위치를 덮어쓰지 않는다.
 
-정확한 HTTP 계약은 [멤버 API](../../services/member-service/docs/api.md)가 소유한다. 그룹 fixture/HTTP 공급자 구현은 [2단계](member-query-stage-2-verification.md) 그대로 사용한다.
+정확한 HTTP 계약은 [멤버 API](../../../services/member-service/docs/api.md)가 소유한다. 그룹 fixture/HTTP 공급자 구현은 [2단계](stage-2.md) 그대로 사용한다.
 
 ## 실행 검사
 
@@ -44,7 +50,7 @@
 ## 3단계 완료 시점의 후속 범위
 
 1. 3단계 예약 실행과 커밋 SHA·46개 경로·내용 일치를 확인했다. AI 턴 중 직접 커밋·병합은 하지 않았다.
-2. 4단계에서 M-08 지수 백오프·Full Jitter를 구현한다. 3단계 당시 HTTP 재시도는 즉시 재시도 정책이며 후속 구현은 [4단계 기록](member-query-stage-4-verification.md)을 따른다.
+2. 4단계에서 M-08 지수 백오프·Full Jitter를 구현한다. 3단계 당시 HTTP 재시도는 즉시 재시도 정책이며 후속 구현은 [4단계 기록](stage-4.md)을 따른다.
 3. 5단계에서 M-07 OpenAPI 스냅샷·읽기 전용 비교·실제 응답 스키마 검사, M-11 Compose/Swagger 업무 실행·독립성을 검증한다.
 4. 기존 local DB에 같은 ID의 비시드 행이 있으면 실행 검증에서 충돌을 보고한다. 이번 자동 테스트는 전용 Testcontainers DB에서 세 가지 비시드 소유자 충돌을 식별하고 데이터를 보존한 증거다. 사용자의 실행 DB를 조사·초기화한 것은 아니다.
 

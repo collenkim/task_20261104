@@ -112,7 +112,8 @@ def save_state(ctx: Context, state: dict) -> None:
 
 
 def build_policy(ctx: Context) -> Policy:
-    return Policy(load_mask_entries(ctx.mask_path), load_allowlist(ctx.allowlist_path))
+    return Policy(load_mask_entries(ctx.mask_path), load_allowlist(ctx.allowlist_path),
+                  cache_dir=ctx.p("verification-cache"))
 
 
 # ------------------------------------------------------------------- reading

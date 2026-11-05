@@ -1,13 +1,19 @@
 # GROUP-001 구현·검증 기록
 
-현재 Swagger 실행 기준은 마지막의 **Swagger 중계 보완 검증** 절과 [구현 요청서](requests/GROUP-001.md)다. 초기 159건 검증과 당시 읽기 전용 화면 결과는 이력으로 보존한다.
+| 항목 | 내용 |
+| --- | --- |
+| 분류 | 검증 기록 |
+| 상태 | 이력 · 당시 요청·계획·검증 내용을 보존. 현재 구현 완료 선언이 아님 |
+| 현재 기준 | [문서 색인](../../README.md)의 공통·서비스 정의를 따른다 |
+
+현재 Swagger 실행 기준은 마지막의 **Swagger 중계 보완 검증** 절과 [구현 요청서](../../tasks/GROUP-001/request.md)다. 초기 159건 검증과 당시 읽기 전용 화면 결과는 이력으로 보존한다.
 
 | 항목 | 결과 |
 | --- | --- |
 | 일자·브랜치 | 2026-11-05, feature/GROUP-001 |
 | 기준 | master c1da7ce에서 시작, 사용자 확정 단일 소속·그룹 상세 6필드 유지 |
 | 코드 상태 | 구현·검증 완료. 커밋·develop/master 병합은 수행하지 않음 |
-| 소유 계약 | [그룹 API](../../services/group-service/docs/api.md), [멤버 API](../../services/member-service/docs/api.md), [계획](group-query-plan.md) |
+| 소유 계약 | [그룹 API](../../../services/group-service/docs/api.md), [멤버 API](../../../services/member-service/docs/api.md), [계획](../../tasks/GROUP-001/plan.md) |
 
 ## 반영 내용
 
@@ -75,7 +81,7 @@ node scripts/verification/swagger-browser.mjs
 ## 문서·Git·AI 기록
 
 - 현재 정책·엔티티·API·계약 공유·실행·공통 문서의 기준을 GROUP-001로 맞췄다. 과거 MEMBER-001 검증 결과와 AI 원본 스냅샷은 편집하지 않았다.
-- 공유 명세는 [그룹](../../services/group-service/docs/openapi.json)과 [멤버](../../services/member-service/docs/openapi.json)가 각각 소유한다. 생성·비교 작업만 공통 빌드 규칙으로 관리한다.
+- 공유 명세는 [그룹](../../../services/group-service/docs/openapi.json)과 [멤버](../../../services/member-service/docs/openapi.json)가 각각 소유한다. 생성·비교 작업만 공통 빌드 규칙으로 관리한다.
 - 커밋·병합·push를 수행하지 않았다. develop에서의 통합 검증과 사용자 feature → master 병합은 후속 단계다.
 - AI 로그는 기존 수집기를 통해 동기화한다. 수집 보류와 Codex hook 실행 확인 여부는 기능 테스트 성공과 별개다. 현재 수집기 정책에서는 보류 세션을 경고와 함께 스냅샷에서 제외하고 코드 커밋·병합은 진행할 수 있다. 보류가 해소되기 전에는 전체 로그 제출 완료로 표시하지 않는다. active/unknown 턴 상태는 별도로 Git 변경을 차단한다.
 
@@ -86,7 +92,7 @@ node scripts/verification/swagger-browser.mjs
 
 사용자 요청으로 그룹 Swagger의 읽기 전용 제한을 해제했다. /internal-docs/group의 서버 주소는 /internal-api/group이며, 멤버의 고정 GET 경로 두 개가 그룹 원본 API로 전달한다. 그룹 포트·원본 명세·상세 6필드·호출자 인증은 유지한다. 정상 JSON과 표준 ProblemDetail의 상태/본문을 유지하므로 그룹 404/500도 Swagger에서 그대로 확인한다. 멤버 업무 조합 API의 오류 변환과는 별도다.
 
-누락됐던 [docs/common/requests/GROUP-001.md](requests/GROUP-001.md)를 생성했다. 범위·계약·단일 소속·시각·멤버 소비자·CQRS·인증·로그·Swagger 중계·테스트·Git 절차를 통합했다. MEMBER-001 요청서는 당시 요구를 보존하고 후속 대체 항목을 연결했다. 공통 정책·실행 안내·서비스 문서·문서 목록의 읽기 전용 규칙도 현재 기준으로 맞췄다.
+누락됐던 [docs/common/requests/GROUP-001.md](../../tasks/GROUP-001/request.md)를 생성했다. 범위·계약·단일 소속·시각·멤버 소비자·CQRS·인증·로그·Swagger 중계·테스트·Git 절차를 통합했다. MEMBER-001 요청서는 당시 요구를 보존하고 후속 대체 항목을 연결했다. 공통 정책·실행 안내·서비스 문서·문서 목록의 읽기 전용 규칙도 현재 기준으로 맞췄다.
 
 실행 결과:
 
