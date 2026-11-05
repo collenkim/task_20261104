@@ -57,3 +57,7 @@ AI 세션 로깅 도구는 [../ai-logging-plan.md](../ai-logging-plan.md)와 저
 
 - [요구사항 재검증](setup-verification.md): 충족·미구현·과거 검증을 구분한다. MEMBER-001 공개 조회·시드·계층 검사는 [3단계 기록](member-query-stage-3-verification.md), 재시도는 [4단계 기록](member-query-stage-4-verification.md), 공유 OpenAPI·실제 Compose/Swagger는 [5단계 기록](member-query-stage-5-verification.md)을 따른다.
 - [멤버 서비스](../../services/member-service/docs/README.md)·[그룹 서비스](../../services/group-service/docs/README.md)의 정책·엔티티·API 정의서를 함께 읽는다.
+
+- [GROUP-001 계획](group-query-plan.md)·[검증 기록](group-query-verification.md): 그룹 제공자·멤버 연동·단일 소속·시각·인증·로그의 현재 기준.
+
+- [GROUP-001 구현 요청서](requests/GROUP-001.md): 확정 요구와 Swagger 중계 실행의 구현·검증 기준.

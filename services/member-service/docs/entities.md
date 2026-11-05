@@ -9,13 +9,13 @@
 | 대상 | 현재 상태 |
 | --- | --- |
 | 업무 JPA 엔티티·Repository | MemberEntity·MemberJpaRepository·JpaMemberReader 구현, `ef03e16`에서 검증 |
-| 업무 테이블 | Flyway V2의 member와 local 전용 R__seed_member.sql |
+| 업무 테이블 | V2 생성 → V3 TIMESTAMP 전환, local R__seed_member.sql |
 | `flyway_schema_history` | Flyway가 생성·관리하는 이력 테이블. 업무 엔티티로 매핑하지 않음 |
 | `jpa_probe` / `JpaProbe` | 테스트 전용. 운영 스키마·jar에 포함하지 않음 |
 
 Spring Data JPA 스타터, Hibernate, Kotlin JPA 기본 생성자·프록시 지원은 구성돼 있다. `ddl-auto=validate`로 검증하고 Flyway만 DDL을 적용한다.
 
-자료형·UTC·문자셋은 [공통 데이터 규칙](../../../docs/common/data-conventions.md)을 따른다. 다음 스키마는 MEMBER-001 M-01에 구현됐으며 실제 MariaDB 검증은 [1단계 기록](../../../docs/common/member-query-stage-1-verification.md)에 있다. 실행 DB에는 다음 앱 기동의 Flyway migrate 때 적용된다.
+자료형·UTC·문자셋은 [공통 데이터 규칙](../../../docs/common/data-conventions.md)을 따른다. 현재 타입은 GROUP-001 V3 기준이다. 초기 스키마의 MariaDB 검증은 [1단계 기록](../../../docs/common/member-query-stage-1-verification.md)에 있다. 실행 DB에는 다음 앱 기동의 Flyway migrate 때 적용된다.
 
 ## member 테이블 (M-01 적용)
 
@@ -27,8 +27,8 @@ Spring Data JPA 스타터, Hibernate, Kotlin JPA 기본 생성자·프록시 지
 | name | VARCHAR(100) | 불가 | 이름 / name |
 | email | VARCHAR(254) | 불가 | 이메일, 이번 범위 고유 제약 없음 / email |
 | address | VARCHAR(255) | 불가 | 주소 / address |
-| registered_at | DATETIME(6) | 불가 | 가입 시각 UTC / registeredDate |
-| created_at | DATETIME(6) | 불가 | 생성 시각 UTC / createdAt |
+| registered_at | TIMESTAMP(6) | 불가 | 가입 시각 UTC / registeredDate |
+| created_at | TIMESTAMP(6) | 불가 | 생성 시각 UTC / createdAt |
 | created_by | VARCHAR(50) | 불가 | 생성 주체 / createdBy |
 
 - `ix_member_name_id(name, id)`를 적용했다. 검증 데이터셋에서 ASC는 Using index, DESC·ID ASC는 Using index; Using filesort였다. 대량 데이터 성능 보장으로 해석하지 않는다.
@@ -42,10 +42,12 @@ Spring Data JPA 스타터, Hibernate, Kotlin JPA 기본 생성자·프록시 지
 
 | 멤버 ID | 이름 | fixture 소속 | 목적 |
 | --- | --- | --- | --- |
-| tu3fgxd45k | user1 | arutjf9348/Editor, demo000002/Viewer | 다중 소속·그룹별 다른 권한 |
+| tu3fgxd45k | user1 | arutjf9348/Editor | 단일 소속 |
 | dj8fy4bewk | user2 | arutjf9348/Viewer | 단일 소속 |
 | k2m9x0p1q3 | user3 | 빈 배열 | 명시적 미소속 |
 | j0n8k2m4p6 | 동명이인 | 빈 배열 | 이름 동률·ID 보조 정렬 |
-| q1w2e3r4t5 | 동명이인 | demo000002/Editor | 이름 동률·소속 조합 |
+| q1w2e3r4t5 | 동명이인 | demo000002/Admin | 이름 동률·소속 조합 |
 
-`arutjf9348`은 개발팀, `demo000002`는 프로젝트팀으로 둔다. 이메일은 `<멤버ID>@example.invalid`, 주소는 가상 문자열이다. 시드의 등록/생성 시각은 명시적인 UTC 고정값, 생성자는 `seed`다. fixture에는 다섯 ID가 모두 존재해야 하며 실제 그룹 데이터를 복제하지 않는다. 미래 그룹 시드가 준비되면 동일 테스트 ID를 사용할 수 있지만 데이터 자동 동기화를 가정하지 않는다.
+`arutjf9348`은 Test1, `demo000002`는 프로젝트팀으로 둔다. 이메일은 `<멤버ID>@example.invalid`, 주소는 가상 문자열이다. 시드의 등록/생성 시각은 명시적인 UTC 고정값, 생성자는 `seed`다. fixture에는 다섯 ID가 모두 존재해야 하며 실제 그룹 데이터를 복제하지 않는다. 그룹 시드와 동일 합성 ID를 사용하되 DB 사이 자동 동기화를 가정하지 않는다.
+
+V2 파일은 변경하지 않는다. V3가 UTC에서 시각 범위·zero date·NULL을 검사하고 타입만 전환한다. 멤버 가입일과 그룹 가입일은 독립이다. 백업·복원은 공통 데이터 정책을 따른다.

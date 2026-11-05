@@ -45,7 +45,7 @@
 
 - `python scripts/verification/runtime-smoke.py`: 실제 Compose 네트워크·키 거부·명세 전달·호스트 포트·멤버 업무 API·공유 명세 일치를 검사한다.
 - `python scripts/verification/runtime-smoke.py --independence`: 그룹 중단 중 멤버 재기동·fixture 조회를 확인하고 서비스별 앱·DB를 단독 실행으로 전환한 뒤 루트 모드로 복구한다. 볼륨을 삭제하지 않는다. 단독 모드가 이미 실행 중이면 중단한다.
-- `node scripts/verification/swagger-browser.mjs`: Windows Edge headless에서 실제 명세를 읽고 선택·읽기 전용·외부 직접 요청 없음을 확인한다. 실제 멤버 목록·상세 Try it out과 다중 소속을 검사한다. 테스트 명세를 주입하지 않고 실제 입력 이벤트·파라미터 상태 반영 후 전송을 확인한다. 그룹 명세는 참고용이며 업무 제공자 실행 검증은 아니다.
+- `node scripts/verification/swagger-browser.mjs`: Windows Edge headless에서 실제 명세를 읽고 선택·읽기 전용·외부 직접 요청 없음을 확인한다. 실제 멤버 목록·상세 Try it out과 다중 소속을 검사한다. 테스트 명세를 주입하지 않고 실제 입력 이벤트·파라미터 상태 반영 후 전송을 확인한다. GROUP-001부터 그룹 요약·상세도 멤버 중계의 Try it out으로 실행하고 응답·키 비노출·원격 직접 요청 없음을 검사한다.
 - 브라우저 검사에는 Node.js 24와 로컬 Edge를 사용한다. 다른 설치 경로는 TASK_BROWSER_EXECUTABLE, 멤버 주소는 TASK_VERIFY_ORIGIN으로 지정한다. 검사 프로필은 Git 제외 build/verification/에 남는다.
 
 ## POL-TEST-005 계층과 트랜잭션

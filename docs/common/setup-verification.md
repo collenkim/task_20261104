@@ -1,6 +1,6 @@
 # 프로젝트 구성과 MEMBER-001 검증
 
-현재 MEMBER-001 상태는 이 문서 끝의 2단계 기록과 [통합 계획](member-query-plan.md)을 따른다. 아래 SETUP-001 표는 당시 구성 검증이며 새 업무 기능의 검증을 대신하지 않는다.
+현재 상태는 [GROUP-001 검증](group-query-verification.md)과 [계획](group-query-plan.md)을 따른다. 아래 MEMBER-001 기록은 당시 검증이며 단일 소속·시각·표시명 계약은 GROUP-001이 대체한다. 아래 SETUP-001 표는 당시 구성 검증이며 새 업무 기능의 검증을 대신하지 않는다.
 
 | 항목 | 내용 |
 | --- | --- |

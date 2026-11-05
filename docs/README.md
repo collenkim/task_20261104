@@ -16,8 +16,10 @@
   - 구조 변경 항목과 완료 기준은 [구조 변경 계획](common/structure-change-plan.md)에 있다.
 - 루트 `docker compose up -d --build --wait`로 두 앱과 DB를 실행한다. 서비스 소유 Compose도 단독 실행할 수 있다.
 - 공통 실행 규칙과 기술 정책은 `docs/common/`, 업무 정책·엔티티·API 계약은 `services/<서비스>/docs/`에서 관리한다.
-- 현재는 멤버 목록·상세 API, 다중 소속 결합, 조회 저장소·소속 공급자와 local 시드를 구현했다. 실제 그룹 업무 제공자와의 연동은 아직 없다. 완료 여부를 Swagger 노출이나 설정 존재만으로 판단하지 않는다.
-- MEMBER-001의 [통합 계획](common/member-query-plan.md)·[구현 요청서](common/requests/MEMBER-001.md)가 기준이다. [1단계 저장소](common/member-query-stage-1-verification.md)와 [2단계 공급자](common/member-query-stage-2-verification.md)의 검증 범위를 구분한다. [3단계 공개 조회·시드](common/member-query-stage-3-verification.md)에서는 입력·결합·프로필·계층/트랜잭션을 검증한다. [4단계 재시도](common/member-query-stage-4-verification.md)에서 지수 백오프·Full Jitter를 구현했다. [5단계 계약·실행](common/member-query-stage-5-verification.md)에서 공유 OpenAPI·실제 Compose/Swagger 업무 검증을 완료했다. 소비자는 [멤버 계약 공유](../services/member-service/docs/contracts.md)를 따른다. feature 커밋 확인·develop 검증·사용자 master 반영 절차는 남아 있다.
+GROUP-001에서 그룹 API와 멤버 HTTP 연동을 구현한다. 현재 멤버당 0~1개, 그룹 상세 6필드 단일 객체, 권한 code만 제공한다. 저장 UTC TIMESTAMP(6), 응답 한국 시간 분 문자열이다. 루트 Compose는 http, 멤버 단독 local은 fixture다.
+
+[그룹 구현 요청서](common/requests/GROUP-001.md)·[그룹 계획](common/group-query-plan.md)·[검증 기록](common/group-query-verification.md)을 기준으로 확인한다. MEMBER-001 기록은 과거 증거로 보존하며 현재 소속·시각·표시명 계약은 GROUP-001이 대체한다.
+
 
 ## 공통 규칙 읽는 순서
 

@@ -8,6 +8,8 @@
 | 정본 | 저장소의 이 파일. 이전 Temp 단일 소속 요청서를 대체 |
 | 전체 계획 | [member-query-plan](../member-query-plan.md) |
 
+> 후속 변경: 그룹 제공자·단일 소속·시각·permissionName 제거·Swagger 중계는 [GROUP-001 요청서](GROUP-001.md)가 대체한다. 아래는 MEMBER-001 당시 요구를 보존한다.
+
 ## 0. 시작 조건과 문서 우선순위
 
 - 작업 저장소는 `C:\IdeaProjects\task_20261104`, 구현 브랜치는 master에서 만든 `feature/MEMBER-001`이다. 실제 브랜치·HEAD·작업 폴더 상태를 먼저 확인하고 보고한다. 문서가 이미 커밋되어 있다고 추정하지 않는다.
