@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import hashlib
 
 from .common import (
     LARGE_FILE_BYTES,
@@ -139,11 +140,16 @@ def latest(entries: list[tuple[str, dict]], policy_version: str):
 # ------------------------------------------------------------------- create
 def _prefix_problems(rel: str, data: bytes, prior: list[tuple[int, str]]) -> list[str]:
     out = []
+    digest = hashlib.sha256()
+    position = 0
     for n, h in sorted(set(prior)):
         if len(data) < n:
             out.append("original_truncated")
-        elif sha256(data[:n]) != h:
-            out.append("original_rewritten")
+        else:
+            digest.update(memoryview(data)[position:n])
+            position = n
+            if digest.hexdigest() != h:
+                out.append("original_rewritten")
     return sorted(set(out))
 
 
@@ -387,17 +393,34 @@ def scan_tree_secrets(ctx: Context, treeish: str, policy=None) -> list[dict]:
 
     policy = policy or build_policy(ctx)
     files = gitops.tree_files(ctx.root, treeish, SNAPSHOTS_REL)
-    blobs = gitops.cat_blobs(ctx.root, {oid for p, (_, oid) in files.items() if "/files/" in p})
-    out = []
+    from .progress import report
+
+    paths = {}
     for path, (_, oid) in sorted(files.items()):
-        if "/files/" not in path:
-            continue
-        data = blobs.get(oid, b"")
-        if policy.residue(data):
-            out.append({"rule": "committed_mask_residue", "file": path})
-        for h in policy.detect(data):
-            out.append({"rule": "committed_" + h.rule, "file": path, "line": h.line})
-    return out
+        if "/files/" in path:
+            paths.setdefault(oid, []).append(path)
+    cache = getattr(policy, "cache", None)
+    passed = cache.known("git-blob", paths) if cache else set()
+    report(f"스냅샷 비밀 검사: 고유 파일 {len(paths)}개, 기존 통과 {len(passed)}개, 검사 대상 {len(paths) - len(passed)}개")
+    out = []
+    done = len(passed)
+    for batch in gitops.blob_batches(ctx.root, set(paths) - passed):
+        blobs = gitops.cat_blobs(ctx.root, batch)
+        for oid in batch:
+            if oid not in blobs:
+                issues = [{"rule": "committed_blob_unreadable"}]
+            else:
+                data = blobs[oid]
+                # residue는 줄을 가로지르는 치환도 검사하므로 전체 바이트로 검사한다.
+                issues = [{"rule": "committed_mask_residue"}] if policy.residue(data) else []
+                issues += [{"rule": "committed_" + h.rule, "line": h.line} for h in policy.detect(data)]
+            for path in paths[oid]:
+                out.extend(dict(p, file=path) for p in issues)
+            if not issues and cache:
+                cache.remember("git-blob", [oid])
+            done += 1
+        report(f"스냅샷 비밀 검사: {done}/{len(paths)}개 확인")
+    return sorted(out, key=lambda x: (x["file"], x.get("line", 0), x["rule"]))
 
 
 # ------------------------------------------------------------ live coverage

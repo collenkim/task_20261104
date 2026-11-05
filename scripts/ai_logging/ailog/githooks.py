@@ -1,6 +1,6 @@
 """Git hook 검사(commit-msg, pre-push)와 런타임 설치.
 
-- 검사는 읽기 전용이다: 파일·index·ref를 바꾸지 않는다(잠금도 잡지 않는다).
+- 검사는 원본·로그·index·ref를 바꾸지 않는다. Git 제외 검증 캐시에 통과 해시만 기록할 수 있다.
 - pre-push는 쌓인 로그 이력을 깨는 경우와 마스킹 실패만 막고, 로그 뒤처짐은 경고만 한다(다음 push에 이어서 쌓임).
 - 런타임: .git/ai-logging/runtime/ 에 hook 스크립트와 수집기 사본을 두고 core.hooksPath를 그 hooks로 지정한다.
   로깅 설정이 없는 브랜치(최초 도입 전 master 등)로 전환해도 hook이 사라지지 않는다.
@@ -93,7 +93,7 @@ def _tree_policy(ctx: Context, commit: str):
         oid = next(iter(files.values()))[1]
         raw = gitops.cat_blobs(ctx.root, [oid]).get(oid, b"")
     allow = Allowlist(json.loads(raw.decode("utf-8")) if raw else {}, raw)
-    return Policy(load_mask_entries(ctx.mask_path), allow)
+    return Policy(load_mask_entries(ctx.mask_path), allow, cache_dir=ctx.p("verification-cache"))
 
 
 def check_pre_push(ctx: Context, remote: str, lines: list[str]) -> tuple[list[str], list[str]]:

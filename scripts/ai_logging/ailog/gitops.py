@@ -157,6 +157,30 @@ def cat_blobs(root: str, oids) -> dict[str, bytes]:
     return out
 
 
+def blob_batches(root: str, oids, max_bytes: int = 32 * 1024 * 1024):
+    """전체 로그를 한꺼번에 메모리에 올리지 않는다. 큰 파일 하나는 단독 배치로 읽는다."""
+    oids = sorted(set(oids))
+    if not oids:
+        return
+    r = git_run(root, "cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)",
+                input=("\n".join(oids) + "\n").encode(), timeout=120)
+    sizes = {}
+    for line in r.stdout.decode().splitlines():
+        parts = line.split()
+        if len(parts) == 3 and parts[1] == "blob":
+            sizes[parts[0]] = int(parts[2])
+    batch, total = [], 0
+    for oid in oids:
+        size = sizes.get(oid, 0)
+        if batch and (total + size > max_bytes or len(batch) >= 128):
+            yield batch
+            batch, total = [], 0
+        batch.append(oid)
+        total += size
+    if batch:
+        yield batch
+
+
 def hash_files(root: str, rel_paths: list[str]) -> dict[str, str]:
     """작업 폴더 파일을 필터 없이(바이트 그대로) blob으로 저장하고 oid를 돌려준다."""
     if not rel_paths:
