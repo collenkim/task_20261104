@@ -32,9 +32,11 @@ class GroupApiDocsTests {
   fun reset() {
     status.set(200)
     delay.set(0)
+    bodyDelay.set(0)
     hits.set(0)
     receivedKey.set(null)
     body.set(SPEC)
+    contentType.set("application/json")
   }
 
   @Test
@@ -111,12 +113,52 @@ class GroupApiDocsTests {
     assertThat(hits.get()).isEqualTo(2)
   }
 
+  @Test
+  fun `명세 본문 수신 중 시간 초과는 재시도 없이 503으로 알린다`() {
+    bodyDelay.set(1000)
+    mockMvc.get("/internal-docs/group").andExpect {
+      status { isServiceUnavailable() }
+      jsonPath("$.code") { value("GROUP_SERVICE_UNAVAILABLE") }
+    }
+    assertThat(hits.get()).isEqualTo(1)
+  }
+
+  @Test
+  fun `잘못된 JSON과 명세 자료형은 재시도 없이 500으로 알린다`() {
+    val invalidBodies =
+      listOf("{", "[]", "null", "", "{}", """{"openapi":3,"info":{},"paths":{}}""")
+    for (invalid in invalidBodies) {
+      body.set(invalid)
+      mockMvc.get("/internal-docs/group").andExpect {
+        status { isInternalServerError() }
+        jsonPath("$.code") { value("INTERNAL_ERROR") }
+      }
+    }
+    assertThat(hits.get()).isEqualTo(invalidBodies.size)
+  }
+
+  @Test
+  fun `JSON 매체 유형만 허용하고 JSON 접미사는 유지한다`() {
+    for (invalid in listOf("text/plain", "invalid-media-type")) {
+      contentType.set(invalid)
+      mockMvc.get("/internal-docs/group").andExpect {
+        status { isInternalServerError() }
+        jsonPath("$.code") { value("INTERNAL_ERROR") }
+      }
+    }
+    contentType.set("application/vnd.openapi+json")
+    mockMvc.get("/internal-docs/group").andExpect { status { isOk() } }
+    assertThat(hits.get()).isEqualTo(3)
+  }
+
   companion object {
     private val status = AtomicInteger(200)
     private val delay = AtomicInteger()
+    private val bodyDelay = AtomicInteger()
     private val hits = AtomicInteger()
     private val receivedKey = AtomicReference<String?>()
     private val body = AtomicReference<String>()
+    private val contentType = AtomicReference("application/json")
     private val executor = Executors.newCachedThreadPool()
     private val server =
       HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
@@ -128,10 +170,17 @@ class GroupApiDocsTests {
           val pause = delay.get()
           runCatching {
             Thread.sleep(pause.toLong())
-            exchange.responseHeaders.set("Content-Type", "application/json")
+            exchange.responseHeaders.set("Content-Type", contentType.get())
             exchange.responseHeaders.set("Location", "/unexpected-redirect")
             exchange.sendResponseHeaders(responseStatus, responseBody.size.toLong())
-            exchange.responseBody.use { it.write(responseBody) }
+            exchange.responseBody.use {
+              if (bodyDelay.get() > 0) {
+                it.write(responseBody, 0, 1)
+                it.flush()
+                Thread.sleep(bodyDelay.get().toLong())
+                it.write(responseBody, 1, responseBody.size - 1)
+              } else it.write(responseBody)
+            }
           }
           exchange.close()
         }

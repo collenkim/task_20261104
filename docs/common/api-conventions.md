@@ -50,7 +50,7 @@
 - 그룹의 `INTERNAL_ACCESS_DENIED`: 403 / 내부 호출 거부 / 내부 서비스 호출 키를 확인할 수 없습니다.
 - 위 서비스 전용 코드는 해당 서비스 enum에만 둔다. 표의 일반 코드는 각 서비스가 유지한다.
 - 내부 주소·그룹 응답 본문·토큰을 사용자 오류 응답에 넣지 않는다.
-- 구현: `ProblemDetailsExceptionHandler`(MVC 예외), `ErrorCode`.
+- 구현: `ProblemDetailsExceptionHandler`(MVC 예외), `ErrorCode`. 멤버 공개 조회 계약은 `type`을 필수로 정의하므로 `MemberProblemDetail`에서 기본 `about:blank`를 명시한다. 그룹 오류 직렬화는 이번 멤버 작업에서 변경하지 않는다.
 
 ## POL-API-003 페이지네이션
 
@@ -59,9 +59,12 @@
 | 요청 파라미터 | `page`(0부터), `size`, `sort` |
 | 기본 크기 | 20 (`spring.data.web.pageable.default-page-size`) |
 | 최대 크기 | 100 (`max-page-size`). 더 큰 값을 요청하면 100으로 맞춘다 |
-| 응답 형식 | Spring Data `PagedModel` 형식(`serialization-mode: via-dto`): `content`와 `page{size, number, totalElements, totalPages}` |
+| 응답 형식 | 페이지 메타데이터 `page{size, number, totalElements, totalPages}` 유지. 목록 키는 서비스 계약이 소유(MEMBER-001: `members`) |
 
-- 목록 API는 `Pageable`을 받고 `Page`를 돌려준다. 제한 없는 전체 목록 API는 만들지 않는다.
+- 기존 `spring.data.web.pageable` 블록(기본 20·최대 100·via-dto)과 기존 공통 정책 테스트는 유지한다. 현재 테스트 API는 Pageable을 사용한다.
+- MEMBER-001 업무 API는 원시 파라미터 개수와 형식을 검증한 요청 DTO를 Query로 변환하고, 명시적 응답 DTO를 반환한다. 작업 폴더 구현·검증 상태는 [3단계 기록](member-query-stage-3-verification.md)에 있다. application에 Pageable/Page를 노출하지 않는다. 목록 키를 `members`로 정한 것은 서비스별 명시적 계약이며 기존 API의 `content`를 일괄 변경하지 않는다.
+- page/size/sort는 각각 한 번만 받는다. 공백·빈 값·음수·정수 범위 초과·반복은 400이다. 생략에만 기본값을 적용하고 size의 범위 검증 후 최대 크기를 적용한다. offset은 Long으로 계산한 뒤 JPA Integer 범위 안인지 검증한다. 정확한 경계는 서비스 API 문서가 소유한다.
+- 제한 없는 전체 목록 API는 만들지 않는다. Spring 내부 PageImpl 직렬화 결과를 외부 계약으로 사용하지 않는다.
 
 ## POL-API-004 API 문서
 
@@ -74,5 +77,19 @@
 - 그룹 Swagger UI는 제공하지 않는다. 외부 온라인 validator와 브라우저의 그룹 직접 요청도 사용하지 않는다.
 - 명세 전달에는 내부 키가 서버에서 추가되며 사용자에게 키를 입력받거나 전달하지 않는다. 사용자 지정 URL을 전달하는 범용 프록시는 제공하지 않는다.
 - 그룹 명세 장애는 503, 내부 키 거부·명세 계약 오류는 500이다. 멤버 자기 명세와 readiness는 계속 제공한다.
-- 위 동작은 local과 기본 프로필에 동일하게 적용한다. local은 개발 주소 기본값만 추가한다.
-- 업무 API가 아직 없으므로 운영 명세 paths는 비어 있을 수 있다. 기능을 만들 때 서비스 `docs/api.md`와 구현·명세를 함께 갱신한다.
+- 위 명세 노출 정책은 local과 기본 프로필에 동일하게 적용한다. local 업무 조회는 임시 그룹 fixture를 기본으로 사용하지만 그룹 명세 전달은 실제 HTTP를 유지한다.
+- 멤버 업무 명세는 목록·상세 경로와 스키마를 제공한다. 그룹 업무 API는 아직 미구현이다. 기능을 만들 때 서비스 `docs/api.md`와 구현·명세를 함께 갱신한다.
+
+## POL-API-005 시각·배열·코드 계약
+
+- 신규 업무 API의 시각은 UTC RFC 3339 문자열과 OpenAPI `format: date-time`을 사용한다. DB 마이크로초 정밀도를 보존하고 서버에서 화면 표시용 분 단위로 절삭하지 않는다. [OpenAPI 시각 형식](https://spec.openapis.org/registry/format/date-time)
+- 가입 시각·소속 시각·생성 시각은 의미를 구분한다. 필드 이름·필수/선택·null 의미는 서비스 계약에 고정한다.
+- 다중 관계는 배열이다. 관계가 없으면 빈 배열이며 선택 부가 정보가 없으면 정의된 null 규칙을 따른다. 장애를 빈 배열로 바꾸지 않는다.
+- 외부 소유 코드의 정의를 소비자 enum으로 복제하지 않는다. 문자열 코드와 표시명을 분리하고 알 수 없는 유효 코드를 수용한다. 코드명은 분기 조건으로 사용하지 않는다.
+
+## POL-API-006 공유 계약과 스냅샷
+
+- 코드·서비스 API 정의서를 검토한 뒤 springdoc으로 OpenAPI를 생성한다. 생성 명세를 저장소에 보관하고, 손으로 따로 수정하지 않는다.
+- operationId·스키마명·입력 범위·필수/null·오류·성공 예제를 고정한다. 상세 시그니처 공유는 OpenAPI로 하며 공유 런타임 DTO 모듈을 만들지 않는다.
+- 환경별 서버 주소와 테스트 전용 API가 스냅샷에 섞이지 않도록 [테스트 규칙](testing.md#pol-test-007-openapi-스냅샷과-계약)을 적용한다.
+- 일반 빌드는 읽기 전용으로 비교한다. 갱신은 별도 명령이며 필드 삭제·필수화·타입 변경은 소비자 영향 검토를 거친다. 스냅샷 일치와 실제 제공자 적합성 검증을 구분한다.

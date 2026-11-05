@@ -14,6 +14,8 @@ import org.springframework.web.method.annotation.HandlerMethodValidationExceptio
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler
 import task.member.application.exception.GroupServiceConfigurationException
 import task.member.application.exception.GroupServiceUnavailableException
+import task.member.application.exception.InvalidMemberQueryException
+import task.member.application.exception.MemberNotFoundException
 
 /**
  * 모든 오류 응답을 RFC 9457 ProblemDetail + `code`로 만든다(POL-API-002).
@@ -24,6 +26,20 @@ import task.member.application.exception.GroupServiceUnavailableException
 @RestControllerAdvice
 class ProblemDetailsExceptionHandler : ResponseEntityExceptionHandler() {
   private val log = LoggerFactory.getLogger(javaClass)
+
+  @ExceptionHandler(InvalidMemberQueryException::class)
+  fun handleInvalidMemberQuery(): ProblemDetail = memberProblem(ErrorCode.VALIDATION_FAILED)
+
+  @ExceptionHandler(MemberNotFoundException::class)
+  fun handleMemberNotFound(): ProblemDetail = memberProblem(ErrorCode.NOT_FOUND)
+
+  private fun memberProblem(code: ErrorCode): ProblemDetail =
+    ProblemDetail.forStatusAndDetail(HttpStatusCode.valueOf(code.status), code.description)
+      .apply {
+        title = code.codeName
+        setProperty(CODE, code.code)
+      }
+      .let(::MemberProblemDetail)
 
   override fun handleExceptionInternal(
     ex: Exception,
@@ -45,7 +61,13 @@ class ProblemDetailsExceptionHandler : ResponseEntityExceptionHandler() {
       problem.title = code.codeName
       if (problem.detail == null) problem.detail = code.description
     }
-    return response
+    return response?.let {
+      ResponseEntity(
+        if (problem != null) MemberProblemDetail(problem) else it.body,
+        it.headers,
+        it.statusCode,
+      )
+    }
   }
 
   @ExceptionHandler(GroupServiceUnavailableException::class)
@@ -61,6 +83,7 @@ class ProblemDetailsExceptionHandler : ResponseEntityExceptionHandler() {
         title = code.codeName
         setProperty(CODE, code.code)
       }
+      .let(::MemberProblemDetail)
   }
 
   @ExceptionHandler(Exception::class)
@@ -74,6 +97,7 @@ class ProblemDetailsExceptionHandler : ResponseEntityExceptionHandler() {
         title = ErrorCode.INTERNAL_ERROR.codeName
         setProperty(CODE, ErrorCode.INTERNAL_ERROR.code)
       }
+      .let(::MemberProblemDetail)
   }
 
   companion object {

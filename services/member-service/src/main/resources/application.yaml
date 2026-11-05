@@ -57,8 +57,12 @@ springdoc:
     path: /swagger-ui.html
 
 task:
+  group-membership:
+    source: ${TASK_GROUP_MEMBERSHIP_SOURCE:http}
   group-client:
     base-url: ${TASK_GROUP_CLIENT_BASE_URL:}
     connect-timeout: 2s
     read-timeout: 3s
     max-retries: 1
+    retry-base-delay: 200ms
+    retry-max-delay: 2s

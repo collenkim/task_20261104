@@ -52,16 +52,20 @@ class GroupClientTests {
     return "http://127.0.0.1:${s.address.port}"
   }
 
-  private fun client(baseUrl: String, readTimeout: Duration = Duration.ofSeconds(3)): RestClient =
-    GroupClientConfiguration()
-      .groupRestClient(
-        RestClient.builder(),
-        GroupClientProperties(
-          baseUrl = baseUrl,
-          readTimeout = readTimeout,
-        ),
-        InternalServiceProperties(TestProperties.internalKey),
-      )
+  private fun client(baseUrl: String, readTimeout: Duration = Duration.ofSeconds(3)): RestClient {
+    val configuration = GroupClientConfiguration()
+    val properties = GroupClientProperties(baseUrl = baseUrl, readTimeout = readTimeout)
+    return configuration.groupRestClient(
+      RestClient.builder(),
+      properties,
+      InternalServiceProperties(TestProperties.internalKey),
+      configuration.groupRetryInterceptor(
+        properties,
+        configuration.retryJitter(),
+        configuration.retrySleeper(),
+      ),
+    )
+  }
 
   @Test
   fun `사용자 지정 내부 헤더는 서버 설정 키로 대체한다`() {

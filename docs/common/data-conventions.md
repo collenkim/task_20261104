@@ -22,10 +22,10 @@
 ## POL-DATA-002 Flyway
 
 - 스키마 변경은 Flyway만 수행한다. JPA는 `ddl-auto=validate`, `open-in-view=false`다.
-- 현재 검색 위치: `classpath:db/migration/mariadb`. 이름은 `V<번호>__<설명>.sql`이고 SQL 개행은 LF다.
+- 기본 검색 위치: `classpath:db/migration/mariadb`. 멤버 local 프로필은 `classpath:db/seed/local`도 추가한다. 이름은 `V<번호>__<설명>.sql`이고 SQL 개행은 LF다.
 - DB는 Compose가 먼저 생성한다. Flyway `create-schemas=false`로 실행하며 이력은 각 DB의 `flyway_schema_history`에 저장한다.
 - 적용한 MariaDB 마이그레이션 내용은 수정하지 않고 다음 버전을 추가한다.
-- MariaDB V1은 최초 이력만 만든다. 업무 테이블은 후속 기능에서 V2부터 추가한다. 운영 경로에 시드 데이터나 테스트 테이블을 넣지 않는다.
+- MariaDB V1은 최초 이력만 만든다. 멤버 V2는 member 테이블을 추가했고 그룹 업무 테이블은 후속 기능 대상이다. 운영 마이그레이션 경로에 시드 데이터나 테스트 테이블을 넣지 않는다.
 - 테스트의 `db/test-migration/V900__jpa_probe.sql`은 테스트 리소스에서만 추가된다. 운영 jar에는 포함하지 않는다.
 
 ## POL-DATA-003 다른 서비스 데이터
@@ -42,3 +42,16 @@
 - `utf8mb4_unicode_ci`는 기본적으로 대소문자를 구분하지 않는다. 이메일·식별자의 비교 및 고유성은 업무 정책을 먼저 정하고 열 정렬·인덱스에 반영한다.
 - 엔티티는 일반 클래스이며 Kotlin `plugin.jpa`와 `allOpen`을 사용한다. 조회 트랜잭션은 `readOnly=true`, API에는 엔티티 대신 조회 DTO를 반환한다.
 - 실제 업무 엔티티 현황은 [멤버 엔티티](../../services/member-service/docs/entities.md)·[그룹 엔티티](../../services/group-service/docs/entities.md)를 따른다.
+
+## POL-DATA-004 local 시드
+
+상태: MEMBER-001 M-06 구현. 실제 프로필 파일과 MariaDB로 local 최초/재기동·체크섬 변경·기본 프로필 격리를 검사한다([3단계 기록](member-query-stage-3-verification.md)). 운영 Flyway 기본 경로에는 시드를 추가하지 않는다.
+
+- local의 `spring.flyway.locations`에는 `classpath:db/migration/mariadb`와 `classpath:db/seed/local`을 모두 명시한다. 프로필 목록 덮어쓰기 때문에 기존 마이그레이션 경로를 빠뜨리지 않는다.
+- 시드는 `R__seed_member.sql`처럼 repeatable로 둔다. 최초 migrate와 체크섬 변경 시, 대기 중인 버전 마이그레이션 뒤 실행된다. 같은 파일의 단순 재기동에서는 다시 실행되지 않는다. [Flyway 동작](https://documentation.red-gate.com/flyway/flyway-concepts/migrations/repeatable-migrations)
+- 매 기동 강제 실행용 timestamp placeholder, 무작위 ID, CURRENT_TIMESTAMP 기반 감사 정보 덮어쓰기를 사용하지 않는다. 값은 고정된 합성 데이터이며 이메일은 example.invalid를 사용한다.
+- 시드 ID가 없으면 삽입한다. 기존 `created_by`가 이진 비교로 정확히 `seed`인 동일 ID만 이름·이메일·주소·가입 시각을 정의된 값으로 갱신할 수 있고 생성 시각·생성자는 유지한다. 비시드 행은 덮어쓰지 않는다. ID 충돌은 별도 시드 검증에서 보고하고 정상 시드 검증 통과로 기록하지 않는다.
+- 시드 소유 ID 외 행을 삭제하거나 수정하지 않는다. 사라진 시드 항목의 자동 삭제·Flyway clean·전체 볼륨 초기화를 재실행 방법으로 삼지 않는다. 데이터 초기화는 사용자가 명시적으로 선택한 별도 절차다.
+- `src/main/resources/db/seed/local`과 fixture는 jar에 포함되지만 기본 프로필에서 로드하지 않는다. 이 범위는 **운영 실행에서 격리**이며 jar에 물리적으로 없다는 주장은 하지 않는다.
+- 일반 통합 테스트는 local 시드를 로드하지 않고 독립 fixture를 넣는다. 별도 local 시드 테스트는 실제 MariaDB에서 최초 적용·무변경 재기동·내용 변경 재적용·감사 정보 보존·비시드 데이터 보호를 검증한다.
+- 기본 프로필에서 시드 행이 생성되지 않고 fixture 공급자 선택이 거부되는지 검증한다. 검증한 환경·프로젝트·볼륨을 기록한다.
