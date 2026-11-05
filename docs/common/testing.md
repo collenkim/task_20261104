@@ -60,7 +60,7 @@ MemberPersistenceTests의 저장소 경계 검사에 MemberQueryApiTests·Member
 
 ## POL-TEST-006 MEMBER-001 기능 검증
 
-필수 완료 매트릭스다. 현재 저장소(M-01·M-02), HTTP/fixture 포트·설정(M-03·M-04)은 [1단계](member-query-stage-1-verification.md)·[2단계](member-query-stage-2-verification.md)에서 검증했다. 원시 HTTP 입력·공개 API·시드·계층/트랜잭션은 [3단계](member-query-stage-3-verification.md)에서 검증한다. 백오프/지터와 공유 스냅샷·실제 Compose/Swagger 업무 검사는 후속 단계다.
+필수 완료 매트릭스다. 현재 저장소(M-01·M-02), HTTP/fixture 포트·설정(M-03·M-04)은 [1단계](member-query-stage-1-verification.md)·[2단계](member-query-stage-2-verification.md)에서 검증했다. 원시 HTTP 입력·공개 API·시드·계층/트랜잭션은 [3단계](member-query-stage-3-verification.md)에서 검증한다. 백오프/지터는 [4단계](member-query-stage-4-verification.md)에서 검증한다. 공유 스냅샷·실제 Compose/Swagger 업무 검사는 후속 단계다.
 
 | 영역 | 필수 사례 |
 | --- | --- |
@@ -76,6 +76,8 @@ MemberPersistenceTests의 저장소 경계 검사에 MemberQueryApiTests·Member
 | HTTP 실패 | 연결/응답 전 시간 초과 재시도, 본문 수신 중 시간 초과 분류, 5xx→503 재시도 없음, 4xx/리다이렉트/계약 오류→500, 내부 키·주소·본문 비노출 |
 | 백오프 | 첫 시도 무대기; retry=0; 횟수 상한; 200/400/800 증가와 cap; 고정 난수 0/중간/상한; 성공/최종 실패 뒤 무대기; 인터럽트 즉시 중단·플래그 복구 |
 | DB·시드 | V2·ddl validate·ID 비교; local 최초/체크섬 변경/재기동; 중복·감사 정보·비시드 보호; 기본 프로필 미적용 |
+
+재시도 검사는 ExponentialRetryBackoffTests·RetryOnTransientFailureTests·GroupRetryConfigurationTests·GroupRetryHttpTests가 담당한다. 지터·대기를 고정 대역으로 바꾸어 순서·범위·횟수를 검사하고 실제 JDK HTTP 시간 초과·복구·최종 실패도 별도로 관찰한다. 실제 sleep 경과 시간으로 지터 알고리즘을 판정하지 않는다. 기존 명세 전달·본문 시간 초과 회귀도 유지한다.
 
 기존 CommonPolicyTests의 Pageable 최대 100과 일반 BAD_REQUEST 동작을 유지한다. 새 업무 API의 엄격한 입력과 기존 테스트 API를 혼동하지 않는다. 기대 DB 순서는 Kotlin 정렬로 계산하지 않고 고정 데이터의 명시된 순서를 사용한다. 정상 호출 1회와 재시도 포함 실제 HTTP 전송 최대 2회(기본값)를 구분한다.
 

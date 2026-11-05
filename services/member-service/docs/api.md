@@ -23,7 +23,7 @@
 
 ## MEMBER-001 공개 계약
 
-2026-11-05 공개 API와 local 자동 시드를 구현하고 실제 MariaDB + fixture/테스트 HTTP 서버로 검증한다. 2단계 커밋 `e5a8c6b`를 확인했으며 3단계 커밋 완료 여부는 예약 실행 뒤 확인한다. [3단계 검증](../../../docs/common/member-query-stage-3-verification.md)을 기준으로 완료 범위를 구분한다. 전체 범위는 [통합 계획](../../../docs/common/member-query-plan.md), 공통 규칙은 [API 정책](../../../docs/common/api-conventions.md)을 따른다.
+2026-11-05 공개 API와 local 자동 시드를 구현하고 실제 MariaDB + fixture/테스트 HTTP 서버로 검증한다. 3단계 커밋 `c350e54`의 경로·내용 일치를 확인했다. [3단계 검증](../../../docs/common/member-query-stage-3-verification.md)을 기준으로 완료 범위를 구분한다. 전체 범위는 [통합 계획](../../../docs/common/member-query-plan.md), 공통 규칙은 [API 정책](../../../docs/common/api-conventions.md)을 따른다.
 
 ### GET /api/members
 

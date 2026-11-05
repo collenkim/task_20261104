@@ -247,13 +247,19 @@ class HttpGroupMembershipTests {
     timeout: Duration = Duration.ofSeconds(3),
     url: String = "http://127.0.0.1:${server.address.port}",
   ): GroupMembershipReader {
+    val configuration = GroupClientConfiguration()
+    val properties = GroupClientProperties(url, readTimeout = timeout)
     val client =
-      GroupClientConfiguration()
-        .groupRestClient(
-          RestClient.builder(),
-          GroupClientProperties(url, readTimeout = timeout),
-          InternalServiceProperties(TestProperties.internalKey),
-        )
+      configuration.groupRestClient(
+        RestClient.builder(),
+        properties,
+        InternalServiceProperties(TestProperties.internalKey),
+        configuration.groupRetryInterceptor(
+          properties,
+          configuration.retryJitter(),
+          configuration.retrySleeper(),
+        ),
+      )
     return HttpGroupMembershipReader(client, decoder)
   }
 

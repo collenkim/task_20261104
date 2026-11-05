@@ -38,7 +38,7 @@ Spring Boot BOM이 관리하는 버전(직접 고정하지 않음, 4.1.2 기준)
 - 라이브러리는 Spring Boot BOM 버전을 우선 쓴다. BOM 밖의 플러그인·라이브러리만 `libs.versions.toml`에 고정한다.
 - 버전을 올리면 이 표와 `libs.versions.toml`을 함께 고치고, 두 서비스를 모두 빌드·테스트한다.
 
-MEMBER-001의 계층 검사는 ArchUnit 1.4.2를 고정하고 JDK 21·Kotlin 2.3.21·Spring Boot 4.1.2에서 금지 의존 검출까지 검증한다([3단계 기록](member-query-stage-3-verification.md)). OpenAPI 스키마 검사 의존성은 M-07에서 Jackson 3 호환성을 확인한 뒤 추가한다. 지수 백오프·Full Jitter 설계만으로 별도 재시도 프레임워크가 설치됐다고 기록하지 않는다.
+MEMBER-001의 계층 검사는 ArchUnit 1.4.2를 고정하고 JDK 21·Kotlin 2.3.21·Spring Boot 4.1.2에서 금지 의존 검출까지 검증한다([3단계 기록](member-query-stage-3-verification.md)). OpenAPI 스키마 검사 의존성은 M-07에서 Jackson 3 호환성을 확인한 뒤 추가한다. 지수 백오프·Full Jitter는 기존 Spring HTTP 인터셉터와 JDK ThreadLocalRandom/Thread.sleep으로 구현했다. 별도 재시도 라이브러리는 추가하지 않았다([4단계 기록](member-query-stage-4-verification.md)).
 
 ## 확인 근거 (2026-11-04)
 

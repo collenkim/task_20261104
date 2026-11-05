@@ -33,7 +33,7 @@ Swagger: [멤버 서비스](http://127.0.0.1:8081/swagger-ui.html)에서 두 명
 
 멤버 목록·상세 조회 API와 다중 소속 결합, 조회 저장소, HTTP/fixture 어댑터, local 시드를 구현했다. [요구사항 재검증](docs/common/setup-verification.md)에 구현·미구현을 구분했다.
 
-MEMBER-001은 [통합 계획](docs/common/member-query-plan.md)과 [구현 요청서](docs/common/requests/MEMBER-001.md)를 따른다. 소속 공급자는 local에서 fixture, 기본 프로필에서 http이며 `TASK_GROUP_MEMBERSHIP_SOURCE`로 선택한다. 공개 API·local 시드·계층/트랜잭션 경계는 [3단계 기록](docs/common/member-query-stage-3-verification.md)을 따른다. 백오프/지터·공유 OpenAPI 스냅샷·업무 Compose/Swagger 실행 검증은 후속 단계다.
+MEMBER-001은 [통합 계획](docs/common/member-query-plan.md)과 [구현 요청서](docs/common/requests/MEMBER-001.md)를 따른다. 소속 공급자는 local에서 fixture, 기본 프로필에서 http이며 `TASK_GROUP_MEMBERSHIP_SOURCE`로 선택한다. 공개 API·local 시드·계층/트랜잭션 경계는 [3단계 기록](docs/common/member-query-stage-3-verification.md)을 따른다. 지수 백오프·Full Jitter는 [4단계 기록](docs/common/member-query-stage-4-verification.md)을 따른다. 공유 OpenAPI 스냅샷·업무 Compose/Swagger 실행 검증은 후속 단계다.
 
 실행 방식·포트·종료 방법은 [로컬 실행](docs/common/local-development.md)을 본다.
 

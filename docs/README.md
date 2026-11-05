@@ -17,7 +17,7 @@
 - 루트 `docker compose up -d --build --wait`로 두 앱과 DB를 실행한다. 서비스 소유 Compose도 단독 실행할 수 있다.
 - 공통 실행 규칙과 기술 정책은 `docs/common/`, 업무 정책·엔티티·API 계약은 `services/<서비스>/docs/`에서 관리한다.
 - 현재는 멤버 목록·상세 API, 다중 소속 결합, 조회 저장소·소속 공급자와 local 시드를 구현했다. 실제 그룹 업무 제공자와의 연동은 아직 없다. 완료 여부를 Swagger 노출이나 설정 존재만으로 판단하지 않는다.
-- MEMBER-001의 [통합 계획](common/member-query-plan.md)·[구현 요청서](common/requests/MEMBER-001.md)가 기준이다. [1단계 저장소](common/member-query-stage-1-verification.md)와 [2단계 공급자](common/member-query-stage-2-verification.md)의 검증 범위를 구분한다. [3단계 공개 조회·시드](common/member-query-stage-3-verification.md)에서는 입력·결합·프로필·계층/트랜잭션을 검증한다. 백오프/지터와 공유 OpenAPI·Compose/Swagger 업무 실행 검증은 후속 단계다.
+- MEMBER-001의 [통합 계획](common/member-query-plan.md)·[구현 요청서](common/requests/MEMBER-001.md)가 기준이다. [1단계 저장소](common/member-query-stage-1-verification.md)와 [2단계 공급자](common/member-query-stage-2-verification.md)의 검증 범위를 구분한다. [3단계 공개 조회·시드](common/member-query-stage-3-verification.md)에서는 입력·결합·프로필·계층/트랜잭션을 검증한다. [4단계 재시도](common/member-query-stage-4-verification.md)에서 지수 백오프·Full Jitter를 구현했다. 공유 OpenAPI·Compose/Swagger 업무 실행 검증은 후속 단계다.
 
 ## 공통 규칙 읽는 순서
 
