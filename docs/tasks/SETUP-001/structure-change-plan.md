@@ -1,13 +1,19 @@
 # 구조 변경 계획: 멤버 진입점과 그룹 내부 호출
 
-> SETUP-001 당시 구조 변경 계획이다. 현재 그룹 Swagger 실행은 [GROUP-001 요청서](requests/GROUP-001.md)의 멤버 중계 규칙이 대체한다.
+| 항목 | 내용 |
+| --- | --- |
+| 분류 | 작업 기록 |
+| 상태 | 이력 · 당시 요청·계획·검증 내용을 보존. 현재 구현 완료 선언이 아님 |
+| 현재 기준 | [문서 색인](../../README.md)의 공통·서비스 정의를 따른다 |
+
+> SETUP-001 당시 구조 변경 계획이다. 현재 그룹 Swagger 실행은 [GROUP-001 요청서](../GROUP-001/request.md)의 멤버 중계 규칙이 대체한다.
 
 | 항목 | 내용 |
 | --- | --- |
 | 결정 | 사용자 인증·인가는 제외하고 멤버 → 그룹 호출만 공유 시크릿 헤더로 확인한다 |
 | 명세 | 멤버 Swagger에서 두 명세를 제공한다. 그룹 명세는 멤버가 받아 전달하며 읽기 전용이다 |
-| 상태 | 2026-11-04 G-01~G-14 구현·로컬 검증 완료. 실제 결과는 [재검증 기록](setup-verification.md)에 기록한다 |
-| 관련 문서 | [ADR-005](decisions/ADR-005-member-edge-group-internal.md), [보안](security.md), [통신](service-communication.md), [API](api-conventions.md) |
+| 당시 상태 | 2026-11-04 G-01~G-14 구현·로컬 검증 완료. 실제 결과는 [재검증 기록](../../verification/SETUP-001/setup-verification.md)에 기록한다 |
+| 관련 문서 | [ADR-005](../../common/decisions/ADR-005-member-edge-group-internal.md), [보안](../../common/security.md), [통신](../../common/service-communication.md), [API](../../common/api-conventions.md) |
 
 ## 1. 범위
 
@@ -51,4 +57,4 @@
 
 명세 조회와 업무 API 중계는 별도다. 이번에는 명세 조회만 제공하고 필요한 사용자 조회는 후속 멤버 업무 API가 소유한다.
 
-후속 변경: GROUP-001에서 그룹 Swagger 읽기 전용 정책을 멤버 경유 실행으로 대체했다. [구현 요청서](requests/GROUP-001.md)의 8절을 현재 기준으로 사용한다.
+후속 변경: GROUP-001에서 그룹 Swagger 읽기 전용 정책을 멤버 경유 실행으로 대체했다. [구현 요청서](../GROUP-001/request.md)의 8절을 현재 기준으로 사용한다.

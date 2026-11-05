@@ -2,6 +2,8 @@
 
 | 항목 | 내용 |
 | --- | --- |
+| 분류 | 서비스 정의 |
+| 상태 | 현재 · 적용 예정 사항은 해당 절에서 구분 |
 | 목적 | 그룹 서비스의 구성·독립 실행 안내 |
 | 범위 | group-service |
 | 관련 문서 | [정책](policies.md), [엔티티](entities.md), [API](api.md), [공통 실행](../../../docs/common/local-development.md) |
@@ -14,7 +16,7 @@
 | Compose 프로젝트 | task-group |
 | 내부 호출 확인 | X-Internal-Service-Id + 호출자별 X-Internal-Service-Key, 파일 주입 |
 
-다른 서비스를 호출하지 않는다. 그룹 API와 OpenAPI는 내부 키가 필요하고 별도 Swagger UI는 없다. 명세는 멤버 Swagger에서 읽는다.
+다른 서비스를 호출하지 않는다. 그룹 API와 OpenAPI는 내부 키가 필요하고 별도 Swagger UI는 없다. 명세와 두 조회 실행은 멤버 Swagger를 경유한다. 응답 유지·검증 보완은 [계약 검토](api-review.md)의 승인 상태를 따른다.
 
 명령은 서비스 폴더(`services/group-service`) 기준이다.
 

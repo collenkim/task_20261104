@@ -2,6 +2,8 @@
 
 | 항목 | 내용 |
 | --- | --- |
+| 분류 | 공통 기준 |
+| 상태 | 현재 · 적용 예정 사항은 해당 절에서 구분 |
 | 목적 | 일괄·단독·IDE 실행과 내부 키·주소 설정 |
 | 범위 | 명령은 저장소 루트, Windows PowerShell 기준 |
 | 관련 코드 | compose.yaml, compose.override.yaml, 서비스별 infra/compose.yaml, build-logic |
@@ -107,7 +109,7 @@ IntelliJ에서 Application 클래스를 직접 실행할 때는 다음 환경변
 
 현재 실행 기준은 GROUP-001이다. MEMBER-001 기록은 당시 fixture 실행의 증거로 보존한다.
 
-source 선택·소속 fixture, 공개 멤버 API와 local 시드를 구현했다(M-04·M-05·M-06). API·프로필·실제 MariaDB 검증은 [3단계 기록](member-query-stage-3-verification.md)을 따른다. 실제 Compose/Swagger 업무 실행·그룹 중단·서비스별 단독 실행은 [5단계 기록](member-query-stage-5-verification.md)에서 확인했다.
+source 선택·소속 fixture, 공개 멤버 API와 local 시드를 구현했다(M-04·M-05·M-06). API·프로필·실제 MariaDB 검증은 [3단계 기록](../verification/MEMBER-001/stage-3.md)을 따른다. 실제 Compose/Swagger 업무 실행·그룹 중단·서비스별 단독 실행은 [5단계 기록](../verification/MEMBER-001/stage-5.md)에서 확인했다.
 
 - local 프로필은 `task.group-membership.source=fixture`로 멤버 내부 합성 소속 데이터를 사용한다. 기본 프로필은 http다. fixture는 local 외에서 선택할 수 없다.
 - 루트 Compose는 TASK_GROUP_MEMBERSHIP_SOURCE=http를 명시한다. 멤버 단독 Compose는 생략 시 fixture이며 http 지정 시 외부 그룹 주소가 필요하다. 프로필·설정 바인딩과 두 실행 방식의 실제 fixture 업무 API를 검증했다.

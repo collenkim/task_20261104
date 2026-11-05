@@ -1,16 +1,22 @@
 # MEMBER-001 5단계 계약·실행 검증
 
+| 항목 | 내용 |
+| --- | --- |
+| 분류 | 검증 기록 |
+| 상태 | 이력 · 당시 요청·계획·검증 내용을 보존. 현재 구현 완료 선언이 아님 |
+| 현재 기준 | [문서 색인](../../README.md)의 공통·서비스 정의를 따른다 |
+
 | 항목 | 상태 |
 | --- | --- |
 | 기준 | 2026-11-05, `feature/MEMBER-001`, HEAD `5a0452c` + 작업 폴더 |
 | 4단계 커밋 | 예약 `263da9e85203` 완료. `5a0452cd88f2f02d8e5730b56708b6afe37f98b0`의 24개 경로·내용이 검증본과 일치 |
 | 이번 범위 | M-07 OpenAPI 공유·검사, M-10 문서, M-11 Compose·Swagger, M-12 인계. M-09 계층·트랜잭션 회귀 유지 |
-| 상태 | 기능 구현·계약·실행 검증 완료. 5단계 커밋은 예약 실행 후 SHA 확인 필요 |
+| 당시 상태 | 기능 구현·계약·실행 검증 완료. 5단계 커밋은 예약 실행 후 SHA 확인 필요 |
 | 브랜치 | feature에서 검증. develop 통합 검증·사용자의 feature → master 병합은 아직 수행하지 않음 |
 
 ## 계약 산출물과 구현
 
-- [공유 OpenAPI](../../services/member-service/docs/openapi.json)와 [소비자 안내](../../services/member-service/docs/contracts.md)를 추가했다. 운영 Controller·DTO가 명세 원천이며 Kotlin/JPA 모델을 서비스 간 공유하지 않는다. operationId는 `getMemberSummaries`, `getMemberDetail`이다.
+- [공유 OpenAPI](../../../services/member-service/docs/openapi.json)와 [소비자 안내](../../../services/member-service/docs/contracts.md)를 추가했다. 운영 Controller·DTO가 명세 원천이며 Kotlin/JPA 모델을 서비스 간 공유하지 않는다. operationId는 `getMemberSummaries`, `getMemberDetail`이다.
 - `generateOpenApiSnapshot`은 실제 운영 패키지만 스캔하는 별도 Spring 문맥에서 계약 8개를 검사하고 build 디렉터리에 JSON을 생성한다. 테스트 Probe·그룹 명세 전달 경로는 제외하고 공개 두 경로만 허용한다.
 - `updateOpenApiSnapshot`은 검증 성공 후 명세를 docs에 복사한다. `checkOpenApiSnapshot`은 저장소 파일을 읽기 전용으로 비교하며 일반 check/build에 연결했다. 객체 키 정렬·서버 URL `/` 정규화·UTF-8/LF만 적용하고 배열·설명·필수/null 의미를 보존한다.
 - 공식 OpenAPI 3.1 메타스키마 네 파일과 라이선스·출처·해시를 테스트 자원에 보관했다. URI를 클래스패스로 매핑하므로 메타스키마를 검사할 때 인터넷에 의존하지 않는다. Git 개행 변환도 막는다.
