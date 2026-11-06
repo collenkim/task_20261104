@@ -75,6 +75,7 @@ ai-logs/snapshots/<claude|codex>/<세션 ID>/<정책 버전 12자>/L<원본 바�
   manifest.json            도구·세션 ID·정책 버전·snapshot_id·snapshot_sha256(전체 64자)·첫/마지막 시각(UTC)·줄 수,
                            파일별 원본/사본 바이트·sha256·마스킹 건수·개행 없는 마지막 기록 여부, 경고(50MB 초과)
   files/<원본 상대 경로>    세션의 모든 파일 전체 사본(마스킹만 적용, 원본과 같은 줄 수·순서·개행)
+  files/_meta/<해시 16자>.json  아래 조건으로 검증된 종료 메타데이터의 이전 버전
 ```
 
 - **ID 규칙**
@@ -82,11 +83,17 @@ ai-logs/snapshots/<claude|codex>/<세션 ID>/<정책 버전 12자>/L<원본 바�
   - 폴더 이름의 해시는 앞 16자만 쓰고, 전체 해시는 manifest에 기록한다.
   - 이미 있는 폴더는 고치지 않는다. 공통으로 고쳐 쓰는 목록 파일은 없다.
 - **최신본**
-  - 현재 정책 폴더에서 `L` 값(원본 바이트)이 가장 큰 스냅샷이 최신 전체본이다.
+  - 현재 정책 폴더에서 `L` 값(현재 원본과 보존한 메타데이터 이전 버전의 바이트 합계)이 가장 큰 스냅샷이 최신 전체본이다.
   - 길이가 같은데 해시가 다르면 최신으로 추정하지 않고 보류한다.
 - **원본 불변성**
   - 파일마다 이전 스냅샷·live·상태 기록과 원본 앞부분을 대조한다.
   - 원본이 잘리거나 다시 쓰이거나 부속 파일이 삭제되면 보류한다.
+- **검증된 Claude 종료 메타데이터**
+  - 예외 범위는 `<session-id>/subagents/agent-*.meta.json`의 마지막 JSON 속성 `finished: true` 추가뿐이다. 중복 키·잘못된 JSON은 허용하지 않는다.
+  - 추가 부분만 제거한 바이트의 길이·SHA-256이 과거 원본 기록과 정확히 일치해야 한다. 과거 사본의 길이·해시와 마스킹 결과도 확인한다. 다른 필드·공백 변경, 값 변경, 원본 롤백, JSONL 재작성은 계속 보류한다.
+  - 이전 live 사본은 교체 전에 `.ai-logging/metadata-history/`에 원래 사본 바이트·검증 기록을 불변 보관한다. 수집 잠금 안에서 보관을 먼저 확정하므로 중단·재실행 때 과거 사본을 잃지 않는다. 보관 파일은 Git 제외 대상이다.
+  - 제출 전체본에는 현재 파일과 `files/_meta/`의 이전 버전을 함께 담는다. 이전 버전도 현재 정책으로 마스킹하며 manifest에 `role: metadata_history`, `source_path`, 원본·사본 길이와 전체 해시를 기록한다. 이전 스냅샷 폴더는 수정하지 않는다.
+  - 이력의 원본 경로 연결도 스냅샷 ID에 포함한다. 이력이 없는 기존 schema 2의 ID는 유지한다. 이력 누락·사본 손상·경로 충돌·검증 불가 변경은 수집 또는 최종 완전성 검사에서 실패한다.
 - **정책 버전**
   - 검출 규칙, 허용 목록 내용, 치환 목록을 반영한다. 치환 목록이 바뀌면 새 정책 폴더에 전체 사본이 다시 생긴다.
 - **큰 파일**: 50,000,000바이트를 넘으면 경고만 하고 자르지 않는다.
@@ -141,6 +148,8 @@ ai-logs/snapshots/<claude|codex>/<세션 ID>/<정책 버전 12자>/L<원본 바�
   - Claude는 `.claude/settings.json` deny 규칙으로 `git commit/merge/push/reset/checkout/switch/add/...` 실행이 막혀 있다.
   - 실행 조건: 스테이징된 변경 없음, 진행 중인 Git 작업 없음, 예약 때와 같은 브랜치·HEAD.
   - 실패하면 뒤 작업을 멈추고 `task list`에 사유를 남긴다. 재시도는 `task retry`, 취소는 `task cancel`.
+  - hook의 외부 시간 초과로 프로세스가 종료되면 예약이 `pending`으로 남을 수 있다. 모든 턴이 끝난 뒤 일반 터미널의 `task run`으로 이어 처리한다. 브랜치·HEAD·index 검사는 그대로 적용하며, 완료된 스냅샷은 재사용한다. `failed` 예약은 원인을 확인하기 전 자동 재시도하지 않는다.
+  - 잠금은 시간 경과만으로 지우지 않는다. 기존 잠금의 소유 프로세스가 실제로 종료됐음을 확인할 때 수집기가 회수한다.
   - 자동 stash·강제 checkout/reset·작업 폴더 정리는 하지 않는다.
   - 커밋은 임시 index와 비교 후 교체(CAS)로 만들어 사용자 index의 다른 항목을 바꾸지 않는다.
 
@@ -228,9 +237,11 @@ python -I scripts/ai_logging/cli.py status    # hook 설정·실행 기록·Git 
   - 브랜치를 바꿔도 hook이 사라지지 않는다. 상태(`.ai-logging/`)는 브랜치와 무관하다.
 - **Claude Code**: `.claude/settings.json`을 자동으로 읽는다(`/hooks`에서 확인). UserPromptSubmit은 `"onFailure": "block"`(v2.1.295+)으로 실패 시 프롬프트를 막는다.
 - **Codex**
+  - 전체 수집과 예약 로그 커밋을 수행하는 SessionStart·Stop 제한은 600초다. UserPromptSubmit은 30초, 등록만 하는 SessionEnd는 3초를 유지한다. 600초 안에 끝난다고 보장하지 않으며, 중단된 예약은 일반 터미널에서 이어 처리한다.
   - hook을 사람이 신뢰해야 실행된다: CLI `/hooks`, VS Code 확장은 Settings > Hooks.
   - `.codex/hooks.json`이 바뀌면 다시 검토한다.
   - `status`의 `trusted_hash` 기록만으로 신뢰·실행을 판단하지 않는다. "Codex hook 실제 실행(설정 변경 이후)" 항목으로 확인한다.
+  - Codex의 timeout 단위·기본값과 변경된 hook 재검토는 [공식 Hooks 문서](https://learn.chatgpt.com/docs/hooks)를 따른다.
 
 ### 명령 요약 (`python -I scripts/ai_logging/cli.py <명령>`)
 
