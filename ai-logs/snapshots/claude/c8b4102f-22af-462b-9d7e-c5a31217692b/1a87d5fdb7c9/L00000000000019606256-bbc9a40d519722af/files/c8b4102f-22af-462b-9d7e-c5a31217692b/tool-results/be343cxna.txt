@@ -1,0 +1,1116 @@
+===== client/ExponentialRetryBackoff.kt
+     1	package task.member.infrastructure.client
+     2	
+     3	import java.time.Duration
+     4	
+     5	/** 상한 있는 지수 증가를 계산한다. 난수·실제 대기·HTTP와 독립적이다(POL-COMM-003). */
+     6	class ExponentialRetryBackoff(baseDelay: Duration, maxDelay: Duration) {
+     7	  private val baseMillis: Long
+     8	  private val maxMillis: Long
+     9	
+    10	  init {
+    11	    require(validDelays(baseDelay, maxDelay)) { "재시도 지연 설정이 허용 범위를 벗어났습니다." }
+    12	    baseMillis = baseDelay.toMillis()
+    13	    maxMillis = maxDelay.toMillis()
+    14	  }
+    15	
+    16	  /** 1부터 시작하는 재시도 번호. cap에 도달하면 반복을 끝내 큰 번호에도 overflow가 없다. */
+    17	  fun upperBoundMillis(retryNumber: Int): Long {
+    18	    require(retryNumber >= 1) { "재시도 번호는 1 이상이어야 합니다." }
+    19	    var bound = baseMillis
+    20	    var number = 1
+    21	    while (number < retryNumber && bound < maxMillis) {
+    22	      bound = if (bound > maxMillis / 2) maxMillis else bound * 2
+    23	      number++
+    24	    }
+    25	    return bound
+    26	  }
+    27	
+    28	  companion object {
+    29	    private val MIN_DELAY = Duration.ofMillis(1)
+    30	    private val MAX_DELAY = Duration.ofSeconds(60)
+    31	
+    32	    /** 정수 밀리초 1~60000, base <= cap. 큰 Duration을 밀리초로 바꾸기 전에 검증한다. */
+    33	    fun validDelays(baseDelay: Duration, maxDelay: Duration): Boolean =
+    34	      validDuration(baseDelay) && validDuration(maxDelay) && baseDelay <= maxDelay
+    35	
+    36	    private fun validDuration(value: Duration): Boolean =
+    37	      value >= MIN_DELAY && value <= MAX_DELAY && value.nano % 1_000_000 == 0
+    38	  }
+    39	}
+    40	
+    41	/** 매 재시도의 0~상한(포함) 밀리초를 균등 추출하는 경계(POL-COMM-003). */
+    42	fun interface RetryJitter {
+    43	  fun sample(upperBoundMillis: Long): Long
+    44	}
+    45	
+    46	/** 실제 대기와 테스트 대역을 교체한다. 인터럽트를 호출자에게 전달한다(POL-COMM-003). */
+    47	fun interface RetrySleeper {
+    48	  @Throws(InterruptedException::class) fun sleep(millis: Long)
+    49	}
+===== client/GroupApiDocsClient.kt
+     1	package task.member.infrastructure.client
+     2	
+     3	import java.io.IOException
+     4	import org.springframework.beans.factory.annotation.Qualifier
+     5	import org.springframework.http.InvalidMediaTypeException
+     6	import org.springframework.http.MediaType
+     7	import org.springframework.stereotype.Component
+     8	import org.springframework.web.client.ResourceAccessException
+     9	import org.springframework.web.client.RestClient
+    10	import org.springframework.web.client.RestClientException
+    11	import task.member.application.exception.*
+    12	import task.member.application.exception.GroupServiceUnavailableException
+    13	import tools.jackson.core.JacksonException
+    14	import tools.jackson.databind.json.JsonMapper
+    15	import tools.jackson.databind.node.ObjectNode
+    16	
+    17	/** 고정된 그룹 명세만 읽는다. 사용자 입력 URL·헤더를 전달하지 않는다(POL-API-004). */
+    18	@Component
+    19	class GroupApiDocsClient(
+    20	  @param:Qualifier(GroupClientConfiguration.GROUP_REST_CLIENT) private val client: RestClient,
+    21	  private val mapper: JsonMapper,
+    22	) {
+    23	  /** 전송 실패와 명세 계약 오류를 구분하고 브라우저용 호출 설정을 제거한다(POL-COMM-004). */
+    24	  fun load(): ObjectNode {
+    25	    val bytes =
+    26	      try {
+    27	        client.get().uri("/v3/api-docs").accept(MediaType.APPLICATION_JSON).exchange { _, response
+    28	          ->
+    29	          if (response.statusCode.value() == 504) throw GroupServiceTimeoutException()
+    30	          if (response.statusCode.value() == 503) throw GroupServiceUnavailableException()
+    31	          if (response.statusCode.value() != 200) throw GroupUpstreamFailureException()
+    32	          val contentType = response.headers.contentType
+    33	          if (
+    34	            contentType == null ||
+    35	              !(MediaType.APPLICATION_JSON.includes(contentType) ||
+    36	                JSON_SUFFIX.includes(contentType))
+    37	          )
+    38	            throw GroupResponseMediaException()
+    39	          response.body.readNBytes(MAX_RESPONSE_BYTES + 1).also {
+    40	            if (it.size > MAX_RESPONSE_BYTES) throw GroupResponseSizeException()
+    41	          }
+    42	        } ?: throw GroupResponseContractException()
+    43	      } catch (error: ResourceAccessException) {
+    44	        throw GroupProxyTransport.failure(error)
+    45	      } catch (error: IOException) {
+    46	        throw GroupProxyTransport.failure(error)
+    47	      } catch (_: InvalidMediaTypeException) {
+    48	        throw GroupResponseMediaException()
+    49	      } catch (_: RestClientException) {
+    50	        throw GroupUpstreamFailureException()
+    51	      }
+    52	    val spec =
+    53	      try {
+    54	        mapper
+    55	          .rebuild()
+    56	          .enable(tools.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+    57	          .enable(tools.jackson.databind.DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
+    58	          .build()
+    59	          .readTree(bytes) as? ObjectNode ?: throw GroupResponseContractException()
+    60	      } catch (_: JacksonException) {
+    61	        throw GroupResponseJsonException()
+    62	      }
+    63	    if (
+    64	      spec.get("openapi")?.isString != true ||
+    65	        spec.get("info")?.isObject != true ||
+    66	        spec.get("paths")?.isObject != true ||
+    67	        (spec.has("components") && !spec.get("components").isObject)
+    68	    )
+    69	      throw GroupResponseContractException()
+    70	    GroupProxyContract(mapper).document(spec)
+    71	    removeInvocationSettings(spec)
+    72	    spec.get("paths")?.forEach { item ->
+    73	      if (item is ObjectNode) {
+    74	        removeInvocationSettings(item)
+    75	        METHODS.forEach { method ->
+    76	          (item.get(method) as? ObjectNode)?.let(::removeInvocationSettings)
+    77	        }
+    78	      }
+    79	    }
+    80	    (spec.get("components") as? ObjectNode)?.remove("securitySchemes")
+    81	    spec.putArray("servers").addObject().put("url", GroupApiProxyClient.BASE_PATH)
+    82	    (spec.get("info") as? ObjectNode)?.put(
+    83	      "description",
+    84	      "그룹 API는 멤버 서비스를 경유해 실행합니다. 내부 호출 키는 멤버 서버에서 추가합니다.",
+    85	    )
+    86	    return spec
+    87	  }
+    88	
+    89	  private fun removeInvocationSettings(node: ObjectNode) {
+    90	    node.remove("servers")
+    91	    node.remove("security")
+    92	  }
+    93	
+    94	  private companion object {
+    95	    const val MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+    96	    val JSON_SUFFIX = MediaType("application", "*+json")
+    97	    val METHODS = listOf("get", "head", "post", "put", "patch", "delete", "options", "trace")
+    98	  }
+    99	}
+===== client/GroupApiProxyClient.kt
+     1	package task.member.infrastructure.client
+     2	
+     3	import java.io.IOException
+     4	import org.slf4j.LoggerFactory
+     5	import org.springframework.beans.factory.annotation.Qualifier
+     6	import org.springframework.http.CacheControl
+     7	import org.springframework.http.InvalidMediaTypeException
+     8	import org.springframework.http.MediaType
+     9	import org.springframework.http.ResponseEntity
+    10	import org.springframework.stereotype.Component
+    11	import org.springframework.util.MultiValueMap
+    12	import org.springframework.web.client.ResourceAccessException
+    13	import org.springframework.web.client.RestClient
+    14	import org.springframework.web.client.RestClientException
+    15	import task.member.application.exception.*
+    16	import task.member.application.exception.GroupServiceUnavailableException
+    17	import tools.jackson.core.JacksonException
+    18	import tools.jackson.databind.DeserializationFeature
+    19	import tools.jackson.databind.json.JsonMapper
+    20	import tools.jackson.databind.node.ObjectNode
+    21	
+    22	/** Swagger 실행용 고정 GET 중계. 업무 모델로 변환하지 않고 그룹 계약을 유지한다(POL-API-004). */
+    23	@Component
+    24	class GroupApiProxyClient(
+    25	  @param:Qualifier(GroupClientConfiguration.GROUP_REST_CLIENT) private val client: RestClient,
+    26	  mapper: JsonMapper,
+    27	) {
+    28	  private val log = LoggerFactory.getLogger(javaClass)
+    29	  private val json =
+    30	    mapper
+    31	      .rebuild()
+    32	      .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+    33	      .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
+    34	      .build()
+    35	  private val contract = GroupProxyContract(json)
+    36	
+    37	  fun summaries(parameters: MultiValueMap<String, String>): ResponseEntity<ObjectNode> =
+    38	    read(
+    39	      client.get().uri { builder ->
+    40	        builder.path("/api/groups/summary")
+    41	        val ids = parameters["memberIds"].orEmpty()
+    42	        ids.indices.forEach { builder.queryParam("memberIds", "{memberId$it}") }
+    43	        builder.build(*ids.toTypedArray())
+    44	      },
+    45	      contract::summary,
+    46	    )
+    47	
+    48	  fun detail(memberId: String): ResponseEntity<ObjectNode> =
+    49	    read(client.get().uri("/api/group/{memberId}", memberId), contract::detail)
+    50	
+    51	  private fun read(
+    52	    request: RestClient.RequestHeadersSpec<*>,
+    53	    project: (ObjectNode) -> ObjectNode,
+    54	  ): ResponseEntity<ObjectNode> =
+    55	    try {
+    56	      request.accept(MediaType.APPLICATION_JSON, MediaType.APPLICATION_PROBLEM_JSON).exchange {
+    57	        _,
+    58	        response ->
+    59	        val status = response.statusCode.value()
+    60	        if (status == 504) throw GroupServiceTimeoutException()
+    61	        if (status == 503) throw GroupServiceUnavailableException()
+    62	        if (status != 200 && status !in 400..499) throw GroupUpstreamFailureException()
+    63	        val media =
+    64	          if (status == 200) MediaType.APPLICATION_JSON else MediaType.APPLICATION_PROBLEM_JSON
+    65	        val contentType = response.headers.contentType
+    66	        if (contentType == null || !media.isCompatibleWith(contentType))
+    67	          throw GroupResponseMediaException()
+    68	        val bytes = response.body.readNBytes(MAX_RESPONSE_BYTES + 1)
+    69	        if (bytes.size > MAX_RESPONSE_BYTES) throw GroupResponseSizeException()
+    70	        val source = json.readTree(bytes) as? ObjectNode ?: throw GroupResponseContractException()
+    71	        val body = if (status == 200) project(source) else contract.problem(source, status)
+    72	        if (status != 200) {
+    73	          log.error(
+    74	            "event=remote.proxy.completed status={} code={}",
+    75	            status,
+    76	            body.path("code").stringValue(),
+    77	          )
+    78	        } else {
+    79	          log.info("event=remote.proxy.completed status={}", status)
+    80	        }
+    81	        // Location·Set-Cookie·인증 등 내부 응답 헤더를 브라우저로 복사하지 않는다.
+    82	        ResponseEntity.status(status)
+    83	          .contentType(media)
+    84	          .cacheControl(CacheControl.noStore())
+    85	          .body(body)
+    86	      }
+    87	    } catch (error: ResourceAccessException) {
+    88	      throw GroupProxyTransport.failure(error)
+    89	    } catch (error: IOException) {
+    90	      throw GroupProxyTransport.failure(error)
+    91	    } catch (_: JacksonException) {
+    92	      throw GroupResponseJsonException()
+    93	    } catch (_: InvalidMediaTypeException) {
+    94	      throw GroupResponseMediaException()
+    95	    } catch (_: RestClientException) {
+    96	      throw GroupUpstreamFailureException()
+    97	    }
+    98	
+    99	  companion object {
+   100	    const val BASE_PATH = "/internal-api/group"
+   101	    private const val MAX_RESPONSE_BYTES = 1024 * 1024
+   102	  }
+   103	}
+===== client/GroupClientConfiguration.kt
+     1	package task.member.infrastructure.client
+     2	
+     3	import jakarta.validation.constraints.AssertTrue
+     4	import jakarta.validation.constraints.Max
+     5	import jakarta.validation.constraints.Min
+     6	import jakarta.validation.constraints.NotBlank
+     7	import java.net.InetAddress
+     8	import java.net.URI
+     9	import java.net.http.HttpClient
+    10	import java.time.Duration
+    11	import java.util.concurrent.ThreadLocalRandom
+    12	import org.springframework.beans.factory.annotation.Qualifier
+    13	import org.springframework.boot.context.properties.ConfigurationProperties
+    14	import org.springframework.boot.context.properties.EnableConfigurationProperties
+    15	import org.springframework.context.annotation.Bean
+    16	import org.springframework.context.annotation.Configuration
+    17	import org.springframework.http.client.JdkClientHttpRequestFactory
+    18	import org.springframework.validation.annotation.Validated
+    19	import org.springframework.web.client.RestClient
+    20	
+    21	/** 그룹 호출 설정(POL-COMM-001~004). 기동 시 그룹을 호출하지 않는다. */
+    22	@Configuration(proxyBeanMethods = false)
+    23	@EnableConfigurationProperties(GroupClientProperties::class, InternalServiceProperties::class)
+    24	class GroupClientConfiguration {
+    25	  /** 요청 스레드에서 상한을 포함하는 정수 밀리초를 추출한다(POL-COMM-003). */
+    26	  @Bean
+    27	  fun retryJitter(): RetryJitter = RetryJitter { upper ->
+    28	    ThreadLocalRandom.current().nextLong(upper + 1)
+    29	  }
+    30	
+    31	  /** 인터럽트 의미를 유지하는 실제 대기 경계(POL-COMM-003). */
+    32	  @Bean fun retrySleeper(): RetrySleeper = RetrySleeper { millis -> Thread.sleep(millis) }
+    33	
+    34	  /** 같은 재시도 정책을 소속 API와 명세 조회에 조립한다(POL-COMM-003). */
+    35	  @Bean
+    36	  fun groupRetryInterceptor(
+    37	    properties: GroupClientProperties,
+    38	    jitter: RetryJitter,
+    39	    sleeper: RetrySleeper,
+    40	  ) =
+    41	    RetryOnTransientFailureInterceptor(
+    42	      properties.maxRetries,
+    43	      ExponentialRetryBackoff(properties.retryBaseDelay, properties.retryMaxDelay),
+    44	      jitter,
+    45	      sleeper,
+    46	      properties.readTimeout,
+    47	    )
+    48	
+    49	  @Bean
+    50	  @Qualifier(GROUP_REST_CLIENT)
+    51	  fun groupRestClient(
+    52	    builder: RestClient.Builder,
+    53	    properties: GroupClientProperties,
+    54	    internal: InternalServiceProperties,
+    55	    retry: RetryOnTransientFailureInterceptor,
+    56	  ): RestClient {
+    57	    val httpClient =
+    58	      HttpClient.newBuilder()
+    59	        .connectTimeout(properties.connectTimeout)
+    60	        .followRedirects(HttpClient.Redirect.NEVER)
+    61	        .build()
+    62	    val factory =
+    63	      JdkClientHttpRequestFactory(httpClient).apply {
+    64	        setReadTimeout(properties.readTimeout)
+    65	      }
+    66	    return builder
+    67	      .baseUrl(requireNotNull(properties.baseUrl))
+    68	      .requestFactory(factory)
+    69	      .requestInterceptor { request, body, execution ->
+    70	        request.headers.set(INTERNAL_HEADER, requireNotNull(internal.key))
+    71	        request.headers.set("X-Internal-Service-Id", properties.serviceId)
+    72	        execution.execute(request, body)
+    73	      }
+    74	      .requestInterceptor(OutgoingTraceInterceptor())
+    75	      .requestInterceptor(retry)
+    76	      .build()
+    77	  }
+    78	
+    79	  companion object {
+    80	    const val GROUP_REST_CLIENT = "groupRestClient"
+    81	    const val INTERNAL_HEADER = "X-Internal-Service-Key"
+    82	  }
+    83	}
+    84	
+    85	/** 숫자 IP와 명시적 포트만 받는다. URL 사용자 정보·쿼리·경로로 호출 대상을 바꾸지 않는다. */
+    86	@Validated
+    87	@ConfigurationProperties("task.group-client")
+    88	class GroupClientProperties(
+    89	  @field:NotBlank(message = "그룹 주소가 필요합니다(TASK_GROUP_CLIENT_BASE_URL)") val baseUrl: String?,
+    90	  val connectTimeout: Duration = Duration.ofSeconds(2),
+    91	  val readTimeout: Duration = Duration.ofSeconds(3),
+    92	  @field:Min(0) @field:Max(3) val maxRetries: Int = 1,
+    93	  val retryBaseDelay: Duration = Duration.ofMillis(200),
+    94	  val retryMaxDelay: Duration = Duration.ofSeconds(2),
+    95	  @field:jakarta.validation.constraints.Pattern(regexp = "[a-z][a-z0-9-]{1,49}")
+    96	  val serviceId: String = "member-service",
+    97	) {
+    98	  @get:AssertTrue(message = "재시도 지연은 정수 밀리초 1~60000이며 기본 지연이 최대 지연 이하여야 합니다")
+    99	  val isRetryDelayValid: Boolean
+   100	    get() = ExponentialRetryBackoff.validDelays(retryBaseDelay, retryMaxDelay)
+   101	
+   102	  @get:AssertTrue(message = "그룹 주소는 http(s)://숫자IP:포트 형식이어야 합니다")
+   103	  val isAddressValid: Boolean
+   104	    get() = runCatching {
+   105	      val uri = URI(baseUrl ?: return false)
+   106	      val host = uri.host?.removeSurrounding("[", "]") ?: return false
+   107	      val numeric =
+   108	        if (host.contains(':')) {
+   109	          host.matches(Regex("[0-9a-fA-F:]+")) && InetAddress.getByName(host).address.size == 16
+   110	        } else {
+   111	          host.split('.').let { parts ->
+   112	            parts.size == 4 &&
+   113	              parts.all {
+   114	                it.matches(Regex("0|[1-9][0-9]{0,2}")) && it.toInt() <= 255
+   115	              }
+   116	          }
+   117	        }
+   118	      numeric &&
+   119	        uri.scheme in setOf("http", "https") &&
+   120	        uri.port in 1..65535 &&
+   121	        uri.userInfo == null &&
+   122	        uri.query == null &&
+   123	        uri.fragment == null &&
+   124	        uri.path in setOf("", "/")
+   125	    }
+   126	      .getOrDefault(false)
+   127	
+   128	  @get:AssertTrue(message = "연결·응답 제한 시간은 양수여야 합니다")
+   129	  val isTimeoutValid: Boolean
+   130	    get() =
+   131	      !connectTimeout.isNegative &&
+   132	        !connectTimeout.isZero &&
+   133	        !readTimeout.isNegative &&
+   134	        !readTimeout.isZero
+   135	}
+   136	
+   137	/** 키가 객체 문자열에 노출되지 않도록 일반 클래스로 바인딩한다. */
+   138	@Validated
+   139	@ConfigurationProperties("task.internal-service")
+   140	class InternalServiceProperties(
+   141	  @field:NotBlank(message = "내부 호출 키가 필요합니다: ./gradlew generateLocalSecrets") val key: String?
+   142	)
+===== client/GroupProxyContract.kt
+     1	package task.member.infrastructure.client
+     2	
+     3	import java.time.LocalDateTime
+     4	import java.time.format.DateTimeFormatter
+     5	import java.time.format.ResolverStyle
+     6	import org.slf4j.LoggerFactory
+     7	import task.member.application.exception.GroupResponseContractException
+     8	import tools.jackson.databind.JsonNode
+     9	import tools.jackson.databind.json.JsonMapper
+    10	import tools.jackson.databind.node.ObjectNode
+    11	
+    12	/** 중계 공개 계약. 명시한 필드만 새 객체에 복사하고 필수값·타입은 보정하지 않는다. */
+    13	internal class GroupProxyContract(private val json: JsonMapper) {
+    14	  private val log = LoggerFactory.getLogger(javaClass)
+    15	  private val id = Regex("[a-z0-9]{10}")
+    16	  private val time =
+    17	    DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm").withResolverStyle(ResolverStyle.STRICT)
+    18	
+    19	  fun detail(input: ObjectNode): ObjectNode =
+    20	    project(input, DETAIL).apply {
+    21	      identifier(this, "memberId")
+    22	      identifier(this, "groupId")
+    23	      text(this, "groupName")
+    24	      text(this, "permission")
+    25	      text(this, "pricing")
+    26	      val value = text(this, "registeredDate")
+    27	      if (!Regex("[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}").matches(value)) fail()
+    28	      try {
+    29	        LocalDateTime.parse(value, time)
+    30	      } catch (_: java.time.DateTimeException) {
+    31	        fail()
+    32	      }
+    33	    }
+    34	
+    35	  fun summary(input: ObjectNode): ObjectNode {
+    36	    val output = project(input, setOf("group"))
+    37	    val groups = input.get("group")
+    38	    if (!groups.isArray) fail()
+    39	    val result = output.putArray("group")
+    40	    val groupIds = mutableSetOf<String>()
+    41	    val memberIds = mutableSetOf<String>()
+    42	    for (group in groups) {
+    43	      val item = project(group, SUMMARY)
+    44	      if (!groupIds.add(identifier(item, "groupId"))) fail()
+    45	      text(item, "groupName")
+    46	      val count = item.get("totalMemberCount")
+    47	      if (!count.isIntegralNumber || !count.canConvertToLong() || count.longValue() < 0) fail()
+    48	      val members = item.get("members")
+    49	      if (!members.isArray || count.longValue() < members.size()) fail()
+    50	      val selected = item.putArray("members")
+    51	      for (member in members) {
+    52	        val value = project(member, MEMBER)
+    53	        if (!memberIds.add(identifier(value, "memberId"))) fail()
+    54	        text(value, "permission")
+    55	        selected.add(value)
+    56	      }
+    57	      result.add(item)
+    58	    }
+    59	    return output
+    60	  }
+    61	
+    62	  fun problem(input: ObjectNode, status: Int): ObjectNode =
+    63	    project(input, PROBLEM).apply {
+    64	      val actual = get("status")
+    65	      if (!actual.isIntegralNumber || !actual.canConvertToInt() || actual.intValue() != status)
+    66	        fail()
+    67	      for (field in listOf("type", "title", "detail", "instance", "code")) text(this, field)
+    68	      if (!Regex("[A-Z][A-Z0-9_]{0,63}").matches(text(this, "code"))) fail()
+    69	    }
+    70	
+    71	  /** 실행 중계와 같은 필드로 Swagger 스키마를 고정한다. 원격의 새 속성은 공개하지 않는다. */
+    72	  fun document(spec: ObjectNode) {
+    73	    val components = spec.withObject("/components")
+    74	    val schemas = components.putObject("schemas")
+    75	    fun string() = json.createObjectNode().put("type", "string")
+    76	    fun reference(name: String) = json.createObjectNode().put("\$ref", "#/components/schemas/$name")
+    77	    fun array(name: String) =
+    78	      json.createObjectNode().put("type", "array").apply { set("items", reference(name)) }
+    79	    fun shape(name: String, properties: Map<String, JsonNode>) {
+    80	      val schema = schemas.putObject(name).put("type", "object").put("additionalProperties", false)
+    81	      val fields = schema.putObject("properties")
+    82	      properties.forEach { (key, value) -> fields.set(key, value) }
+    83	      val required = schema.putArray("required")
+    84	      properties.keys.forEach { required.add(it) }
+    85	    }
+    86	    fun identifier() = string().put("pattern", "^[a-z0-9]{10}$")
+    87	    shape("GroupSummaryResponse", mapOf("group" to array("GroupSummaryItem")))
+    88	    shape(
+    89	      "GroupSummaryItem",
+    90	      mapOf(
+    91	        "groupId" to identifier(),
+    92	        "groupName" to string().put("minLength", 1),
+    93	        "totalMemberCount" to
+    94	          json.createObjectNode().put("type", "integer").put("format", "int64").put("minimum", 0),
+    95	        "members" to array("GroupMemberSummary"),
+    96	      ),
+    97	    )
+    98	    shape(
+    99	      "GroupMemberSummary",
+   100	      mapOf("memberId" to identifier(), "permission" to string().put("minLength", 1)),
+   101	    )
+   102	    shape(
+   103	      "MemberGroupDetailResponse",
+   104	      mapOf(
+   105	        "memberId" to identifier(),
+   106	        "groupId" to identifier(),
+   107	        "groupName" to string().put("minLength", 1),
+   108	        "permission" to string().put("minLength", 1),
+   109	        "pricing" to string().put("minLength", 1),
+   110	        "registeredDate" to
+   111	          string().put("pattern", "^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}$"),
+   112	      ),
+   113	    )
+   114	    shape(
+   115	      "GroupProblemResponse",
+   116	      PROBLEM.associateWith {
+   117	        if (it == "status") json.createObjectNode().put("type", "integer") else string()
+   118	      },
+   119	    )
+   120	    val paths = spec.get("paths") as? ObjectNode ?: fail()
+   121	    val endpoints =
+   122	      mapOf(
+   123	        "/api/groups/summary" to "GroupSummaryResponse",
+   124	        "/api/group/{memberId}" to "MemberGroupDetailResponse",
+   125	      )
+   126	    paths.propertyNames().toList().filter { it !in endpoints }.forEach { paths.remove(it) }
+   127	    for ((path, schema) in endpoints) {
+   128	      val item = paths.get(path) as? ObjectNode ?: fail()
+   129	      val operation = item.get("get") as? ObjectNode ?: fail()
+   130	      item
+   131	        .propertyNames()
+   132	        .toList()
+   133	        .filter { it !in setOf("get", "parameters", "summary", "description") }
+   134	        .forEach { item.remove(it) }
+   135	      val responses = operation.putObject("responses")
+   136	      for (status in listOf("200", "400", "403", "404", "500", "502", "503", "504")) {
+   137	        val response =
+   138	          responses
+   139	            .putObject(status)
+   140	            .put("description", if (status == "200") "조회 성공" else "정의된 업무 또는 중계 오류")
+   141	        response
+   142	          .putObject("content")
+   143	          .putObject(if (status == "200") "application/json" else "application/problem+json")
+   144	          .set("schema", reference(if (status == "200") schema else "GroupProblemResponse"))
+   145	      }
+   146	    }
+   147	  }
+   148	
+   149	  private fun project(input: JsonNode, fields: Set<String>): ObjectNode {
+   150	    if (!input.isObject || fields.any { !input.has(it) || input.get(it).isNull }) fail()
+   151	    val extra = input.propertyNames().count { it !in fields }
+   152	    if (extra > 0) log.info("event=remote.proxy.fields.filtered count={}", extra)
+   153	    return json.createObjectNode().apply { fields.forEach { set(it, input.get(it)) } }
+   154	  }
+   155	
+   156	  private fun text(input: JsonNode, field: String): String {
+   157	    val value = input.get(field)
+   158	    if (value?.isString != true || value.stringValue().isBlank()) fail()
+   159	    return value.stringValue()
+   160	  }
+   161	
+   162	  private fun identifier(input: JsonNode, field: String): String =
+   163	    text(input, field).also {
+   164	      if (!id.matches(it)) fail()
+   165	    }
+   166	
+   167	  private fun fail(): Nothing = throw GroupResponseContractException()
+   168	
+   169	  companion object {
+   170	    val DETAIL =
+   171	      setOf("memberId", "groupId", "groupName", "registeredDate", "pricing", "permission")
+   172	    val SUMMARY = setOf("groupId", "groupName", "totalMemberCount", "members")
+   173	    val MEMBER = setOf("memberId", "permission")
+   174	    val PROBLEM = setOf("type", "title", "status", "detail", "instance", "code")
+   175	  }
+   176	}
+===== client/GroupProxyTransport.kt
+     1	package task.member.infrastructure.client
+     2	
+     3	import java.net.SocketTimeoutException
+     4	import java.net.http.HttpTimeoutException
+     5	import java.util.concurrent.TimeoutException
+     6	import task.member.application.exception.GroupServiceTimeoutException
+     7	import task.member.application.exception.GroupServiceUnavailableException
+     8	
+     9	/** HTTP 어댑터의 예외 타입만으로 시간 초과를 구분한다. 메시지나 원문을 전달하지 않는다. */
+    10	internal object GroupProxyTransport {
+    11	  fun failure(error: Throwable): RuntimeException {
+    12	    val seen = mutableSetOf<Throwable>()
+    13	    var current: Throwable? = error
+    14	    while (current != null && seen.add(current)) {
+    15	      if (
+    16	        current is SocketTimeoutException ||
+    17	          current is HttpTimeoutException ||
+    18	          current is TimeoutException
+    19	      )
+    20	        return GroupServiceTimeoutException()
+    21	      current = current.cause
+    22	    }
+    23	    return GroupServiceUnavailableException()
+    24	  }
+    25	}
+===== client/OutgoingTraceInterceptor.kt
+     1	package task.member.infrastructure.client
+     2	
+     3	import java.util.UUID
+     4	import org.slf4j.LoggerFactory
+     5	import org.slf4j.MDC
+     6	import org.springframework.http.HttpRequest
+     7	import org.springframework.http.client.ClientHttpRequestExecution
+     8	import org.springframework.http.client.ClientHttpRequestInterceptor
+     9	import org.springframework.http.client.ClientHttpResponse
+    10	
+    11	/** 호출과 전송 시도를 연결하고 원문 URL·헤더를 기록하지 않는다(POL-CODE-004). */
+    12	class OutgoingTraceInterceptor : ClientHttpRequestInterceptor {
+    13	  private val log = LoggerFactory.getLogger(javaClass)
+    14	
+    15	  override fun intercept(
+    16	    request: HttpRequest,
+    17	    body: ByteArray,
+    18	    execution: ClientHttpRequestExecution,
+    19	  ): ClientHttpResponse {
+    20	    val old = MDC.getCopyOfContextMap()
+    21	    val callId = UUID.randomUUID().toString()
+    22	    val requestId = MDC.get("requestId") ?: UUID.randomUUID().toString()
+    23	    val start = System.nanoTime()
+    24	    MDC.put("requestId", requestId)
+    25	    MDC.put("callId", callId)
+    26	    request.headers.set("X-Request-Id", requestId)
+    27	    request.headers.set("X-Internal-Call-Id", callId)
+    28	    val operation =
+    29	      when {
+    30	        request.uri.path == "/api/groups/summary" -> "group.summary"
+    31	        request.uri.path.startsWith("/api/group/") -> "group.detail"
+    32	        request.uri.path == "/v3/api-docs" -> "group.docs"
+    33	        else -> "group.other"
+    34	      }
+    35	    log.info(
+    36	      "event=remote.started dependency=group-service operation={} callId={}",
+    37	      operation,
+    38	      callId,
+    39	    )
+    40	    try {
+    41	      return execution.execute(request, body).also {
+    42	        log.info(
+    43	          "event=remote.completed phase=response.headers operation={} callId={} status={} durationMs={}",
+    44	          operation,
+    45	          callId,
+    46	          it.statusCode.value(),
+    47	          (System.nanoTime() - start) / 1_000_000,
+    48	        )
+    49	      }
+    50	    } finally {
+    51	      MDC.clear()
+    52	      if (old != null) MDC.setContextMap(old)
+    53	    }
+    54	  }
+    55	}
+===== client/ReadDeadline.kt
+     1	package task.member.infrastructure.client
+     2	
+     3	import java.io.FilterInputStream
+     4	import java.io.IOException
+     5	import java.io.InputStream
+     6	import java.net.http.HttpTimeoutException
+     7	import java.time.Duration
+     8	import org.springframework.http.client.ClientHttpResponse
+     9	
+    10	/** Spring JDK 전송기가 본문 시간 초과를 stream close로 전달해도 시도별 제한 의미를 유지한다. */
+    11	internal object ReadDeadline {
+    12	  fun wrap(
+    13	    response: ClientHttpResponse,
+    14	    started: Long,
+    15	    timeout: Duration,
+    16	  ): ClientHttpResponse {
+    17	    return object : ClientHttpResponse by response {
+    18	      private val input by lazy {
+    19	        object : FilterInputStream(response.body) {
+    20	          private fun checkDeadline() {
+    21	            if (System.nanoTime() - started >= timeout.toNanos())
+    22	              throw HttpTimeoutException("그룹 응답 시간 초과")
+    23	          }
+    24	
+    25	          private fun readWithinDeadline(read: () -> Int): Int {
+    26	            checkDeadline()
+    27	            try {
+    28	              return read().also { checkDeadline() }
+    29	            } catch (error: IOException) {
+    30	              checkDeadline()
+    31	              throw error
+    32	            }
+    33	          }
+    34	
+    35	          override fun read(): Int = readWithinDeadline { super.read() }
+    36	
+    37	          override fun read(bytes: ByteArray, offset: Int, length: Int): Int = readWithinDeadline {
+    38	            super.read(bytes, offset, length)
+    39	          }
+    40	        }
+    41	      }
+    42	
+    43	      override fun getBody(): InputStream = input
+    44	    }
+    45	  }
+    46	}
+===== client/RetryOnTransientFailureInterceptor.kt
+     1	package task.member.infrastructure.client
+     2	
+     3	import java.io.IOException
+     4	import java.io.InterruptedIOException
+     5	import java.net.ConnectException
+     6	import java.net.SocketTimeoutException
+     7	import java.net.http.HttpTimeoutException
+     8	import java.time.Duration
+     9	import org.slf4j.LoggerFactory
+    10	import org.slf4j.MDC
+    11	import org.springframework.http.HttpMethod
+    12	import org.springframework.http.HttpRequest
+    13	import org.springframework.http.client.ClientHttpRequestExecution
+    14	import org.springframework.http.client.ClientHttpRequestInterceptor
+    15	import org.springframework.http.client.ClientHttpResponse
+    16	
+    17	/**
+    18	 * 연결 실패·시간 초과일 때만 조회 요청(GET·HEAD)을 지수 백오프·Full Jitter로 다시 보낸다(POL-COMM-003).
+    19	 *
+    20	 * 응답을 받은 경우(4xx·5xx 포함)는 재시도하지 않는다. 마지막 실패는 그대로 던져 호출 쪽이 장애를 알 수 있게 한다. 이 인터셉터는 RestClient의 마지막
+    21	 * 인터셉터로 둔다(재실행 시 뒤 인터셉터를 다시 거치지 않으므로).
+    22	 */
+    23	class RetryOnTransientFailureInterceptor(
+    24	  private val maxRetries: Int,
+    25	  private val backoff: ExponentialRetryBackoff,
+    26	  private val jitter: RetryJitter,
+    27	  private val sleeper: RetrySleeper,
+    28	  private val readTimeout: Duration? = null,
+    29	) : ClientHttpRequestInterceptor {
+    30	  private val log = LoggerFactory.getLogger(javaClass)
+    31	
+    32	  init {
+    33	    require(maxRetries in 0..3) { "추가 재시도 횟수는 0부터 3까지여야 합니다." }
+    34	  }
+    35	
+    36	  override fun intercept(
+    37	    request: HttpRequest,
+    38	    body: ByteArray,
+    39	    execution: ClientHttpRequestExecution,
+    40	  ): ClientHttpResponse {
+    41	    val oldAttempt = MDC.get("attempt")
+    42	    try {
+    43	      var retries = 0
+    44	      while (true) {
+    45	        stopIfInterrupted()
+    46	        request.headers.set("X-Internal-Attempt", (retries + 1).toString())
+    47	        MDC.put("attempt", (retries + 1).toString())
+    48	        log.info("event=remote.attempt.started attempt={}", retries + 1)
+    49	        try {
+    50	          val started = System.nanoTime()
+    51	          val response = execution.execute(request, body)
+    52	          return (readTimeout?.let { ReadDeadline.wrap(response, started, it) } ?: response).also {
+    53	            log.info(
+    54	              "event=remote.attempt.completed attempt={} status={}",
+    55	              retries + 1,
+    56	              it.statusCode.value(),
+    57	            )
+    58	          }
+    59	        } catch (e: IOException) {
+    60	          log.error(
+    61	            "event=remote.failed attempt={} exception={}",
+    62	            retries + 1,
+    63	            e.javaClass.simpleName,
+    64	          )
+    65	          stopIfInterrupted()
+    66	          if (retries >= maxRetries || !isRetryable(request, e)) throw e
+    67	          retries++
+    68	          val upper = backoff.upperBoundMillis(retries)
+    69	          val delay = jitter.sample(upper)
+    70	          check(delay in 0..upper) { "재시도 난수 결과가 허용 범위를 벗어났습니다." }
+    71	          log.info(
+    72	            "event=remote.retry.scheduled nextAttempt={} delayMs={} reason={}",
+    73	            retries + 1,
+    74	            delay,
+    75	            e.javaClass.simpleName,
+    76	          )
+    77	          try {
+    78	            sleeper.sleep(delay)
+    79	          } catch (_: InterruptedException) {
+    80	            Thread.currentThread().interrupt()
+    81	            throw interrupted()
+    82	          }
+    83	          stopIfInterrupted()
+    84	        }
+    85	      }
+    86	    } finally {
+    87	      if (oldAttempt == null) MDC.remove("attempt") else MDC.put("attempt", oldAttempt)
+    88	    }
+    89	  }
+    90	
+    91	  private fun stopIfInterrupted() {
+    92	    if (Thread.currentThread().isInterrupted) throw interrupted()
+    93	  }
+    94	
+    95	  private fun interrupted() = InterruptedIOException("그룹 호출이 중단되었습니다.")
+    96	
+    97	  private fun isRetryable(request: HttpRequest, e: IOException): Boolean =
+    98	    request.method in RETRYABLE_METHODS &&
+    99	      generateSequence<Throwable>(e) { it.cause }
+   100	        .any {
+   101	          it is ConnectException || it is HttpTimeoutException || it is SocketTimeoutException
+   102	        }
+   103	
+   104	  private companion object {
+   105	    val RETRYABLE_METHODS = setOf(HttpMethod.GET, HttpMethod.HEAD)
+   106	  }
+   107	}
+===== client/group/GroupMembershipContract.kt
+     1	package task.member.infrastructure.client.group
+     2	
+     3	import java.util.Collections
+     4	import task.member.application.exception.GroupServiceConfigurationException
+     5	import task.member.application.model.GroupMembership
+     6	
+     7	/** HTTP와 fixture가 공유하는 순수 소속 계약 검사. JSON·전송·Spring에 의존하지 않는다(POL-MEMBER-001). */
+     8	internal object GroupMembershipContract {
+     9	  private val idPattern = Regex("[a-z0-9]{10}")
+    10	
+    11	  fun validateRequest(memberIds: List<String>) {
+    12	    if (
+    13	      memberIds.size !in 1..100 ||
+    14	        memberIds.distinct().size != memberIds.size ||
+    15	        memberIds.any { !idPattern.matches(it) }
+    16	    )
+    17	      throw GroupServiceConfigurationException()
+    18	  }
+    19	
+    20	  fun toMemberships(payload: GroupMembershipPayload): Map<String, List<GroupMembership>> {
+    21	    val members = payload.members
+    22	    if (members.map { it.memberId }.distinct().size != members.size) {
+    23	      throw GroupServiceConfigurationException()
+    24	    }
+    25	    val mapped = members.associate { member ->
+    26	      if (
+    27	        !idPattern.matches(member.memberId) ||
+    28	          member.memberships.size > 1 ||
+    29	          member.memberships.map { it.groupId }.distinct().size != member.memberships.size
+    30	      )
+    31	        throw GroupServiceConfigurationException()
+    32	      val groups =
+    33	        member.memberships
+    34	          .map { group ->
+    35	            if (
+    36	              !idPattern.matches(group.groupId) ||
+    37	                group.groupName.isBlank() ||
+    38	                group.permission.isBlank()
+    39	            )
+    40	              throw GroupServiceConfigurationException()
+    41	            GroupMembership(
+    42	              group.groupId,
+    43	              group.groupName,
+    44	              group.permission,
+    45	              group.joinedAt,
+    46	              group.pricing?.takeUnless { it.isBlank() },
+    47	            )
+    48	          }
+    49	          .sortedBy { it.groupId }
+    50	      member.memberId to Collections.unmodifiableList(groups)
+    51	    }
+    52	    return Collections.unmodifiableMap(mapped)
+    53	  }
+    54	}
+===== client/group/GroupMembershipDecoder.kt
+     1	package task.member.infrastructure.client.group
+     2	
+     3	import java.time.Instant
+     4	import java.time.LocalDateTime
+     5	import java.time.OffsetDateTime
+     6	import java.time.ZoneId
+     7	import java.time.format.DateTimeFormatter
+     8	import java.time.format.DateTimeParseException
+     9	import java.time.format.ResolverStyle
+    10	import task.member.application.exception.GroupServiceConfigurationException
+    11	import task.member.application.model.GroupMembership
+    12	import tools.jackson.core.JacksonException
+    13	import tools.jackson.databind.DeserializationFeature
+    14	import tools.jackson.databind.JsonNode
+    15	import tools.jackson.databind.json.JsonMapper
+    16	
+    17	/** 원격 계약과 local fixture를 별도로 해석한다. 원문을 예외에 담지 않는다(POL-COMM-005). */
+    18	class GroupMembershipDecoder(mapper: JsonMapper) {
+    19	  private val strictMapper =
+    20	    mapper
+    21	      .rebuild()
+    22	      .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+    23	      .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
+    24	      .build()
+    25	
+    26	  /** fixture 전용 형식. 원격 API의 그룹 중심 응답과 결합하지 않는다(POL-MEMBER-002). */
+    27	  fun decode(bytes: ByteArray): Map<String, List<GroupMembership>> {
+    28	    val members =
+    29	      array(root(bytes).get("members")).map { member ->
+    30	        val node = obj(member)
+    31	        MemberMembershipPayload(
+    32	          text(node, "memberId"),
+    33	          array(node.get("memberships")).map { raw ->
+    34	            val group = obj(raw)
+    35	            MembershipPayload(
+    36	              text(group, "groupId"),
+    37	              text(group, "groupName"),
+    38	              text(group, "permission"),
+    39	              optionalText(group, "joinedAt")?.let(::parseFixtureTimestamp),
+    40	              optionalText(group, "pricing"),
+    41	            )
+    42	          },
+    43	        )
+    44	      }
+    45	    return GroupMembershipContract.toMemberships(GroupMembershipPayload(members))
+    46	  }
+    47	
+    48	  /** 성공한 sparse summary만 요청 ID별 미소속으로 초기화한다(POL-COMM-005). */
+    49	  fun decodeSummary(bytes: ByteArray, memberIds: List<String>): Map<String, List<GroupMembership>> {
+    50	    GroupMembershipContract.validateRequest(memberIds)
+    51	    val result = memberIds.associateWith { emptyList<GroupMembership>() }.toMutableMap()
+    52	    val groupIds = mutableSetOf<String>()
+    53	    val seen = mutableSetOf<String>()
+    54	    for (raw in array(root(bytes).get("group"))) {
+    55	      val group = obj(raw)
+    56	      val id = text(group, "groupId")
+    57	      val name = text(group, "groupName")
+    58	      if (!ID.matches(id) || !groupIds.add(id)) fail()
+    59	      val members = array(group.get("members"))
+    60	      val total = group.get("totalMemberCount")
+    61	      if (
+    62	        members.isEmpty() ||
+    63	          total == null ||
+    64	          !total.isIntegralNumber ||
+    65	          !total.canConvertToLong() ||
+    66	          total.longValue() < members.size
+    67	      )
+    68	        fail()
+    69	      for (rawMember in members) {
+    70	        val member = obj(rawMember)
+    71	        val memberId = text(member, "memberId")
+    72	        if (memberId !in result || !seen.add(memberId)) fail()
+    73	        result[memberId] = listOf(GroupMembership(id, name, text(member, "permission"), null, null))
+    74	      }
+    75	    }
+    76	    return result
+    77	  }
+    78	
+    79	  /** 그룹 상세의 기존 6개 필드를 해석한다. 시각은 분 정밀도임을 보존한다(POL-API-005). */
+    80	  fun decodeDetail(bytes: ByteArray, memberId: String): GroupMembership {
+    81	    val node = root(bytes)
+    82	    if (text(node, "memberId") != memberId) fail()
+    83	    val id = text(node, "groupId")
+    84	    if (!ID.matches(id)) fail()
+    85	    val instant =
+    86	      try {
+    87	        val value = text(node, "registeredDate")
+    88	        if (!MINUTE_PATTERN.matches(value)) fail()
+    89	        LocalDateTime.parse(value, MINUTE_FORMAT).atZone(ZoneId.of("Asia/Seoul")).toInstant()
+    90	      } catch (_: DateTimeParseException) {
+    91	        fail()
+    92	      }
+    93	    return GroupMembership(
+    94	      id,
+    95	      text(node, "groupName"),
+    96	      text(node, "permission"),
+    97	      instant,
+    98	      text(node, "pricing"),
+    99	    )
+   100	  }
+   101	
+   102	  /** 경로 404와 구분되는 정상 미소속만 허용한다(POL-COMM-004). */
+   103	  fun isMembershipNotFound(bytes: ByteArray): Boolean {
+   104	    val node = root(bytes)
+   105	    return text(node, "code") == "GROUP_MEMBERSHIP_NOT_FOUND" &&
+   106	      node.get("status")?.let {
+   107	        it.isIntegralNumber && it.canConvertToInt() && it.intValue() == 404
+   108	      } == true
+   109	  }
+   110	
+   111	  private fun root(bytes: ByteArray): JsonNode =
+   112	    try {
+   113	      obj(strictMapper.readTree(bytes))
+   114	    } catch (_: JacksonException) {
+   115	      fail()
+   116	    }
+   117	
+   118	  private fun obj(node: JsonNode?): JsonNode = node?.takeIf { it.isObject } ?: fail()
+   119	
+   120	  private fun array(node: JsonNode?): List<JsonNode> =
+   121	    node?.takeIf { it.isArray }?.toList() ?: fail()
+   122	
+   123	  private fun text(node: JsonNode, name: String): String =
+   124	    node.get(name)?.takeIf { it.isString }?.stringValue()?.takeIf { it.isNotBlank() } ?: fail()
+   125	
+   126	  private fun optionalText(node: JsonNode, name: String): String? {
+   127	    val value = node.get(name) ?: return null
+   128	    if (value.isNull) return null
+   129	    return value.takeIf { it.isString }?.stringValue() ?: fail()
+   130	  }
+   131	
+   132	  private fun parseFixtureTimestamp(value: String): Instant =
+   133	    try {
+   134	      if (!UTC_TIMESTAMP.matches(value)) fail()
+   135	      OffsetDateTime.parse(value).toInstant()
+   136	    } catch (_: DateTimeParseException) {
+   137	      fail()
+   138	    }
+   139	
+   140	  private fun fail(): Nothing = throw GroupServiceConfigurationException()
+   141	
+   142	  private companion object {
+   143	    val ID = Regex("[a-z0-9]{10}")
+   144	    val MINUTE_PATTERN = Regex("[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}")
+   145	    val MINUTE_FORMAT =
+   146	      DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm").withResolverStyle(ResolverStyle.STRICT)
+   147	    val UTC_TIMESTAMP =
+   148	      Regex("[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?(Z|\\+00:00)")
+   149	  }
+   150	}
+===== client/group/GroupMembershipPayload.kt
+     1	package task.member.infrastructure.client.group
+     2	
+     3	import java.time.Instant
+     4	
+     5	/** 그룹 전송 계약 DTO. 필수 목록의 부재를 기본 빈 배열로 숨기지 않는다(POL-COMM-005). */
+     6	internal data class GroupMembershipPayload(val members: List<MemberMembershipPayload>)
+     7	
+     8	/** 멤버 하나의 전송 항목. application 포트에 노출하지 않는다(POL-CQRS-004). */
+     9	internal data class MemberMembershipPayload(
+    10	  val memberId: String,
+    11	  val memberships: List<MembershipPayload>,
+    12	)
+    13	
+    14	/** 제공자 필드를 명시적으로 보존하는 내부 전송 DTO(POL-COMM-005). */
+    15	internal data class MembershipPayload(
+    16	  val groupId: String,
+    17	  val groupName: String,
+    18	  val permission: String,
+    19	  val joinedAt: Instant?,
+    20	  val pricing: String?,
+    21	)
+===== client/group/HttpGroupMembershipReader.kt
+     1	package task.member.infrastructure.client.group
+     2	
+     3	import java.io.IOException
+     4	import org.springframework.http.InvalidMediaTypeException
+     5	import org.springframework.http.MediaType
+     6	import org.springframework.web.client.ResourceAccessException
+     7	import org.springframework.web.client.RestClient
+     8	import org.springframework.web.client.RestClientException
+     9	import task.member.application.exception.GroupServiceConfigurationException
+    10	import task.member.application.exception.GroupServiceUnavailableException
+    11	import task.member.application.model.GroupMembership
+    12	import task.member.application.port.output.GroupMembershipReader
+    13	
+    14	/** 목록과 상세를 의미별 경로로 전달한다. 페이지 크기로 API를 선택하지 않는다(POL-COMM-005). */
+    15	class HttpGroupMembershipReader(
+    16	  private val client: RestClient,
+    17	  private val decoder: GroupMembershipDecoder,
+    18	) : GroupMembershipReader {
+    19	  override fun findByMemberIds(memberIds: List<String>): Map<String, List<GroupMembership>> {
+    20	    GroupMembershipContract.validateRequest(memberIds)
+    21	    val response =
+    22	      read(
+    23	        client.get().uri { builder ->
+    24	          builder.path("/api/groups/summary")
+    25	          memberIds.forEach { builder.queryParam("memberIds", it) }
+    26	          builder.build()
+    27	        },
+    28	        allowMissing = false,
+    29	      )
+    30	    return decoder.decodeSummary(response.body, memberIds)
+    31	  }
+    32	
+    33	  override fun findByMemberId(memberId: String): GroupMembership? {
+    34	    GroupMembershipContract.validateRequest(listOf(memberId))
+    35	    val response = read(client.get().uri("/api/group/{memberId}", memberId), allowMissing = true)
+    36	    if (response.status == 404) {
+    37	      if (decoder.isMembershipNotFound(response.body)) return null
+    38	      throw GroupServiceConfigurationException()
+    39	    }
+    40	    return decoder.decodeDetail(response.body, memberId)
+    41	  }
+    42	
+    43	  private fun read(request: RestClient.RequestHeadersSpec<*>, allowMissing: Boolean): Payload =
+    44	    try {
+    45	      request.accept(MediaType.APPLICATION_JSON, MediaType.APPLICATION_PROBLEM_JSON).exchange {
+    46	        _,
+    47	        response ->
+    48	        val status = response.statusCode.value()
+    49	        if (response.statusCode.is5xxServerError) throw GroupServiceUnavailableException()
+    50	        if (status != 200 && !(allowMissing && status == 404))
+    51	          throw GroupServiceConfigurationException()
+    52	        val media =
+    53	          if (status == 404) MediaType.APPLICATION_PROBLEM_JSON else MediaType.APPLICATION_JSON
+    54	        val contentType = response.headers.contentType
+    55	        if (contentType == null || !media.isCompatibleWith(contentType))
+    56	          throw GroupServiceConfigurationException()
+    57	        val bytes = response.body.readNBytes(MAX_RESPONSE_BYTES + 1)
+    58	        if (bytes.size > MAX_RESPONSE_BYTES) throw GroupServiceConfigurationException()
+    59	        Payload(status, bytes)
+    60	      }
+    61	    } catch (_: ResourceAccessException) {
+    62	      throw GroupServiceUnavailableException()
+    63	    } catch (_: IOException) {
+    64	      throw GroupServiceUnavailableException()
+    65	    } catch (_: InvalidMediaTypeException) {
+    66	      throw GroupServiceConfigurationException()
+    67	    } catch (_: RestClientException) {
+    68	      throw GroupServiceConfigurationException()
+    69	    }
+    70	
+    71	  private data class Payload(val status: Int, val body: ByteArray)
+    72	
+    73	  private companion object {
+    74	    const val MAX_RESPONSE_BYTES = 1024 * 1024
+    75	  }
+    76	}

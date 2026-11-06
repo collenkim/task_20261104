@@ -1,0 +1,668 @@
+=== MemberServiceApplication.kt
+     1	package task.member
+     2	
+     3	import org.springframework.boot.autoconfigure.SpringBootApplication
+     4	import org.springframework.boot.runApplication
+     5	
+     6	@SpringBootApplication class MemberServiceApplication
+     7	
+     8	fun main(args: Array<String>) {
+     9	  runApplication<MemberServiceApplication>(*args)
+    10	}
+=== presentation/query/MemberQueryApi.kt
+     1	package task.member.presentation.query
+     2	
+     3	import io.swagger.v3.oas.annotations.Operation
+     4	import io.swagger.v3.oas.annotations.Parameter
+     5	import io.swagger.v3.oas.annotations.Parameters
+     6	import io.swagger.v3.oas.annotations.enums.ParameterIn
+     7	import io.swagger.v3.oas.annotations.media.Content
+     8	import io.swagger.v3.oas.annotations.media.ExampleObject
+     9	import io.swagger.v3.oas.annotations.media.Schema
+    10	import io.swagger.v3.oas.annotations.responses.ApiResponse
+    11	import io.swagger.v3.oas.annotations.responses.ApiResponses
+    12	import io.swagger.v3.oas.annotations.tags.Tag
+    13	import org.springframework.http.ResponseEntity
+    14	import org.springframework.util.MultiValueMap
+    15	import org.springframework.web.bind.annotation.GetMapping
+    16	import org.springframework.web.bind.annotation.PathVariable
+    17	import org.springframework.web.bind.annotation.RequestParam
+    18	import task.member.presentation.query.response.MemberDetailResponse
+    19	import task.member.presentation.query.response.MemberProblemResponse
+    20	import task.member.presentation.query.response.MemberSummaryPageResponse
+    21	
+    22	/** HTTP 계약을 컨트롤러 처리와 분리한다. 소비자는 생성 OpenAPI를 공유한다(POL-API-004). */
+    23	@Tag(name = "멤버 조회", description = "멤버 기본 정보와 그룹 소속 조회. 현재 멤버당 0~1개")
+    24	interface MemberQueryApi {
+    25	  @Operation(
+    26	    operationId = "getMemberSummaries",
+    27	    summary = "멤버 요약 목록 조회",
+    28	    description =
+    29	      "이름 정렬과 멤버 기준 페이지. page/size/sort는 같은 값이어도 반복 불가. 공백·부호·소수 불가. size 범위 확인 후 최대 100 적용, page × 적용 크기는 2147483647 이하.",
+    30	  )
+    31	  @Parameters(
+    32	    Parameter(
+    33	      name = "page",
+    34	      `in` = ParameterIn.QUERY,
+    35	      description = "0부터 시작. ASCII 숫자만 허용",
+    36	      schema =
+    37	        Schema(
+    38	          type = "integer",
+    39	          format = "int32",
+    40	          defaultValue = "0",
+    41	          minimum = "0",
+    42	          maximum = "2147483647",
+    43	        ),
+    44	    ),
+    45	    Parameter(
+    46	      name = "size",
+    47	      `in` = ParameterIn.QUERY,
+    48	      description = "정수 검증 후 최대 100 적용. ASCII 숫자만 허용",
+    49	      schema =
+    50	        Schema(
+    51	          type = "integer",
+    52	          format = "int32",
+    53	          defaultValue = "20",
+    54	          minimum = "1",
+    55	          maximum = "2147483647",
+    56	        ),
+    57	    ),
+    58	    Parameter(
+    59	      name = "sort",
+    60	      `in` = ParameterIn.QUERY,
+    61	      description = "동명이인은 항상 ID 오름차순",
+    62	      schema =
+    63	        Schema(
+    64	          type = "string",
+    65	          defaultValue = "name,asc",
+    66	          allowableValues = ["name,asc", "name,desc"],
+    67	        ),
+    68	    ),
+    69	  )
+    70	  @ApiResponses(
+    71	    ApiResponse(
+    72	      responseCode = "200",
+    73	      description = "멤버 요약 페이지",
+    74	      content =
+    75	        [
+    76	          Content(
+    77	            mediaType = "application/json",
+    78	            schema = Schema(implementation = MemberSummaryPageResponse::class),
+    79	          )
+    80	        ],
+    81	    ),
+    82	    ApiResponse(
+    83	      responseCode = "400",
+    84	      description = "VALIDATION_FAILED: 조회 입력 위반",
+    85	      content =
+    86	        [
+    87	          Content(
+    88	            mediaType = "application/problem+json",
+    89	            schema = Schema(implementation = MemberProblemResponse::class),
+    90	            examples = [ExampleObject(value = MemberQueryExamples.INVALID_SUMMARY)],
+    91	          )
+    92	        ],
+    93	    ),
+    94	    ApiResponse(
+    95	      responseCode = "500",
+    96	      description = "INTERNAL_ERROR: 내부 설정·계약 오류",
+    97	      content =
+    98	        [
+    99	          Content(
+   100	            mediaType = "application/problem+json",
+   101	            schema = Schema(implementation = MemberProblemResponse::class),
+   102	            examples = [ExampleObject(value = MemberQueryExamples.INTERNAL_ERROR)],
+   103	          )
+   104	        ],
+   105	    ),
+   106	    ApiResponse(
+   107	      responseCode = "503",
+   108	      description = "GROUP_SERVICE_UNAVAILABLE: 그룹 일시 장애",
+   109	      content =
+   110	        [
+   111	          Content(
+   112	            mediaType = "application/problem+json",
+   113	            schema = Schema(implementation = MemberProblemResponse::class),
+   114	            examples = [ExampleObject(value = MemberQueryExamples.GROUP_UNAVAILABLE)],
+   115	          )
+   116	        ],
+   117	    ),
+   118	  )
+   119	  @GetMapping("/api/members", produces = ["application/json"])
+   120	  fun summaries(
+   121	    @Parameter(hidden = true) @RequestParam parameters: MultiValueMap<String, String>
+   122	  ): MemberSummaryPageResponse
+   123	
+   124	  @Operation(
+   125	    operationId = "getMemberDetail",
+   126	    summary = "멤버 상세 조회",
+   127	    description =
+   128	      "기본 정보·생성 감사 정보·현재 최대 한 그룹 소속. 응답은 no-store, 시각은 한국 시간(Asia/Seoul) yyyy-MM-dd HH:mm입니다.",
+   129	  )
+   130	  @ApiResponses(
+   131	    ApiResponse(
+   132	      responseCode = "200",
+   133	      description = "멤버 상세",
+   134	      content =
+   135	        [
+   136	          Content(
+   137	            mediaType = "application/json",
+   138	            schema = Schema(implementation = MemberDetailResponse::class),
+   139	          )
+   140	        ],
+   141	    ),
+   142	    ApiResponse(
+   143	      responseCode = "400",
+   144	      description = "VALIDATION_FAILED: 식별자 형식 오류",
+   145	      content =
+   146	        [
+   147	          Content(
+   148	            mediaType = "application/problem+json",
+   149	            schema = Schema(implementation = MemberProblemResponse::class),
+   150	            examples = [ExampleObject(value = MemberQueryExamples.INVALID_DETAIL)],
+   151	          )
+   152	        ],
+   153	    ),
+   154	    ApiResponse(
+   155	      responseCode = "404",
+   156	      description = "NOT_FOUND: 멤버 없음",
+   157	      content =
+   158	        [
+   159	          Content(
+   160	            mediaType = "application/problem+json",
+   161	            schema = Schema(implementation = MemberProblemResponse::class),
+   162	            examples = [ExampleObject(value = MemberQueryExamples.NOT_FOUND)],
+   163	          )
+   164	        ],
+   165	    ),
+   166	    ApiResponse(
+   167	      responseCode = "500",
+   168	      description = "INTERNAL_ERROR: 내부 설정·계약 오류",
+   169	      content =
+   170	        [
+   171	          Content(
+   172	            mediaType = "application/problem+json",
+   173	            schema = Schema(implementation = MemberProblemResponse::class),
+   174	            examples = [ExampleObject(value = MemberQueryExamples.INTERNAL_ERROR)],
+   175	          )
+   176	        ],
+   177	    ),
+   178	    ApiResponse(
+   179	      responseCode = "503",
+   180	      description = "GROUP_SERVICE_UNAVAILABLE: 그룹 일시 장애",
+   181	      content =
+   182	        [
+   183	          Content(
+   184	            mediaType = "application/problem+json",
+   185	            schema = Schema(implementation = MemberProblemResponse::class),
+   186	            examples = [ExampleObject(value = MemberQueryExamples.GROUP_UNAVAILABLE)],
+   187	          )
+   188	        ],
+   189	    ),
+   190	  )
+   191	  @GetMapping("/api/member/{id}", produces = ["application/json"])
+   192	  fun detail(
+   193	    @Parameter(
+   194	      required = true,
+   195	      description = "소문자 영숫자 10자리 멤버 ID",
+   196	      schema = Schema(pattern = "^[a-z0-9]{10}$"),
+   197	    )
+   198	    @PathVariable("id")
+   199	    id: String
+   200	  ): ResponseEntity<MemberDetailResponse>
+   201	}
+=== presentation/query/MemberQueryController.kt
+     1	package task.member.presentation.query
+     2	
+     3	import org.springframework.http.CacheControl
+     4	import org.springframework.http.ResponseEntity
+     5	import org.springframework.util.MultiValueMap
+     6	import org.springframework.web.bind.annotation.RestController
+     7	import task.member.application.port.input.GetMemberDetailUseCase
+     8	import task.member.application.port.input.GetMemberSummariesUseCase
+     9	import task.member.application.query.detail.MemberDetailQuery
+    10	import task.member.presentation.query.mapper.MemberResponseMapper
+    11	import task.member.presentation.query.request.MemberSummaryRequest
+    12	
+    13	/** 입력 포트만 호출하고 HTTP 변환만 담당한다(POL-CQRS-004). */
+    14	@RestController
+    15	class MemberQueryController(
+    16	  private val summariesUseCase: GetMemberSummariesUseCase,
+    17	  private val detailUseCase: GetMemberDetailUseCase,
+    18	) : MemberQueryApi {
+    19	  override fun summaries(parameters: MultiValueMap<String, String>) =
+    20	    MemberResponseMapper.summaries(
+    21	      summariesUseCase.execute(MemberSummaryRequest.from(parameters).toQuery())
+    22	    )
+    23	
+    24	  override fun detail(id: String) =
+    25	    ResponseEntity.ok()
+    26	      .cacheControl(CacheControl.noStore())
+    27	      .body(MemberResponseMapper.detail(detailUseCase.execute(MemberDetailQuery(id))))
+    28	}
+=== presentation/query/MemberQueryExamples.kt
+     1	package task.member.presentation.query
+     2	
+     3	/** 오류 예제는 실제 고정 코드·문구 계약을 따른다. 값이나 내부 주소를 노출하지 않는다(POL-API-002·004). */
+     4	object MemberQueryExamples {
+     5	  const val INVALID_SUMMARY =
+     6	    """{"type":"about:blank","title":"입력값 검증 실패","status":400,"detail":"요청 값이 허용된 조건을 충족하지 않습니다.","instance":"/api/members","code":"VALIDATION_FAILED"}"""
+     7	  const val INVALID_DETAIL =
+     8	    """{"type":"about:blank","title":"입력값 검증 실패","status":400,"detail":"요청 값이 허용된 조건을 충족하지 않습니다.","instance":"/api/member/invalid","code":"VALIDATION_FAILED"}"""
+     9	  const val NOT_FOUND =
+    10	    """{"type":"about:blank","title":"대상 없음","status":404,"detail":"요청한 경로나 자원을 찾을 수 없습니다.","instance":"/api/member/missing001","code":"NOT_FOUND"}"""
+    11	  const val INTERNAL_ERROR =
+    12	    """{"type":"about:blank","title":"내부 처리 오류","status":500,"detail":"요청을 처리하지 못했습니다.","instance":"/api/members","code":"INTERNAL_ERROR"}"""
+    13	  const val GROUP_UNAVAILABLE =
+    14	    """{"type":"about:blank","title":"그룹 서비스 이용 불가","status":503,"detail":"그룹 정보를 일시적으로 조회할 수 없습니다.","instance":"/api/members","code":"GROUP_SERVICE_UNAVAILABLE"}"""
+    15	}
+=== presentation/query/mapper/ApiTime.kt
+     1	package task.member.presentation.query.mapper
+     2	
+     3	import java.time.Instant
+     4	import java.time.ZoneId
+     5	import java.time.format.DateTimeFormatter
+     6	
+     7	/** 업무 시각만 한국 시간의 분 단위로 표현한다. 저장 값은 변경하지 않는다(POL-API-005). */
+     8	internal object ApiTime {
+     9	  const val PATTERN = "^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}$"
+    10	  private val format =
+    11	    DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm").withZone(ZoneId.of("Asia/Seoul"))
+    12	
+    13	  fun format(value: Instant): String = format.format(value)
+    14	}
+=== presentation/query/mapper/MemberResponseMapper.kt
+     1	package task.member.presentation.query.mapper
+     2	
+     3	import task.member.application.model.PageResult
+     4	import task.member.application.query.detail.MemberDetailView
+     5	import task.member.application.query.summary.MemberSummaryView
+     6	import task.member.presentation.query.response.GroupMembershipDetailResponse
+     7	import task.member.presentation.query.response.GroupMembershipSummaryResponse
+     8	import task.member.presentation.query.response.MemberDetailResponse
+     9	import task.member.presentation.query.response.MemberPageResponse
+    10	import task.member.presentation.query.response.MemberSummaryPageResponse
+    11	import task.member.presentation.query.response.MemberSummaryResponse
+    12	
+    13	/** 내부 조회 값을 공개 계약에 투영하는 순수 변환. 공급자·저장소를 참조하지 않는다(POL-CQRS-004). */
+    14	object MemberResponseMapper {
+    15	  fun summaries(view: PageResult<MemberSummaryView>) =
+    16	    MemberSummaryPageResponse(
+    17	      view.items.map { member ->
+    18	        MemberSummaryResponse(
+    19	          member.id,
+    20	          member.name,
+    21	          member.groups.map {
+    22	            GroupMembershipSummaryResponse(it.id, it.name, it.permission)
+    23	          },
+    24	        )
+    25	      },
+    26	      MemberPageResponse(view.size, view.number, view.totalElements, view.totalPages),
+    27	    )
+    28	
+    29	  fun detail(view: MemberDetailView) =
+    30	    MemberDetailResponse(
+    31	      view.id,
+    32	      view.name,
+    33	      view.email,
+    34	      view.address,
+    35	      ApiTime.format(view.registeredDate),
+    36	      ApiTime.format(view.createdAt),
+    37	      view.createdBy,
+    38	      view.groups.map {
+    39	        GroupMembershipDetailResponse(
+    40	          it.id,
+    41	          it.name,
+    42	          it.permission,
+    43	          it.joinedAt?.let(ApiTime::format),
+    44	          it.pricing,
+    45	        )
+    46	      },
+    47	    )
+    48	}
+=== presentation/query/request/MemberSummaryRequest.kt
+     1	package task.member.presentation.query.request
+     2	
+     3	import task.member.application.exception.InvalidMemberQueryException
+     4	import task.member.application.model.MemberNameSort
+     5	import task.member.application.model.MemberPageRequest
+     6	import task.member.application.query.summary.MemberSummaryQuery
+     7	
+     8	/** 원시 입력의 반복·형식을 먼저 검증한다. 생략만 기본값으로 처리한다(POL-API-003). */
+     9	class MemberSummaryRequest
+    10	private constructor(
+    11	  val page: String?,
+    12	  val size: String?,
+    13	  val sort: String?,
+    14	) {
+    15	  fun toQuery(): MemberSummaryQuery {
+    16	    val number = integer(page, 0, 0)
+    17	    val effectiveSize =
+    18	      integer(size, MemberPageRequest.DEFAULT_SIZE, 1).coerceAtMost(MemberPageRequest.MAX_SIZE)
+    19	    if (number.toLong() * effectiveSize > MemberPageRequest.MAX_OFFSET) invalid()
+    20	    val direction =
+    21	      when (sort) {
+    22	        null,
+    23	        "name,asc" -> MemberNameSort.ASCENDING
+    24	        "name,desc" -> MemberNameSort.DESCENDING
+    25	        else -> invalid()
+    26	      }
+    27	    return MemberSummaryQuery(MemberPageRequest(number, effectiveSize), direction)
+    28	  }
+    29	
+    30	  companion object {
+    31	    private val DIGITS = Regex("[0-9]+")
+    32	
+    33	    /** 순서나 값의 동일 여부와 무관하게 각 파라미터를 한 번만 받는다. */
+    34	    fun from(parameters: Map<String, List<String>>): MemberSummaryRequest {
+    35	      for (name in listOf("page", "size", "sort")) {
+    36	        if (parameters.containsKey(name) && parameters.getValue(name).size != 1) invalid()
+    37	      }
+    38	      return MemberSummaryRequest(
+    39	        parameters["page"]?.single(),
+    40	        parameters["size"]?.single(),
+    41	        parameters["sort"]?.single(),
+    42	      )
+    43	    }
+    44	
+    45	    private fun integer(raw: String?, default: Int, minimum: Int): Int {
+    46	      if (raw == null) return default
+    47	      if (!DIGITS.matches(raw)) invalid()
+    48	      val value = raw.toIntOrNull() ?: invalid()
+    49	      if (value < minimum) invalid()
+    50	      return value
+    51	    }
+    52	
+    53	    private fun invalid(): Nothing = throw InvalidMemberQueryException()
+    54	  }
+    55	}
+=== presentation/query/response/MemberResponses.kt
+     1	package task.member.presentation.query.response
+     2	
+     3	import com.fasterxml.jackson.annotation.JsonInclude
+     4	import io.swagger.v3.oas.annotations.media.Schema
+     5	import io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED
+     6	import task.member.presentation.query.mapper.ApiTime
+     7	
+     8	/** 공개 목록 봉투. Spring Data Page의 직렬화 구조에 의존하지 않는다(POL-API-003·004). */
+     9	@Schema(description = "멤버 요약 목록과 멤버 수 기준의 페이지 정보")
+    10	data class MemberSummaryPageResponse(
+    11	  @field:Schema(requiredMode = REQUIRED) val members: List<MemberSummaryResponse>,
+    12	  @field:Schema(requiredMode = REQUIRED) val page: MemberPageResponse,
+    13	)
+    14	
+    15	/** 적용된 크기와 요청 페이지, 멤버 기준 건수(POL-API-003). */
+    16	data class MemberPageResponse(
+    17	  @field:Schema(requiredMode = REQUIRED, minimum = "1", maximum = "100") val size: Int,
+    18	  @field:Schema(requiredMode = REQUIRED, minimum = "0") val number: Int,
+    19	  @field:Schema(requiredMode = REQUIRED, minimum = "0") val totalElements: Long,
+    20	  @field:Schema(requiredMode = REQUIRED, minimum = "0") val totalPages: Long,
+    21	)
+    22	
+    23	/** 목록에는 기본 식별 정보와 소속 핵심 정보만 노출한다(POL-CQRS-002). */
+    24	data class MemberSummaryResponse(
+    25	  @field:Schema(requiredMode = REQUIRED, pattern = "^[a-z0-9]{10}$") val id: String,
+    26	  @field:Schema(requiredMode = REQUIRED) val name: String,
+    27	  @field:Schema(requiredMode = REQUIRED, description = "미소속은 빈 배열, group ID 오름차순")
+    28	  val groups: List<GroupMembershipSummaryResponse>,
+    29	)
+    30	
+    31	/** 권한 코드는 그룹이 소유하는 열린 문자열이며 코드만 노출한다(POL-API-004). */
+    32	data class GroupMembershipSummaryResponse(
+    33	  @field:Schema(requiredMode = REQUIRED) val id: String,
+    34	  @field:Schema(requiredMode = REQUIRED) val name: String,
+    35	  @field:Schema(requiredMode = REQUIRED, description = "그룹 권한 코드. 새 코드 추가 가능")
+    36	  val permission: String,
+    37	)
+    38	
+    39	/** 감사 정보와 소속을 포함한 상세 계약. 시각은 한국 시간의 분 단위로 표시한다(POL-API-004). */
+    40	data class MemberDetailResponse(
+    41	  @field:Schema(requiredMode = REQUIRED, pattern = "^[a-z0-9]{10}$") val id: String,
+    42	  @field:Schema(requiredMode = REQUIRED) val name: String,
+    43	  @field:Schema(requiredMode = REQUIRED, format = "email") val email: String,
+    44	  @field:Schema(requiredMode = REQUIRED) val address: String,
+    45	  @field:Schema(
+    46	    requiredMode = REQUIRED,
+    47	    type = "string",
+    48	    pattern = ApiTime.PATTERN,
+    49	    minLength = 16,
+    50	    maxLength = 16,
+    51	    description = "멤버 가입 시각 한국 시간(Asia/Seoul), 분 단위",
+    52	  )
+    53	  val registeredDate: String,
+    54	  @field:Schema(
+    55	    requiredMode = REQUIRED,
+    56	    type = "string",
+    57	    pattern = ApiTime.PATTERN,
+    58	    minLength = 16,
+    59	    maxLength = 16,
+    60	    description = "행 생성 시각 한국 시간(Asia/Seoul), 분 단위",
+    61	  )
+    62	  val createdAt: String,
+    63	  @field:Schema(requiredMode = REQUIRED, description = "행 생성 주체") val createdBy: String,
+    64	  @field:Schema(requiredMode = REQUIRED, description = "미소속은 빈 배열, group ID 오름차순")
+    65	  val groups: List<GroupMembershipDetailResponse>,
+    66	)
+    67	
+    68	/** 선택 필드는 null이어도 키를 유지한다. 목록 DTO와 용도별로 분리한다(POL-API-004). */
+    69	@JsonInclude(JsonInclude.Include.ALWAYS)
+    70	data class GroupMembershipDetailResponse(
+    71	  @field:Schema(requiredMode = REQUIRED) val id: String,
+    72	  @field:Schema(requiredMode = REQUIRED) val name: String,
+    73	  @field:Schema(requiredMode = REQUIRED, description = "그룹 권한 코드. 새 코드 추가 가능")
+    74	  val permission: String,
+    75	  @field:Schema(
+    76	    requiredMode = REQUIRED,
+    77	    types = ["string", "null"],
+    78	    pattern = ApiTime.PATTERN,
+    79	    minLength = 16,
+    80	    maxLength = 16,
+    81	    description = "그룹 소속 시각 한국 시간(Asia/Seoul), 분 단위. 모르면 null",
+    82	  )
+    83	  val joinedAt: String?,
+    84	  @field:Schema(
+    85	    requiredMode = REQUIRED,
+    86	    types = ["string", "null"],
+    87	    description = "선택 과금 코드. 모르면 null, 새 코드 추가 가능",
+    88	  )
+    89	  val pricing: String?,
+    90	)
+    91	
+    92	/** 실제 ProblemDetail + code 응답의 문서용 스키마(POL-API-002). */
+    93	data class MemberProblemResponse(
+    94	  @field:Schema(requiredMode = REQUIRED, example = "about:blank") val type: String,
+    95	  @field:Schema(requiredMode = REQUIRED) val title: String,
+    96	  @field:Schema(requiredMode = REQUIRED) val status: Int,
+    97	  @field:Schema(requiredMode = REQUIRED) val detail: String,
+    98	  @field:Schema(requiredMode = REQUIRED) val instance: String,
+    99	  @field:Schema(requiredMode = REQUIRED) val code: String,
+   100	)
+=== presentation/error/ErrorCode.kt
+     1	package task.member.presentation.error
+     2	
+     3	import org.springframework.http.HttpStatusCode
+     4	
+     5	/** 오류 응답(ProblemDetail)의 `code` 값. 목록과 의미는 docs/common/api-conventions.md (POL-API-002). */
+     6	enum class ErrorCode(
+     7	  val code: String,
+     8	  val status: Int,
+     9	  val codeName: String,
+    10	  val description: String,
+    11	) {
+    12	  BAD_REQUEST("BAD_REQUEST", 400, "잘못된 요청", "요청 형식이 올바르지 않습니다."),
+    13	  VALIDATION_FAILED("VALIDATION_FAILED", 400, "입력값 검증 실패", "요청 값이 허용된 조건을 충족하지 않습니다."),
+    14	  UNAUTHORIZED("UNAUTHORIZED", 401, "인증 필요", "인증이 필요합니다."),
+    15	  FORBIDDEN("FORBIDDEN", 403, "접근 거부", "접근 권한이 없습니다."),
+    16	  NOT_FOUND("NOT_FOUND", 404, "대상 없음", "요청한 경로나 자원을 찾을 수 없습니다."),
+    17	  METHOD_NOT_ALLOWED("METHOD_NOT_ALLOWED", 405, "허용되지 않은 요청 방법", "지원하지 않는 HTTP 메서드입니다."),
+    18	  NOT_ACCEPTABLE("NOT_ACCEPTABLE", 406, "응답 형식 불일치", "요청한 형식으로 응답할 수 없습니다."),
+    19	  CONFLICT("CONFLICT", 409, "상태 충돌", "현재 자원의 상태와 요청이 충돌합니다."),
+    20	  UNSUPPORTED_MEDIA_TYPE("UNSUPPORTED_MEDIA_TYPE", 415, "지원하지 않는 본문 형식", "요청 본문의 형식을 지원하지 않습니다."),
+    21	  INTERNAL_ERROR("INTERNAL_ERROR", 500, "내부 처리 오류", "요청을 처리하지 못했습니다."),
+    22	  GROUP_SERVICE_UNAVAILABLE(
+    23	    "GROUP_SERVICE_UNAVAILABLE",
+    24	    503,
+    25	    "그룹 서비스 이용 불가",
+    26	    "그룹 정보를 일시적으로 조회할 수 없습니다.",
+    27	  ),
+    28	  SERVICE_UNAVAILABLE("SERVICE_UNAVAILABLE", 503, "서비스 이용 불가", "일시적으로 요청을 처리할 수 없습니다.");
+    29	
+    30	  companion object {
+    31	    /** 상태 코드에 맞는 일반 코드. 목록에 없는 상태는 4xx면 BAD_REQUEST, 5xx면 INTERNAL_ERROR. */
+    32	    fun of(status: HttpStatusCode): ErrorCode =
+    33	      entries.firstOrNull {
+    34	        it.status == status.value() && it !in setOf(VALIDATION_FAILED, GROUP_SERVICE_UNAVAILABLE)
+    35	      } ?: if (status.is5xxServerError) INTERNAL_ERROR else BAD_REQUEST
+    36	  }
+    37	}
+=== presentation/error/MemberProblemDetail.kt
+     1	package task.member.presentation.error
+     2	
+     3	import com.fasterxml.jackson.annotation.JsonInclude
+     4	import java.net.URI
+     5	import org.springframework.http.ProblemDetail
+     6	
+     7	/** about:blank도 필수 type으로 직렬화한다. Spring의 확장 속성 처리는 유지한다(POL-API-002). */
+     8	class MemberProblemDetail(source: ProblemDetail) : ProblemDetail(source) {
+     9	  @JsonInclude(JsonInclude.Include.ALWAYS)
+    10	  override fun getType(): URI = super.getType() ?: URI.create("about:blank")
+    11	}
+=== presentation/error/ProblemDetailsExceptionHandler.kt
+     1	package task.member.presentation.error
+     2	
+     3	import org.slf4j.LoggerFactory
+     4	import org.springframework.http.HttpHeaders
+     5	import org.springframework.http.HttpStatus
+     6	import org.springframework.http.HttpStatusCode
+     7	import org.springframework.http.ProblemDetail
+     8	import org.springframework.http.ResponseEntity
+     9	import org.springframework.web.bind.MethodArgumentNotValidException
+    10	import org.springframework.web.bind.annotation.ExceptionHandler
+    11	import org.springframework.web.bind.annotation.RestControllerAdvice
+    12	import org.springframework.web.context.request.WebRequest
+    13	import org.springframework.web.method.annotation.HandlerMethodValidationException
+    14	import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler
+    15	import task.member.application.exception.GroupServiceConfigurationException
+    16	import task.member.application.exception.GroupServiceUnavailableException
+    17	import task.member.application.exception.InvalidMemberQueryException
+    18	import task.member.application.exception.MemberNotFoundException
+    19	
+    20	/**
+    21	 * 모든 오류 응답을 RFC 9457 ProblemDetail + `code`로 만든다(POL-API-002).
+    22	 *
+    23	 * Spring MVC 표준 예외는 상위 클래스가 ProblemDetail을 만들고, 여기서 `code`를 붙인다. 처리되지 않은 예외는 내부 정보를 응답에 넣지 않고
+    24	 * INTERNAL_ERROR로 바꾼다.
+    25	 */
+    26	@RestControllerAdvice
+    27	class ProblemDetailsExceptionHandler : ResponseEntityExceptionHandler() {
+    28	  private val log = LoggerFactory.getLogger(javaClass)
+    29	
+    30	  @ExceptionHandler(InvalidMemberQueryException::class)
+    31	  fun handleInvalidMemberQuery(): ProblemDetail = memberProblem(ErrorCode.VALIDATION_FAILED)
+    32	
+    33	  @ExceptionHandler(MemberNotFoundException::class)
+    34	  fun handleMemberNotFound(): ProblemDetail = memberProblem(ErrorCode.NOT_FOUND)
+    35	
+    36	  private fun memberProblem(code: ErrorCode): ProblemDetail {
+    37	    SafeErrorLog.record(code)
+    38	    return ProblemDetail.forStatusAndDetail(HttpStatusCode.valueOf(code.status), code.description)
+    39	      .apply {
+    40	        title = code.codeName
+    41	        setProperty(CODE, code.code)
+    42	      }
+    43	      .let(::MemberProblemDetail)
+    44	  }
+    45	
+    46	  override fun handleExceptionInternal(
+    47	    ex: Exception,
+    48	    body: Any?,
+    49	    headers: HttpHeaders,
+    50	    statusCode: HttpStatusCode,
+    51	    request: WebRequest,
+    52	  ): ResponseEntity<Any>? {
+    53	    val response = super.handleExceptionInternal(ex, body, headers, statusCode, request)
+    54	    val problem = response?.body as? ProblemDetail
+    55	    if (problem != null && problem.properties?.containsKey(CODE) != true) {
+    56	      val code =
+    57	        when (ex) {
+    58	          is MethodArgumentNotValidException,
+    59	          is HandlerMethodValidationException -> ErrorCode.VALIDATION_FAILED
+    60	          else -> ErrorCode.of(statusCode)
+    61	        }
+    62	      SafeErrorLog.record(code, ex)
+    63	      problem.setProperty(CODE, code.code)
+    64	      problem.title = code.codeName
+    65	      if (problem.detail == null) problem.detail = code.description
+    66	    }
+    67	    return response?.let {
+    68	      ResponseEntity(
+    69	        if (problem != null) MemberProblemDetail(problem) else it.body,
+    70	        it.headers,
+    71	        it.statusCode,
+    72	      )
+    73	    }
+    74	  }
+    75	
+    76	  @ExceptionHandler(GroupServiceUnavailableException::class)
+    77	  fun handleGroupUnavailable(): ProblemDetail = groupProblem(ErrorCode.GROUP_SERVICE_UNAVAILABLE)
+    78	
+    79	  @ExceptionHandler(GroupServiceConfigurationException::class)
+    80	  fun handleGroupConfiguration(): ProblemDetail = groupProblem(ErrorCode.INTERNAL_ERROR)
+    81	
+    82	  private fun groupProblem(code: ErrorCode): ProblemDetail {
+    83	    SafeErrorLog.record(code)
+    84	    return ProblemDetail.forStatusAndDetail(HttpStatusCode.valueOf(code.status), code.description)
+    85	      .apply {
+    86	        title = code.codeName
+    87	        setProperty(CODE, code.code)
+    88	      }
+    89	      .let(::MemberProblemDetail)
+    90	  }
+    91	
+    92	  @ExceptionHandler(Exception::class)
+    93	  fun handleUnexpected(ex: Exception): ProblemDetail {
+    94	    SafeErrorLog.record(ErrorCode.INTERNAL_ERROR, ex)
+    95	    return ProblemDetail.forStatusAndDetail(
+    96	        HttpStatus.INTERNAL_SERVER_ERROR,
+    97	        ErrorCode.INTERNAL_ERROR.description,
+    98	      )
+    99	      .apply {
+   100	        title = ErrorCode.INTERNAL_ERROR.codeName
+   101	        setProperty(CODE, ErrorCode.INTERNAL_ERROR.code)
+   102	      }
+   103	      .let(::MemberProblemDetail)
+   104	  }
+   105	
+   106	  companion object {
+   107	    const val CODE = "code"
+   108	  }
+   109	}
+=== presentation/error/SafeErrorLog.kt
+     1	package task.member.presentation.error
+     2	
+     3	import org.slf4j.LoggerFactory
+     4	import org.slf4j.MDC
+     5	import org.springframework.web.context.request.RequestContextHolder
+     6	import org.springframework.web.context.request.ServletRequestAttributes
+     7	
+     8	/** 외부 메시지·SQL·본문을 포함할 수 있는 Throwable 원문을 기록하지 않는다(POL-CODE-004). */
+     9	internal object SafeErrorLog {
+    10	  private val log = LoggerFactory.getLogger(SafeErrorLog::class.java)
+    11	
+    12	  fun record(code: ErrorCode, error: Exception? = null) {
+    13	    val request =
+    14	      (RequestContextHolder.getRequestAttributes() as? ServletRequestAttributes)?.request
+    15	    request?.setAttribute("errorCode", code.code)
+    16	    if (request?.getAttribute("exceptionLogged") == true) return
+    17	    request?.setAttribute("exceptionLogged", true)
+    18	    val frames =
+    19	      if (code.status >= 500) error?.stackTrace?.take(16)?.joinToString(" <- ") ?: "-" else "-"
+    20	    log.error(
+    21	      "event=exception.handled requestId={} stage=error.mapping code={} exception={} frames={}",
+    22	      MDC.get("requestId") ?: "-",
+    23	      code.code,
+    24	      error?.javaClass?.simpleName ?: code.code,
+    25	      frames,
+    26	    )
+    27	  }
+    28	}
