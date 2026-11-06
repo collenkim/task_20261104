@@ -387,6 +387,46 @@ class TaskTests(Base):
         e.git("commit", "-q", "--allow-empty", "-m", "[AI-TEST-001] other\n\n  x")
         self.assertEqual(tasks.run_pending(self.ctx)["reason"], "head_changed")
 
+    def test_interrupted_stage_log_resumes_without_rewriting_snapshots(self):
+        base = gitops.rev(self.env.root, "HEAD")
+        tasks.reserve(self.ctx, "stage-log", {"task": "AI-LOG-009", "stage": "중단 복구"})
+
+        def interrupted(*args, **kwargs):
+            self.assertEqual(snapshot.snapshot_all(self.ctx, states=turns.effective_states(self.ctx))["result"], "ok")
+            raise KeyboardInterrupt("simulated hook termination before commit")
+
+        with mock.patch.object(snapshot, "commit_snapshots", side_effect=interrupted):
+            with self.assertRaises(KeyboardInterrupt):
+                tasks.run_pending(self.ctx, trigger="codex:Stop")
+        self.assertEqual(gitops.rev(self.env.root, "HEAD"), base)
+        self.assertEqual(tasks.listing(self.ctx)[0]["status"], "pending")
+        preserved = {}
+        for folder, _, names in os.walk(self.ctx.snapshots_dir):
+            for name in names:
+                path = os.path.join(folder, name)
+                preserved[path] = rb(path)
+        result = tasks.run_pending(self.ctx, trigger="manual")
+        self.assertEqual(result["reason"], "ok")
+        self.assertEqual(tasks.listing(self.ctx)[0]["status"], "done")
+        for path, content in preserved.items():
+            self.assertEqual(rb(path), content)
+        committed = gitops.rev(self.env.root, "HEAD")
+        self.assertNotEqual(committed, base)
+        self.assertTrue(snapshot.completeness(self.ctx, "HEAD")["complete"])
+        self.assertEqual(tasks.run_pending(self.ctx)["reason"], "no_tasks")
+        self.assertEqual(gitops.rev(self.env.root, "HEAD"), committed)
+
+    def test_interrupted_stage_log_still_waits_for_new_active_turn(self):
+        base = gitops.rev(self.env.root, "HEAD")
+        tasks.reserve(self.ctx, "stage-log", {"task": "AI-LOG-009", "stage": "중단 복구"})
+        with mock.patch.object(snapshot, "commit_snapshots", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                tasks.run_pending(self.ctx, trigger="codex:Stop")
+        self.append(self.p, prompt_rec("new turn", 2))
+        self.assertEqual(tasks.run_pending(self.ctx)["reason"], "ai_turn_not_idle")
+        self.assertEqual(gitops.rev(self.env.root, "HEAD"), base)
+        self.assertEqual(tasks.listing(self.ctx)[0]["status"], "pending")
+
     def test_reserve_rejects_bad_message_and_log_paths(self):
         self.assertEqual(tasks.reserve(self.ctx, "commit", {"paths": ["a"], "message": "bad"})["reason"],
                          "message_format")

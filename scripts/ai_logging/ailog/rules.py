@@ -67,6 +67,7 @@ def check_snapshot_group(base: str, rests: list[str], blob) -> list[str]:
     blob(path) -> bytes | None 는 검사 대상(index 또는 커밋)의 실제 내용을 돌려준다.
     """
     from .snapshot import snapshot_id, snapshot_sha256  # 순환 import 방지
+    from . import metadata
 
     if "manifest.json" not in rests:
         return ["snapshot_manifest_missing"]
@@ -76,6 +77,12 @@ def check_snapshot_group(base: str, rests: list[str], blob) -> list[str]:
     except (AttributeError, ValueError, UnicodeDecodeError):
         return ["snapshot_manifest_unreadable"]
     problems = []
+    paths = {e.get("path") for e in m.get("files", []) if e.get("role") != metadata.ROLE}
+    for entry in m.get("files", []):
+        if entry.get("role") == metadata.ROLE or entry.get("path", "").startswith(metadata.PREFIX):
+            source = metadata.source_path(m.get("tool"), m.get("session_id"), entry)
+            if source is None or source not in paths:
+                problems.append("metadata_history_invalid")
     listed = {"files/" + e["path"]: e for e in m.get("files", []) if not e.get("original_missing")}
     present = {r for r in rests if r != "manifest.json"}
     if present != set(listed):

@@ -31,6 +31,7 @@ from .common import (
 )
 from .discover import Session, SessionFile, Targets, resolve_targets
 from .policy import Policy, load_allowlist, load_mask_entries, shape
+from . import metadata
 
 # hook 이벤트 중 동기화를 실행하는 것. Codex SessionEnd는 제한 시간(최대 3초) 때문에 기록만 한다.
 SYNC_EVENTS = {
@@ -56,6 +57,8 @@ def _merge_manifest_knowledge(ctx: Context, files_state: dict) -> int:
             continue
         live = m.get("kind") == "live"
         for e in m.get("files", []):
+            if e.get("role") == metadata.ROLE:
+                continue
             if e.get("original_missing") or not isinstance(e.get("original_bytes"), int):
                 continue
             fkey = f"{m.get('tool')}/{m.get('session_id')}/{e.get('path')}"
@@ -218,7 +221,7 @@ def check_masked(rel: str, data: bytes, masked: bytes, policy: Policy, scan_from
 
 
 # ------------------------------------------------------------------------ sync
-def _process_session(ctx: Context, s: Session, policy: Policy, state: dict) -> dict:
+def _process_session(ctx: Context, s: Session, policy: Policy, state: dict, snaps=()) -> dict:
     files_state = state.setdefault("files", {})
     sess_dir = _session_dir(ctx, s.tool, s.session_id)
     manifest_path = os.path.join(sess_dir, "manifest.json")
@@ -229,10 +232,22 @@ def _process_session(ctx: Context, s: Session, policy: Policy, state: dict) -> d
         problems.append(_problem("live_manifest_unreadable"))
         old_manifest = None
 
+    meta_data = {}
+    for f in s.files:
+        if metadata.eligible(s.tool, s.session_id, f.rel):
+            try:
+                meta_data[f.rel] = read_complete(f)
+            except OSError:
+                pass  # 일반 파일 처리에서 같은 오류를 보고한다.
+    manifests = [(sess_dir, old_manifest)] if old_manifest else []
+    manifests.extend((os.path.join(ctx.root, *base.rstrip("/").split("/")), m) for base, m in snaps)
+    history = metadata.prepare(ctx, s, policy, meta_data, state, manifests)
+    problems.extend(history["problems"])
+
     for f in s.files:
         fkey = f"{s.key}/{f.rel}"
         try:
-            data = read_complete(f)
+            data = meta_data[f.rel] if f.rel in meta_data else read_complete(f)
         except OSError as e:
             problems.append(_problem("original_unreadable", f.rel, detail=type(e).__name__))
             continue
@@ -241,7 +256,8 @@ def _process_session(ctx: Context, s: Session, policy: Policy, state: dict) -> d
             if len(data) < prev["original_bytes"]:
                 problems.append(_problem("original_truncated", f.rel))
                 continue
-            if sha256(data[: prev["original_bytes"]]) != prev.get("original_sha256"):
+            if (sha256(data[: prev["original_bytes"]]) != prev.get("original_sha256")
+                    and not metadata.matches(history["originals"].get(f.rel), prev)):
                 problems.append(_problem("original_rewritten", f.rel))
                 continue
         masked, counts = policy.mask(data)
@@ -269,7 +285,14 @@ def _process_session(ctx: Context, s: Session, policy: Policy, state: dict) -> d
         summary.update(status="hold", pending_bytes=max(0, current - published), problems=len(problems))
         return {"summary": summary, "holds": [dict(p, session=s.key) for p in problems]}
 
-    entries, changed = [], False
+    # 과거 live 사본 보관이 완료되기 전에는 어느 현재 사본도 교체하지 않는다.
+    metadata.write_archives(ctx, s, history["archives"])
+    entries, changed = list(history["entries"]), False
+    for rel, data in history["copies"].items():
+        path = _copy_path(ctx, s.tool, s.session_id, rel)
+        if _read_bytes(path) != data:
+            atomic_write(path, data)
+            changed = True
     main_stats = None
     for f, fkey, data, masked, counts in prepared:
         cpath = _copy_path(ctx, s.tool, s.session_id, f.rel)
@@ -336,11 +359,13 @@ def _process_session(ctx: Context, s: Session, policy: Policy, state: dict) -> d
 
 
 def sync(ctx: Context, lock_timeout: float = 60.0) -> dict:
+    from . import snapshot
     ensure_dir(ctx.state_dir)
     with file_lock(ctx.lock_path, timeout=lock_timeout):
         state = load_state(ctx)
         policy = build_policy(ctx)
         targets = resolve_targets(ctx, state)
+        grouped = snapshot.by_session(snapshot.worktree_manifests(ctx))
         report = {
             "time": utc_now(),
             "policy_version": policy.version,
@@ -364,7 +389,7 @@ def sync(ctx: Context, lock_timeout: float = 60.0) -> dict:
             info = known.setdefault(s.key, {"first_seen": utc_now()})
             info["main"] = s.main_path
             try:
-                res = _process_session(ctx, s, policy, state)
+                res = _process_session(ctx, s, policy, state, grouped.get(s.key, []))
             except Exception as e:  # 세션 하나의 실패가 다른 세션 수집을 막지 않게 한다.
                 report["errors"].append({"session": s.key, "error": type(e).__name__, "where": _where(e)})
                 continue
@@ -404,10 +429,12 @@ def tail_status(f: SessionFile, data_full: bytes, collected: int) -> str | None:
 def verify(ctx: Context, final: bool = False) -> dict:
     """읽기 전용 live 검사. 파일·상태·manifest를 바꾸지 않는다.
 
-    - 사본 = 원본 앞부분의 마스킹 결과(바이트 동일), 민감정보·치환 목록 잔류 없음
+    - 사본 = 원본 앞부분 또는 검증된 이전 메타데이터의 마스킹 결과, 민감정보·치환 목록 잔류 없음
     - manifest에 없는 파일(a), 원본 꼬리(b), 대상 세션 합집합의 누락·원본 부재(c), manifest 손상(e)
     final=True면 원본보다 뒤처진 사본·미완성 꼬리·정책 변경도 실패로 본다.
     """
+    from . import snapshot
+
     policy = build_policy(ctx)
     state = load_state(ctx)
     targets = resolve_targets(ctx, state)
@@ -442,12 +469,29 @@ def verify(ctx: Context, final: bool = False) -> dict:
     if targets.unresolved:
         warnings.append(_problem("unresolved_codex_files", detail=f"count={targets.unresolved}"))
     checked = 0
+    snapshots = snapshot.by_session(snapshot.worktree_manifests(ctx))
     for key, m in manifests.items():
         s = by_key.get(key)
         if m.get("policy_version") != policy.version:
             soft.append(dict(_problem("policy_version_changed"), session=key))
         orig_files = {f.rel: f for f in (s.files if s else [])}
         listed = {e["path"] for e in m["files"]}
+        if s:
+            meta_data = {}
+            for rel, f in orig_files.items():
+                if metadata.eligible(s.tool, s.session_id, rel):
+                    try:
+                        meta_data[rel] = read_full(f)
+                    except OSError:
+                        pass
+            bases = [(_session_dir(ctx, s.tool, s.session_id), m)]
+            bases.extend((os.path.join(ctx.root, *base.rstrip("/").split("/")), sm)
+                         for base, sm in snapshots.get(key, []))
+            history = metadata.prepare(ctx, s, policy, meta_data, state, bases)
+            failures.extend(dict(p, session=key) for p in history["problems"])
+            for entry in history["entries"]:
+                if entry["path"] not in listed:
+                    failures.append(dict(_problem("metadata_history_not_collected", entry["path"]), session=key))
         for rel in sorted(set(orig_files) - listed):
             soft.append(dict(_problem("attachment_not_collected", rel), session=key))
         actual = _list_files(os.path.join(ctx.live_dir, *key.split("/"), "files"))
@@ -459,7 +503,9 @@ def verify(ctx: Context, final: bool = False) -> dict:
             if copy is None or sha256(copy) != e["copy_sha256"]:
                 failures.append(dict(_problem("copy_hash_mismatch", e["path"]), session=key))
                 continue
-            f = orig_files.get(e["path"])
+            historic = e.get("role") == metadata.ROLE
+            rel = metadata.source_path(m["tool"], m["session_id"], e) if historic else e["path"]
+            f = orig_files.get(rel)
             if f is None or e.get("original_missing"):
                 soft.append(dict(_problem("original_missing", e["path"]), session=key))
                 continue
@@ -468,6 +514,11 @@ def verify(ctx: Context, final: bool = False) -> dict:
             except OSError:
                 failures.append(dict(_problem("original_unreadable", e["path"]), session=key))
                 continue
+            if historic:
+                data = metadata.original_data(m["tool"], m["session_id"], e, data)
+                if data is None:
+                    failures.append(dict(_problem("metadata_history_source_changed", e["path"]), session=key))
+                    continue
             if len(data) < e["original_bytes"]:
                 failures.append(dict(_problem("original_truncated", e["path"]), session=key))
                 continue
@@ -481,7 +532,7 @@ def verify(ctx: Context, final: bool = False) -> dict:
                 failures.append(dict(_problem(h.rule, e["path"], h.line, h.detail), session=key))
             if policy.residue(copy):
                 failures.append(dict(_problem("mask_residue", e["path"]), session=key))
-            tail = tail_status(f, data, e["original_bytes"])
+            tail = None if historic else tail_status(f, data, e["original_bytes"])
             if tail:
                 soft.append(dict(_problem(tail, e["path"], detail=f"bytes={len(data) - e['original_bytes']}"),
                                  session=key))

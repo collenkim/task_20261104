@@ -116,6 +116,94 @@
       {
         "pattern": "pdfRoot=832470d42097c20b28e60aa4a830b4502f1d5630/en",
         "reason": "사용자가 허용한 YDB PDF 식별자의 URL 디코딩 표현(/en 포함). 원 URL과 같은 값만 정확히 허용 (GROUP-001)"
+      },
+      {
+        "pattern": "ol\\-results/toolu_01UzVNrLYH5dwrepi8Lm4eDo",
+        "reason": "REVIEW-002 후보 #10: 로그 도구 결과 파일 경로와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "ol\\-results/toolu_01X6QCAW4XZ1xfrdcUvSQG3u",
+        "reason": "REVIEW-002 후보 #11: 로그 도구 결과 파일 경로와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "ol\\-results/toolu_01XxPLPgxVTWsy3yaTrFKmoZ",
+        "reason": "REVIEW-002 후보 #12: 로그 도구 결과 파일 경로와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "org/springframework/security/oauth2/server/resource/OAuth2ProtectedResourceMetadata",
+        "reason": "REVIEW-002 후보 #13: 의존성 JAR의 클래스명·경로와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "org/springframework/security/oauth2/server/resource/OAuth2ProtectedResourceMetadataClaimAccessor",
+        "reason": "REVIEW-002 후보 #14: 의존성 JAR의 클래스명·경로와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "org/springframework/security/oauth2/server/resource/OAuth2ProtectedResourceMetadataClaimNames",
+        "reason": "REVIEW-002 후보 #15: 의존성 JAR의 클래스명·경로와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "org/springframework/security/oauth2/server/resource/web/OAuth2ProtectedResourceMetadataFilter",
+        "reason": "REVIEW-002 후보 #16: 의존성 JAR의 클래스명·경로와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "org/springframework/security/config/annotation/web/configurers/oauth2/server/resource/OAuth2ResourceServerConfigurer",
+        "reason": "REVIEW-002 후보 #17: 의존성 JAR의 클래스명·경로와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "OAuth2ProtectedResourceMetadataFilter",
+        "reason": "REVIEW-002 후보 #18: 의존성 JAR의 클래스명·경로와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "org/springframework/security/config/http/OAuth2ResourceServerBeanDefinitionParser",
+        "reason": "REVIEW-002 후보 #19: 의존성 JAR의 클래스명·경로와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "org/springframework/security/config/annotation/web/OAuth2ResourceServerDsl",
+        "reason": "REVIEW-002 후보 #20: 의존성 JAR의 클래스명·경로와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "org/springframework/security/config/annotation/web/oauth2/resourceserver/OAuth2ResourceServerSecurityMarker",
+        "reason": "REVIEW-002 후보 #21: 의존성 JAR의 클래스명·경로와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "org/springframework/security/config/web/server/ServerOAuth2ResourceServerDsl",
+        "reason": "REVIEW-002 후보 #22: 의존성 JAR의 클래스명·경로와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "nai\\-logs/snapshots/claude/29f7d66a\\-3d57\\-4f2b\\-abfc\\-f8eb69f2ccc0/07c578527ac1/L00000000000016000838\\-1d910d34da0e3a87/files/29f7d66a\\-3d57\\-4f2b\\-abfc\\-f8eb69f2ccc0/tool\\-results/toolu_01UzVNrLYH5dwrepi8Lm4eDo",
+        "reason": "REVIEW-002 후보 #23: 로그 도구 결과 파일 경로와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "nai\\-logs/snapshots/claude/29f7d66a\\-3d57\\-4f2b\\-abfc\\-f8eb69f2ccc0/07c578527ac1/L00000000000016000838\\-1d910d34da0e3a87/files/29f7d66a\\-3d57\\-4f2b\\-abfc\\-f8eb69f2ccc0/tool\\-results/toolu_01X6QCAW4XZ1xfrdcUvSQG3u",
+        "reason": "REVIEW-002 후보 #24: 로그 도구 결과 파일 경로와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "nai\\-logs/snapshots/claude/29f7d66a\\-3d57\\-4f2b\\-abfc\\-f8eb69f2ccc0/07c578527ac1/L00000000000016000838\\-1d910d34da0e3a87/files/29f7d66a\\-3d57\\-4f2b\\-abfc\\-f8eb69f2ccc0/tool\\-results/toolu_01XxPLPgxVTWsy3yaTrFKmoZ",
+        "reason": "REVIEW-002 후보 #25: 로그 도구 결과 파일 경로와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "nai\\-logs/snapshots/claude/29f7d66a\\-3d57\\-4f2b\\-abfc\\-f8eb69f2ccc0/6f8647a66f84/L00000000000025766741\\-8b15606df2fb84a1/files/29f7d66a\\-3d57\\-4f2b\\-abfc\\-f8eb69f2ccc0/tool\\-results/toolu_01UzVNrLYH5dwrepi8Lm4eDo",
+        "reason": "REVIEW-002 후보 #26: 로그 도구 결과 파일 경로와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "nai\\-logs/snapshots/claude/29f7d66a\\-3d57\\-4f2b\\-abfc\\-f8eb69f2ccc0/6f8647a66f84/L00000000000025766741\\-8b15606df2fb84a1/files/29f7d66a\\-3d57\\-4f2b\\-abfc\\-f8eb69f2ccc0/tool\\-results/toolu_01X6QCAW4XZ1xfrdcUvSQG3u",
+        "reason": "REVIEW-002 후보 #27: 로그 도구 결과 파일 경로와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "nai\\-logs/snapshots/claude/29f7d66a\\-3d57\\-4f2b\\-abfc\\-f8eb69f2ccc0/6f8647a66f84/L00000000000025766741\\-8b15606df2fb84a1/files/29f7d66a\\-3d57\\-4f2b\\-abfc\\-f8eb69f2ccc0/tool\\-results/toolu_01XxPLPgxVTWsy3yaTrFKmoZ",
+        "reason": "REVIEW-002 후보 #28: 로그 도구 결과 파일 경로와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "nai\\-logs/snapshots/claude/29f7d66a\\-3d57\\-4f2b\\-abfc\\-f8eb69f2ccc0/7bbef877469d/L00000000000011057546\\-ef10dbd98f9268cf/files/29f7d66a\\-3d57\\-4f2b\\-abfc\\-f8eb69f2ccc0/tool\\-results/toolu_01UzVNrLYH5dwrepi8Lm4eDo",
+        "reason": "REVIEW-002 후보 #29: 로그 도구 결과 파일 경로와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "nai\\-logs/snapshots/claude/29f7d66a\\-3d57\\-4f2b\\-abfc\\-f8eb69f2ccc0/7bbef877469d/L00000000000011057546\\-ef10dbd98f9268cf/files/29f7d66a\\-3d57\\-4f2b\\-abfc\\-f8eb69f2ccc0/tool\\-results/toolu_01X6QCAW4XZ1xfrdcUvSQG3u",
+        "reason": "REVIEW-002 후보 #30: 로그 도구 결과 파일 경로와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "nai\\-logs/snapshots/claude/29f7d66a\\-3d57\\-4f2b\\-abfc\\-f8eb69f2ccc0/7bbef877469d/L00000000000011057546\\-ef10dbd98f9268cf/files/29f7d66a\\-3d57\\-4f2b\\-abfc\\-f8eb69f2ccc0/tool\\-results/toolu_01XxPLPgxVTWsy3yaTrFKmoZ",
+        "reason": "REVIEW-002 후보 #31: 로그 도구 결과 파일 경로와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
       }
     ],
     "url_contexts": [
@@ -234,6 +322,34 @@
       {
         "pattern": "<CANDIDATE>",
         "reason": "GROUP-001 보류 검토에서 원래 값을 숨기기 위해 출력한 진단 대체 표식. 실제 후보 값이 아님"
+      },
+      {
+        "pattern": "member",
+        "reason": "REVIEW-002 후보 #1: 소스 표현식와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "RSAPrivateKey",
+        "reason": "REVIEW-002 후보 #2: 소스 표현식와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "settings\\.path",
+        "reason": "REVIEW-002 후보 #3: 소스 표현식와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "settings",
+        "reason": "REVIEW-002 후보 #4: 소스 표현식와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "local_token",
+        "reason": "REVIEW-002 후보 #5: 소스 표현식와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "issuer\\?\\.issue",
+        "reason": "REVIEW-002 후보 #6: 소스 표현식와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
+      },
+      {
+        "pattern": "json\\.loads",
+        "reason": "REVIEW-002 후보 #7: 소스 표현식와 대조한 정확한 값. 2026-11-06 사용자 승인; 다른 값·접두/접미 변형은 허용하지 않음"
       }
     ]
   },

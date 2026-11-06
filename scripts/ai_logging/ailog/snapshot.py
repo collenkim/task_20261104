@@ -1,13 +1,14 @@
 """불변 스냅샷과 로그 전용 커밋.
 
 경로: ai-logs/snapshots/<tool>/<session-id>/<policy-version>/L<원본 바이트 20자리>-<sha256 앞 16자리>/
-  manifest.json  + files/<원본 상대 경로>  (세션의 모든 파일 전체 사본, 마스킹만 적용)
+  manifest.json + files/<원본 상대 경로> + files/_meta/<해시>.json (검증된 이전 메타데이터)
 
 - 같은 원본·같은 정책이면 같은 ID(폴더 이름)가 나온다. 생성 시각 같은 가변 값은 manifest에 넣지 않는다.
 - 전체 sha256은 manifest의 snapshot_sha256에 기록한다(폴더 이름에는 앞 16자리만).
 - 이미 있는 폴더는 고치지 않는다. 같은 ID인데 내용이 다르면 보류한다.
 - 원본 길이가 같은데 내용(해시)이 다른 스냅샷은 '더 최신'으로 추정하지 않고 보류한다.
 - 원본 앞부분 불변성(절단·재작성·삭제)은 이전 스냅샷·live·상태 기록 모두와 대조한다.
+- 해시로 검증된 Claude 종료 표시 추가만 이전·현재 버전을 구별해 보존한다(metadata 모듈).
 """
 from __future__ import annotations
 
@@ -29,6 +30,7 @@ from .common import (
     utc_now,
 )
 from .discover import Session, resolve_targets
+from . import metadata
 
 TIME_BASIS = "UTC - 도구가 기록한 ISO 8601 timestamp 값을 그대로 사용"
 ORDER_BASIS = "파일 안의 줄 순서 (타임스탬프로 재정렬하지 않음)"
@@ -46,6 +48,10 @@ def _id_payload(m: dict) -> bytes:
         "policy_version": m.get("policy_version"),
         "files": files,
     }
+    historical = sorted([e["path"], e.get("source_path")] for e in m.get("files", [])
+                        if e.get("role") == metadata.ROLE)
+    if historical:  # 기존 schema 2의 ID를 유지하고 새 이력 참조는 ID에 포함한다.
+        payload["metadata_sources"] = historical
     return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
@@ -158,10 +164,13 @@ def _prior_knowledge(session_key: str, state: dict, snaps: list[tuple[str, dict]
     prior: dict[str, list] = {}
     prefix = session_key + "/"
     for k, v in (state.get("files") or {}).items():
-        if k.startswith(prefix) and isinstance(v.get("original_bytes"), int) and v.get("original_sha256"):
+        if (k.startswith(prefix) and not k[len(prefix):].startswith(metadata.PREFIX)
+                and isinstance(v.get("original_bytes"), int) and v.get("original_sha256")):
             prior.setdefault(k[len(prefix):], []).append((v["original_bytes"], v["original_sha256"]))
     for _, m in snaps:
         for e in (m or {}).get("files", []):
+            if e.get("role") == metadata.ROLE:
+                continue
             if isinstance(e.get("original_bytes"), int) and e.get("original_sha256"):
                 prior.setdefault(e["path"], []).append((e["original_bytes"], e["original_sha256"]))
     return prior
@@ -178,14 +187,30 @@ def build_snapshot(ctx: Context, s: Session, policy, state: dict, snaps: list[tu
 
     problems, warnings, deferred = [], [], []
     prior = _prior_knowledge(s.key, state, snaps)
-    entries, copies = [], {}
+    meta_data = {}
+    for f in s.files:
+        if metadata.eligible(s.tool, s.session_id, f.rel):
+            try:
+                meta_data[f.rel] = read_full(f)
+            except OSError:
+                pass
+    manifests = [(os.path.join(ctx.root, *base.rstrip("/").split("/")), m) for base, m in snaps]
+    live_dir = os.path.join(ctx.live_dir, s.tool, s.session_id)
+    live, live_status = read_json_ro(os.path.join(live_dir, "manifest.json"))
+    if live_status == "ok" and isinstance(live, dict):
+        manifests.append((live_dir, live))
+    elif live_status == "corrupt":
+        problems.append({"rule": "live_manifest_unreadable"})
+    history = metadata.prepare(ctx, s, policy, meta_data, state, manifests)
+    problems.extend(history["problems"])
+    entries, copies = list(history["entries"]), dict(history["copies"])
     current = {f.rel for f in s.files}
     for rel in sorted(set(prior) - current):
         problems.append({"rule": "original_file_deleted", "file": rel})
     main_stats = (0, None, None)
     for f in s.files:
         try:
-            data = read_full(f)
+            data = meta_data[f.rel] if f.rel in meta_data else read_full(f)
         except OSError as e:
             problems.append({"rule": "original_unreadable", "file": f.rel, "detail": type(e).__name__})
             continue
@@ -203,7 +228,10 @@ def build_snapshot(ctx: Context, s: Session, policy, state: dict, snaps: list[tu
             else:
                 deferred.append({"file": f.rel, "bytes": len(tail), "reason": "unterminated_tail"})
                 data = data[:cut]
-        for rule in _prefix_problems(f.rel, data, prior.get(f.rel, [])):
+        checkpoints = [(n, digest) for n, digest in prior.get(f.rel, [])
+                       if not metadata.matches(history["originals"].get(f.rel),
+                                               {"original_bytes": n, "original_sha256": digest})]
+        for rule in _prefix_problems(f.rel, data, checkpoints):
             problems.append({"rule": rule, "file": f.rel})
         masked, counts = policy.mask(data)
         for p in check_masked(f.rel, data, masked, policy):
@@ -257,11 +285,14 @@ def build_snapshot(ctx: Context, s: Session, policy, state: dict, snaps: list[tu
     status = "hold" if problems else "ready"
     return {"key": s.key, "status": status, "manifest": m, "copies": copies, "problems": problems,
             "warnings": warnings, "deferred": deferred,
+            "metadata_archives": history["archives"], "session": s,
             "base": snap_base(s.tool, s.session_id, policy.version, m["snapshot_id"])}
 
 
 def write_snapshot(ctx: Context, prep: dict) -> str:
     """준비된 스냅샷을 쓴다. 이미 있으면 내용이 같은지 확인만 한다. 반환: created|exists|conflict."""
+    if prep.get("metadata_archives"):
+        metadata.write_archives(ctx, prep["session"], prep["metadata_archives"])
     base_abs = os.path.join(ctx.root, *prep["base"].rstrip("/").split("/"))
     mpath = os.path.join(base_abs, "manifest.json")
     want = dumps_json(prep["manifest"])
@@ -333,10 +364,31 @@ def completeness(ctx: Context, treeish: str | None, policy=None, read_originals:
     failures가 비어 있어야 '완전'이다. 원본이 사라진 세션은 이전 스냅샷이 있으면 경고, 없으면 실패.
     """
     from .engine import build_policy, load_state
+    from . import gitops
 
     policy = policy or build_policy(ctx)
     mans = tree_manifests(ctx.root, treeish) if treeish else worktree_manifests(ctx)
     grouped = by_session(mans)
+    historical_manifests = by_session({**worktree_manifests(ctx), **mans})
+    tree_files = gitops.tree_files(ctx.root, treeish, SNAPSHOTS_REL) if treeish else {}
+    blob_cache = {}
+
+    def read_copy(base, entry, strict=False):
+        path = os.path.join(base, "files", *entry["path"].split("/"))
+        rel = os.path.relpath(path, ctx.root).replace(os.sep, "/")
+        if treeish and (strict or rel in tree_files):
+            item = tree_files.get(rel)
+            if item is None:
+                return None
+            oid = item[1]
+            if oid not in blob_cache:
+                blob_cache.update(gitops.cat_blobs(ctx.root, [oid]))
+            return blob_cache.get(oid)
+        try:
+            with open(path, "rb") as stream:
+                return stream.read()
+        except OSError:
+            return None
     state = load_state(ctx)
     targets = resolve_targets(ctx, state, extra_known=grouped.keys())
     failures, warnings, rows = [], [], []
@@ -351,13 +403,46 @@ def completeness(ctx: Context, treeish: str | None, policy=None, read_originals:
         b, m = pick
         listed = {e["path"]: e for e in m["files"]}
         cur = {f.rel: f for f in s.files}
+        if m.get("snapshot_id") != snapshot_id(m) or m.get("snapshot_sha256") != snapshot_sha256(m):
+            failures.append({"rule": "snapshot_id_mismatch", "session": s.key})
         for rel in sorted(set(cur) - set(listed)):
             failures.append({"rule": "file_not_in_snapshot", "session": s.key, "file": rel})
         if read_originals:
+            meta_data = {}
+            for rel, f in cur.items():
+                if metadata.eligible(s.tool, s.session_id, rel):
+                    try:
+                        with open(f.path, "rb") as stream:
+                            meta_data[rel] = stream.read()
+                    except OSError:
+                        pass
+            bases = [(os.path.join(ctx.root, *base.rstrip("/").split("/")), sm)
+                     for base, sm in historical_manifests.get(s.key, [])]
+            live_dir = os.path.join(ctx.live_dir, s.tool, s.session_id)
+            live, status = read_json_ro(os.path.join(live_dir, "manifest.json"))
+            if status == "ok" and isinstance(live, dict):
+                bases.append((live_dir, live))
+            history = metadata.prepare(ctx, s, policy, meta_data, state, bases, read_copy=read_copy)
+            failures.extend(dict(p, session=s.key) for p in history["problems"])
+            for entry in history["entries"]:
+                if entry["path"] not in listed:
+                    failures.append({"rule": "metadata_history_not_in_snapshot", "session": s.key,
+                                     "file": entry["path"]})
             for rel, e in listed.items():
-                f = cur.get(rel)
+                historic = e.get("role") == metadata.ROLE
+                original_rel = metadata.source_path(s.tool, s.session_id, e) if historic else rel
+                f = cur.get(original_rel)
                 if f is None:
                     failures.append({"rule": "original_file_deleted", "session": s.key, "file": rel})
+                    continue
+                if historic:
+                    original = metadata.original_data(s.tool, s.session_id, e, meta_data.get(original_rel))
+                    copied = read_copy(os.path.join(ctx.root, *b.rstrip("/").split("/")), e, strict=True)
+                    if original is None:
+                        failures.append({"rule": "metadata_history_source_changed", "session": s.key, "file": rel})
+                    elif (copied is None or len(copied) != e.get("copy_bytes")
+                          or sha256(copied) != e.get("copy_sha256") or policy.mask(original)[0] != copied):
+                        failures.append({"rule": "metadata_history_copy_mismatch", "session": s.key, "file": rel})
                     continue
                 try:
                     size = os.path.getsize(f.path)
@@ -445,26 +530,35 @@ def live_covered(ctx: Context) -> dict:
             checked += 1
             best = None
             for base, sm in cands:
-                se = next((x for x in sm["files"] if x["path"] == e["path"]), None)
-                if se and se["original_bytes"] >= e["original_bytes"]:
-                    if best is None or se["original_bytes"] > best[1]["original_bytes"]:
-                        best = (base, se, sm)
+                for se in sm["files"]:
+                    same_version = se.get("original_sha256") == e.get("original_sha256")
+                    same_path = (se["path"] == e["path"] or
+                                 (se.get("role") == metadata.ROLE and same_version
+                                  and metadata.source_path(m["tool"], m["session_id"], se) == e["path"]))
+                    if same_path and se["original_bytes"] >= e["original_bytes"]:
+                        rank = (same_version, se["original_bytes"], se.get("role") == metadata.ROLE)
+                        if best is None or rank > best[3]:
+                            best = (base, se, sm, rank)
             if best is None:
                 gaps.append({"rule": "live_not_in_snapshot", "session": key, "file": e["path"]})
                 continue
-            base, se, sm = best
+            base, se, sm, _ = best
             live_copy = os.path.join(os.path.dirname(mpath), "files", *e["path"].split("/"))
-            snap_copy = os.path.join(ctx.root, *base.rstrip("/").split("/"), "files", *e["path"].split("/"))
+            snap_copy = os.path.join(ctx.root, *base.rstrip("/").split("/"), "files", *se["path"].split("/"))
             if sm.get("policy_version") == m.get("policy_version"):
                 with open(live_copy, "rb") as a, open(snap_copy, "rb") as b:
                     if not b.read().startswith(a.read()):
                         gaps.append({"rule": "snapshot_not_extending_live", "session": key, "file": e["path"]})
             # 정책이 다르면 원본 기준으로 대조: live 범위와 스냅샷 범위가 같은 원본의 앞부분이어야 한다
-            orig = _original_path(ctx, key, e["path"])
+            source_rel = (metadata.source_path(m["tool"], m["session_id"], se)
+                          if se.get("role") == metadata.ROLE else e["path"])
+            orig = _original_path(ctx, key, source_rel)
             if orig:
                 with open(orig, "rb") as f:
-                    data = f.read(se["original_bytes"])
-                if sha256(data[: e["original_bytes"]]) != e["original_sha256"] or sha256(data) != se["original_sha256"]:
+                    data = f.read() if se.get("role") == metadata.ROLE else f.read(se["original_bytes"])
+                data = metadata.original_data(m["tool"], m["session_id"], se, data)
+                if (data is None or sha256(data[: e["original_bytes"]]) != e["original_sha256"]
+                        or sha256(data) != se["original_sha256"]):
                     gaps.append({"rule": "live_snapshot_original_mismatch", "session": key, "file": e["path"]})
             elif sm.get("policy_version") != m.get("policy_version"):
                 gaps.append({"rule": "original_missing_cannot_compare", "session": key, "file": e["path"]})
