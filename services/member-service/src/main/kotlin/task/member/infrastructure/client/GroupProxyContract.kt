@@ -46,7 +46,7 @@ internal class GroupProxyContract(private val json: JsonMapper) {
       val count = item.get("totalMemberCount")
       if (!count.isIntegralNumber || !count.canConvertToLong() || count.longValue() < 0) fail()
       val members = item.get("members")
-      if (!members.isArray || count.longValue() < members.size()) fail()
+      if (!members.isArray || count.longValue() != members.size().toLong()) fail()
       val selected = item.putArray("members")
       for (member in members) {
         val value = project(member, MEMBER)
@@ -138,7 +138,7 @@ internal class GroupProxyContract(private val json: JsonMapper) {
           responses.putObject(status).put("description", RESPONSE_DESCRIPTIONS.getValue(status))
         response
           .putObject("content")
-          .putObject(if (status == "200") "application/json" else "application/problem+json")
+          .putObject("application/json")
           .set("schema", reference(if (status == "200") schema else "GroupProblemResponse"))
       }
     }

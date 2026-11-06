@@ -47,7 +47,7 @@ class CommonPolicyTests {
 
   private fun ResultActionsDsl.problem(status: Int, code: String) = andExpect {
     status { isEqualTo(status) }
-    content { contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON) }
+    content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
     jsonPath("$.status") { value(status) }
     jsonPath("$.code") { value(code) }
     jsonPath("$.type") { value(ProblemType.DEFAULT) }
@@ -57,10 +57,15 @@ class CommonPolicyTests {
   fun `상태 확인은 인증 없이 열려 있고 DB를 포함한 준비 상태가 UP이다`() {
     mockMvc.get("/actuator/health").andExpect {
       status { isOk() }
+      content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
       jsonPath("$.status") { value("UP") }
     }
-    mockMvc.get("/actuator/health/readiness").andExpect { jsonPath("$.status") { value("UP") } }
-    mockMvc.get("/actuator/health/liveness").andExpect { jsonPath("$.status") { value("UP") } }
+    for (path in listOf("/actuator/health/readiness", "/actuator/health/liveness")) {
+      mockMvc.get(path).andExpect {
+        content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
+        jsonPath("$.status") { value("UP") }
+      }
+    }
   }
 
   @Test
@@ -206,22 +211,20 @@ class CommonPolicyTests {
   fun `명세는 Bearer 인증과 업무 API의 코드표 오류 응답을 노출하고 내부 문서 전달 경로는 제외한다`() {
     mockMvc.get("/v3/api-docs").andExpect {
       status { isOk() }
-      jsonPath("$.info.version") { value("0.4.0") }
+      jsonPath("$.info.version") { value("0.5.0") }
       jsonPath("$.security[0].bearerAuth") { exists() }
       jsonPath("$.components.securitySchemes.bearerAuth.scheme") { value("bearer") }
       jsonPath("$.components.securitySchemes.bearerAuth.bearerFormat") { value("JWT") }
       jsonPath("$.paths['/internal-docs/group']") { doesNotExist() }
       jsonPath("$.paths['/internal-api/group/api/groups/summary']") { doesNotExist() }
       for (status in listOf("400", "401", "403", "405", "406", "422", "429", "500", "503")) {
-        jsonPath(
-          "$.paths['/api/members'].get.responses['$status'].content['application/problem+json']"
-        ) {
+        jsonPath("$.paths['/api/members'].get.responses['$status'].content['application/json']") {
           exists()
         }
       }
       for (status in listOf("400", "401", "403", "404", "405", "406", "429", "500", "503")) {
         jsonPath(
-          "$.paths['/api/member/{memberId}'].get.responses['$status'].content['application/problem+json']"
+          "$.paths['/api/member/{memberId}'].get.responses['$status'].content['application/json']"
         ) {
           exists()
         }

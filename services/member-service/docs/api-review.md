@@ -3,9 +3,9 @@
 | 항목 | 내용 |
 | --- | --- |
 | 분류 | 서비스 계약 개정안 |
-| 상태 | 사용자 승인 · REVIEW-002 적용. 1차(0.3.0 응답 필드)·2차(0.4.0 인증·오류 코드) |
-| 현재 계약 | [api.md](api.md), OpenAPI 0.4.0 |
-| 목표 버전 | 0.3.0 응답 필드 변경, 0.4.0 JWT·오류 코드표·400/422 구분. 둘 다 기존 소비자에 호환되지 않는 변경 |
+| 상태 | 사용자 승인 · REVIEW-002 적용. 1차(0.3.0 응답 필드)·2차(0.4.0 인증·오류 코드)·3차(0.5.0 페이지·JSON) |
+| 현재 계약 | [api.md](api.md), OpenAPI 0.5.0 |
+| 적용 버전 | 0.3.0 응답 필드 변경, 0.4.0 JWT·오류 코드표·400/422 구분, 0.5.0 페이지 1 시작·application/json. 기존 소비자의 요청·오류 처리 변경 필요 |
 | 결정·작업 | [결정표](../../../docs/tasks/REVIEW-001/decisions.md), [REVIEW-002](../../../docs/tasks/REVIEW-002/plan.md) |
 
 정의된 응답 외 필드를 내보내지 않는 요구는 확정됐다. 아래 필드 집합은 **사용자 승인 계약**이며 [REVIEW-002 검증](../../../docs/verification/REVIEW-002/verification.md)을 마쳤다. 기존 코드에 배열·감사 필드가 실제 존재했으며 단일 group·감사 필드 제외·가입일 분리를 승인받아 변경했다.
@@ -29,7 +29,7 @@ permission은 그룹 권한 code다. 현재 값은 Viewer/Editor/Admin이며 소
 | members[].permission | 문자열 | 가능 | 소속 권한 code. 미소속만 null |
 | page | 객체 | 불가 | 아래 네 필드만 포함 |
 | page.size | 정수 | 불가 | 적용한 페이지 크기 1~100 |
-| page.number | 정수 | 불가 | 요청한 0 기반 페이지 번호 |
+| page.number | 정수 | 불가 | 요청한 1 기반 페이지 번호 |
 | page.totalElements | 정수(int64) | 불가 | 멤버 전체 수, 0 이상 |
 | page.totalPages | 정수(int64) | 불가 | 전체 페이지 수, 0건이면 0 |
 
@@ -41,7 +41,7 @@ group과 permission은 함께 null이거나 함께 값이 있다. 그룹 응답 
     {"id": "tu3fgxd45k", "name": "user1", "group": "Test1", "permission": "Editor"},
     {"id": "k2m9x0p1q3", "name": "user3", "group": null, "permission": null}
   ],
-  "page": {"size": 20, "number": 0, "totalElements": 2, "totalPages": 1}
+  "page": {"size": 20, "number": 1, "totalElements": 2, "totalPages": 1}
 }
 ```
 

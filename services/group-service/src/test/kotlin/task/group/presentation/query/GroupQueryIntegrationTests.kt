@@ -87,21 +87,48 @@ class GroupQueryIntegrationTests {
   }
 
   @Test
-  fun `summary는 요청 소속과 전체 인원을 구분하고 실제 두 쿼리로 처리한다`() {
+  fun `summary는 실제 반환 멤버만 집계하고 한 쿼리로 처리한다`() {
     val stats = emf.unwrap(SessionFactory::class.java).statistics
     stats.clear()
     val result = handler.execute(GroupSummaryQuery(listOf("member0001")))
-    assertEquals(2, result.single().totalMemberCount)
+    assertEquals(1, result.single().totalMemberCount)
     assertEquals(1, result.single().members.size)
-    assertEquals(2, stats.prepareStatementCount)
+    assertEquals(1, stats.prepareStatementCount)
     assertFalse(TransactionSynchronizationManager.isActualTransactionActive())
     stats.clear()
     handler.execute(GroupSummaryQuery((1..100).map { "m" + it.toString().padStart(9, '0') }))
-    assertTrue(stats.prepareStatementCount <= 2)
+    assertEquals(1, stats.prepareStatementCount)
     request("/api/groups/summary?memberIds=member0001").andExpect {
       status { isOk() }
-      jsonPath("$.group[0].totalMemberCount") { value(2) }
+      jsonPath("$.group[0].totalMemberCount") { value(1) }
       jsonPath("$.group[0].members[0].permissionName") { doesNotExist() }
+    }
+  }
+
+  @Test
+  fun `없는 매핑은 인원과 목록에서 제외하고 여러 그룹도 각각 반환 수를 집계한다`() {
+    insert("member0003", "group00002")
+    request("/api/groups/summary?memberIds=member0001&memberIds=missing001").andExpect {
+      status { isOk() }
+      jsonPath("$.group.length()") { value(1) }
+      jsonPath("$.group[0].totalMemberCount") { value(1) }
+      jsonPath("$.group[0].members.length()") { value(1) }
+      jsonPath("$.group[0].members[0].memberId") { value("member0001") }
+    }
+    request(
+        "/api/groups/summary?memberIds=member0001&memberIds=member0003&memberIds=missing001&memberIds=member0001"
+      )
+      .andExpect {
+        status { isOk() }
+        jsonPath("$.group.length()") { value(2) }
+        jsonPath("$.group[0].totalMemberCount") { value(1) }
+        jsonPath("$.group[1].totalMemberCount") { value(1) }
+        jsonPath("$.group[0].members.length()") { value(1) }
+        jsonPath("$.group[1].members.length()") { value(1) }
+      }
+    request("/api/groups/summary?memberIds=missing001&memberIds=missing002").andExpect {
+      status { isOk() }
+      jsonPath("$.group") { isEmpty() }
     }
   }
 
@@ -262,7 +289,7 @@ class GroupQueryIntegrationTests {
   }
 
   @Test
-  fun `두 쿼리 사이에 다른 연결이 소속을 추가해도 같은 스냅샷을 읽는다`() {
+  fun `조회 중 다른 연결이 요청 밖 소속을 추가해도 인원과 반환 목록은 일치한다`() {
     val pool = Executors.newSingleThreadExecutor()
     var observed = false
     GroupSqlObservation.observer.set { sql ->
@@ -272,7 +299,7 @@ class GroupQueryIntegrationTests {
         java.sql.Connection.TRANSACTION_REPEATABLE_READ,
         TransactionSynchronizationManager.getCurrentTransactionIsolationLevel(),
       )
-      if (sql.contains("count(")) {
+      if (sql.contains("group_membership")) {
         GroupSqlObservation.observer.remove()
         pool.submit { insert("member0003", "group00001") }.get()
         observed = true
@@ -281,7 +308,8 @@ class GroupQueryIntegrationTests {
     try {
       val result = handler.execute(GroupSummaryQuery(listOf("member0001")))
       assertTrue(observed)
-      assertEquals(2, result.single().totalMemberCount)
+      assertEquals(1, result.single().totalMemberCount)
+      assertEquals(1, result.single().members.size)
       assertEquals(3, jdbc.queryForObject("select count(*) from group_membership", Int::class.java))
       assertFalse(TransactionSynchronizationManager.isActualTransactionActive())
     } finally {

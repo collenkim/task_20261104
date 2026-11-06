@@ -18,10 +18,10 @@ class MemberQueryRequestTests {
     assertEquals(20, default.page.size)
     assertEquals(MemberNameSort.ASCENDING, default.sort)
     val leading = query("page" to "00001", "size" to "00002", "sort" to "name,desc")
-    assertEquals(1, leading.page.number)
+    assertEquals(0, leading.page.number)
     assertEquals(2, leading.page.size)
     assertEquals(MemberNameSort.DESCENDING, leading.sort)
-    assertEquals(2147483647L, query("page" to "2147483647", "size" to "1").page.offset)
+    assertEquals(2147483646L, query("page" to "2147483647", "size" to "1").page.offset)
     assertEquals(100, query("size" to "101").page.size)
     assertEquals(100, query("size" to "2147483647").page.size)
   }
@@ -53,13 +53,17 @@ class MemberQueryRequestTests {
 
   @Test
   fun `형식은 맞지만 size 0과 offset 상한 초과는 처리 불가다`() {
+    assertFailsWith<UnprocessableMemberQueryException> { query("page" to "0") }
+    assertFailsWith<UnprocessableMemberQueryException> { query("page" to "000") }
     assertFailsWith<UnprocessableMemberQueryException> { query("size" to "0") }
     assertFailsWith<UnprocessableMemberQueryException> { query("size" to "000") }
     assertFailsWith<UnprocessableMemberQueryException> {
-      query("page" to "21474837", "size" to "100")
+      query("page" to "21474838", "size" to "100")
     }
     assertFailsWith<UnprocessableMemberQueryException> { query("page" to "2147483647") }
-    assertEquals(21474836, query("page" to "21474836", "size" to "100").page.number)
+    assertEquals(21474836, query("page" to "21474837", "size" to "100").page.number)
+    assertEquals(0L, query("page" to "1").page.offset)
+    assertEquals(20L, query("page" to "2").page.offset)
   }
 
   @Test

@@ -23,7 +23,7 @@ object MemberResponseMapper {
           group?.permission,
         )
       },
-      MemberPageResponse(view.size, view.number, view.totalElements, view.totalPages),
+      MemberPageResponse(view.size, view.number + 1, view.totalElements, view.totalPages),
     )
 
   fun detail(view: MemberDetailView): MemberDetailResponse {

@@ -90,6 +90,23 @@ class HttpGroupMembershipTests {
   }
 
   @Test
+  fun `summary 인원수가 반환 멤버 수보다 크거나 작으면 계약 오류다`() {
+    for (count in listOf(0, 2)) {
+      requests.clear()
+      body.set(
+        GroupMembershipSamples.SUMMARY.replace(
+          "\"totalMemberCount\":1",
+          "\"totalMemberCount\":$count",
+        )
+      )
+      assertFailsWith<GroupServiceConfigurationException> {
+        reader().findByMemberIds(listOf("member0001"))
+      }
+      assertEquals(1, requests.size)
+    }
+  }
+
+  @Test
   fun `업무 응답은 1MiB 경계를 허용하고 초과하면 재시도 없이 계약 오류다`() {
     val valid = """{"group":[]}"""
     body.set(valid + " ".repeat(1024 * 1024 - valid.toByteArray().size))
@@ -296,7 +313,7 @@ class HttpGroupMembershipTests {
   @Test
   fun `상세의 전용 미소속 404만 빈 목록으로 바꾸며 다른 상태와 계약 위반은 숨기지 않는다`() {
     status.set(404)
-    contentType.set("application/problem+json")
+    contentType.set("application/json")
     val membershipType = "urn:problem-type:group-membership-not-found"
     body.set("""{"type":"$membershipType","status":404,"code":"RESOURCE_NOT_FOUND"}""")
     assertNull(reader().findByMemberId("member0001"))

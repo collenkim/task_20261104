@@ -12,13 +12,15 @@
 
 - 경로·헤더·미디어 타입에 버전을 두지 않는다(예: `/v1/...`를 쓰지 않음).
 - 호환되지 않는 변경은 소비 서비스와 함께 바꾼다. 계약 호환성은 OpenAPI 스냅샷 비교로 검증한다([POL-API-006](#pol-api-006-공유-계약과-스냅샷)).
-- OpenAPI 문서의 필수 항목 `info.version`은 서비스가 관리한다(현재 멤버 0.4.0, 그룹 0.2.0). 명세 문서 버전이며 API 경로·헤더 버전과 다르다([OpenAPI 규격](https://spec.openapis.org/oas/v3.1.0#info-object)).
+- OpenAPI 문서의 필수 항목 `info.version`은 서비스가 관리한다(현재 멤버 0.5.0, 그룹 0.4.0). 명세 문서 버전이며 API 경로·헤더 버전과 다르다([OpenAPI 규격](https://spec.openapis.org/oas/v3.1.0#info-object)).
 
 <a id="pol-api-002"></a>
 
 ## POL-API-002 오류 응답
 
-애플리케이션의 오류 응답은 RFC 9457 ProblemDetail(`application/problem+json`) 다섯 필드에 `code`를 더한 여섯 필드다.
+애플리케이션의 오류 응답은 RFC 9457의 ProblemDetail 필드 구조를 활용한 공통 JSON이다. 레거시 소비자와의 호환을 위해 성공·오류 모두 `application/json`으로 고정하며, 기본 다섯 필드에 `code`를 더한 여섯 필드다.
+
+상태 확인·OpenAPI JSON도 application/json을 사용한다. Swagger HTML·JavaScript 등 정적 자원은 본래 형식을 유지한다. MVC의 ProblemDetail은 응답 advice, 필터 오류는 공통 writer, Actuator는 EndpointMediaTypes 설정으로 미디어 타입을 고정한다.
 
 ```json
 {
@@ -37,7 +39,7 @@
 - 처리되지 않은 예외(500)는 내부 메시지·스택을 넣지 않는다. 고정 문구와 `INTERNAL_SERVER_ERROR`만 넣는다.
 - 내부 주소·그룹 응답 본문·키·토큰·이메일·주소를 오류 응답에 넣지 않는다.
 - 필터(인증·메서드·요청 제한)가 쓰는 오류도 같은 여섯 필드다(`ProblemResponseWriter`). MVC 예외는 `ProblemDetailsExceptionHandler`가 매핑한다.
-- OpenAPI에는 각 작업이 `@ProblemResponses`로 선언한 상태마다 `application/problem+json` 스키마와 예제 하나를 생성한다. `code` 허용 값은 코드표에서 채운다.
+- OpenAPI에는 각 작업이 `@ProblemResponses`로 선언한 상태마다 `application/json` 스키마와 예제 하나를 생성한다. `code` 허용 값은 코드표에서 채운다.
 
 | status | code | codeName | 쓰임 |
 | --- | --- | --- | --- |
@@ -49,7 +51,7 @@
 | 406 | `NOT_ACCEPTABLE` | 지원하지 않는 응답 형식 | 지원하지 않는 `Accept`. 사용자 표에 없던 상태를 같은 규칙으로 추가 |
 | 409 | `RESOURCE_CONFLICT` | 리소스 충돌 | 코드표 예약. 현재 GET 조회 API에서는 발생하지 않음 |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | 지원하지 않는 미디어 타입 | 코드표 예약. 현재 요청 본문이 없어 발생하지 않음 |
-| 422 | `VALIDATION_FAILED` | 처리할 수 없는 요청 값 | 형식은 맞지만 의미상 처리 불가: size 0·offset 초과·허용하지 않는 정렬·memberIds 100개 초과 |
+| 422 | `VALIDATION_FAILED` | 처리할 수 없는 요청 값 | 형식은 맞지만 의미상 처리 불가: page 0·size 0·offset 초과·허용하지 않는 정렬·memberIds 100개 초과 |
 | 429 | `TOO_MANY_REQUESTS` | 요청 횟수 제한 초과 | 멤버: subject별 제한 초과 + `Retry-After` |
 | 500 | `INTERNAL_SERVER_ERROR` | 서버 내부 오류 | 자체 처리 오류·원격 계약 위반(업무 API) |
 | 502 | `BAD_GATEWAY` | 게이트웨이 응답 오류 | 멤버 중계·명세 전달의 원격 응답 오류(type으로 원인 구분) |
@@ -79,14 +81,14 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 요청 파라미터 | `page`(0부터), `size`, `sort` |
+| 요청 파라미터 | `page`(기본 1, 최솟값 1), `size`, `sort` |
 | 기본 크기 | 20 (`spring.data.web.pageable.default-page-size`) |
 | 최대 크기 | 100 (`max-page-size`). 더 큰 값을 요청하면 100으로 맞춘다 |
 | 응답 형식 | 목록 키(서비스 계약 소유, 멤버: `members`) + 페이지 메타데이터 `page{size, number, totalElements, totalPages}` |
 
 - 형식 위반은 400 `INVALID_PARAMETER`, 형식은 맞지만 의미상 처리할 수 없는 값은 422 `VALIDATION_FAILED`다(사용자 결정). 검증은 DB·원격 호출 전에 끝낸다.
   - 400: 숫자 아님, 빈 값, 공백, 부호, 정수 범위 초과, 반복 파라미터, 필수 누락, ID 패턴 위반, 콤마 결합.
-  - 422: `size=0`, offset(`page × size`) 상한 초과, 허용하지 않는 정렬, `memberIds` 100개 초과.
+  - 422: `page=0`, `size=0`, offset(`(page - 1) × 적용 size`) 상한 초과, 허용하지 않는 정렬, `memberIds` 100개 초과.
 - page/size/sort는 각각 한 번만 받는다. 생략에만 기본값을 적용하고 size의 범위 검증 후 최대 크기를 적용한다. offset은 Long으로 계산한 뒤 JPA Integer 범위 안인지 검증한다. 정확한 경계는 서비스 API 문서가 소유한다.
 - `page` 메타데이터는 클라이언트가 다음 요청을 만들 수 있도록 응답에 둔다(사용자 결정). Spring 내부 PageImpl 직렬화 결과는 외부 계약으로 사용하지 않고 명시적 응답 DTO로 반환한다. application 계층에 Pageable/Page를 노출하지 않는다.
 - 제한 없는 전체 목록 API는 만들지 않는다.
@@ -136,7 +138,7 @@
 
 ## POL-API-007 정의된 응답만 노출
 
-상태: 사용자 확정 요구. 응답 DTO 명시·중계 필드 선별·계약 테스트의 정의 외 필드 거부로 적용했다. 모든 출력 경계의 강제 수단을 전수 검사한 기록은 아직 없으므로 전체 완료로 표시하지 않는다.
+상태: 사용자 확정 요구. 응답 DTO 명시·중계 필드 선별·계약 테스트의 정의 외 필드 거부로 적용했다. 네 업무 API·중계와 공통 오류의 검사 근거는 [요구 재검증](../verification/REVIEW-002/requirements-audit.md)에 있다. 임의로 추가될 미래 API까지 검증한 의미는 아니다.
 
 - 목록·상세·중첩 항목·page·그룹 중계에는 서비스별로 확정한 응답 필드만 노출한다. Entity·내부 모델·원격 JSON의 확장 필드를 자동으로 전달하지 않는다.
 - 응답 DTO와 OpenAPI의 객체별 필드 목록·타입·필수·null 규칙을 맞춘다. 실제 응답 키 집합과 계약을 대조하고 정의 외 필드를 넣은 실패 사례를 검사한다.

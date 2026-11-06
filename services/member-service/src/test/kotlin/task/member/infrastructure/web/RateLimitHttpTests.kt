@@ -40,7 +40,7 @@ class RateLimitHttpTests {
     call("/api/member/zzzzzzzzzz", limited).andExpect {
       status { isEqualTo(429) }
       header { string(HttpHeaders.RETRY_AFTER, "1") }
-      content { contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON) }
+      content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
       jsonPath("$.code") { value("TOO_MANY_REQUESTS") }
       jsonPath("$.status") { value(429) }
     }

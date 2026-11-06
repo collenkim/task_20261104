@@ -10,12 +10,12 @@ data class GroupSummaryResponse(
   @field:Schema(requiredMode = REQUIRED) val group: List<GroupSummaryItem>
 )
 
-/** 전체 인원과 요청 멤버를 구분한다(POL-GROUP-002). */
+/** 요청 범위에서 실제 반환하는 멤버 수와 목록을 함께 제공한다(POL-GROUP-002). */
 @Schema(additionalProperties = FALSE)
 data class GroupSummaryItem(
   @field:Schema(requiredMode = REQUIRED, pattern = "^[a-z0-9]{10}$") val groupId: String,
   @field:Schema(requiredMode = REQUIRED, minLength = 1) val groupName: String,
-  @field:Schema(requiredMode = REQUIRED, minimum = "0", description = "그룹 전체 소속 인원")
+  @field:Schema(requiredMode = REQUIRED, minimum = "0", description = "중복을 제외한 응답 members의 개수")
   val totalMemberCount: Long,
   @field:Schema(requiredMode = REQUIRED) val members: List<GroupMemberSummary>,
 )

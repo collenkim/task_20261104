@@ -146,6 +146,7 @@ try {
   assert.equal(typeof summaries.members[0].group, 'string');
   assert.deepEqual(Object.keys(summaries.members[0]).sort(), ['group', 'id', 'name', 'permission']);
   assert.equal(summaries.page.totalElements, 5);
+  assert.equal(summaries.page.number, 1);
   const detail = await execute('/api/member/{memberId}', 'tu3fgxd45k', 'memberId');
   assert.equal(detail.id, 'tu3fgxd45k');
   assert.deepEqual(Object.keys(detail).sort(), ['address', 'email', 'group', 'id', 'name', 'registeredDate']);
@@ -167,7 +168,8 @@ try {
     catch { return true; }
   })()`), true);
   const groupSummary = await execute('/api/groups/summary', 'tu3fgxd45k', 'memberIds', '/internal-api/group');
-  assert.equal(groupSummary.group[0].totalMemberCount, 2);
+  assert.equal(groupSummary.group[0].totalMemberCount, 1);
+  assert.equal(groupSummary.group[0].members.length, 1);
   assert.deepEqual(groupSummary.group[0].members, [{memberId:'tu3fgxd45k', permission:'Editor'}]);
   const groupDetail = await execute('/api/group/{memberId}', 'tu3fgxd45k', 'memberId', '/internal-api/group');
   assert.deepEqual(Object.keys(groupDetail).sort(), ['groupId','groupName','memberId','permission','pricing','registeredDate']);

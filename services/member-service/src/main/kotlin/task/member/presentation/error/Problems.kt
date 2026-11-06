@@ -50,7 +50,7 @@ class ProblemResponseWriter(private val mapper: JsonMapper) {
         Problems.CODE to code.code,
       )
     response.status = code.status
-    response.contentType = MediaType.APPLICATION_PROBLEM_JSON_VALUE
+    response.contentType = MediaType.APPLICATION_JSON_VALUE
     response.characterEncoding = Charsets.UTF_8.name()
     response.writer.write(mapper.writeValueAsString(body))
   }

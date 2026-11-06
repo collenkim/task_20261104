@@ -67,7 +67,7 @@ MemberPersistenceTests의 저장소 경계 검사에 MemberQueryApiTests·Member
 | 영역 | 필수 사례 |
 | --- | --- |
 | 입력 | 생략 기본값; 빈/공백/앞뒤 공백/음수/소수/문자/정수 범위 초과·빈 sort; page/size/sort 동일값·다른값 반복 모두 400 `INVALID_PARAMETER` |
-| 범위 | size 101→100; size 2147483648→400(보정 전 검증); size 0·offset 경계 밖·허용하지 않는 정렬→422 `VALIDATION_FAILED`; 허용 범위 내 마지막 페이지 초과→빈 배열·그룹 호출 0회 |
+| 범위 | size 101→100; size 2147483648→400(보정 전 검증); page 0·size 0·offset 경계 밖·허용하지 않는 정렬→422 `VALIDATION_FAILED`; 허용 범위 내 마지막 페이지 초과→빈 배열·그룹 호출 0회 |
 | 정렬 | 이름 ASC/DESC, 고정 ID 보조 정렬, 고정 DB 데이터셋의 동명이인 페이지 중복·누락 없음, 전체 건수는 멤버 수 |
 | 결합 | 미소속·단일 소속·다건 계약 위반, 소속별 권한, 멤버·그룹 응답 순서 변경, 정상 논리 호출 1회, 중복 없는 요청 ID |
 | 소속 계약 | 요청 ID 누락/추가/중복, 같은 멤버의 중복 group ID, 필수 필드 null/누락/공백, 잘못된 JSON/시각은 오류; 다중 소속은 계약 위반 |
@@ -113,3 +113,5 @@ MemberPersistenceTests의 저장소 경계 검사에 MemberQueryApiTests·Member
 정의 외 응답 필드 차단은 [POL-API-007](api-conventions.md#pol-api-007-정의된-응답만-노출)의 사용자 확정 요구다. 목록·상세·page·중첩 그룹의 정확한 필드 집합과 추가 필드 삽입 실패를 검사한다. 중계는 추가 필드를 제거하고 필수·타입·값 위반을 502로 구분한다. 연결 불가 503, 헤더·본문 시간 초과 504, 원격 서버 실패 502와 멤버 자체 오류 500을 구분한다. 재시도 후 본문의 시간 제한도 검사한다.
 
 문서 검사는 `python -X utf8 -I scripts/verification/docs-check.py`로 실행한다. 저장소 내부 파일·Markdown/HTML 앵커, 현재 문서의 분류·상태, 정책 정의·참조를 검사한다. 코드 블록·외부 URL·과거 작업의 정책 참조는 구별한다. 자연어 계약의 의미 일치와 외부 URL의 응답까지 자동으로 증명하지는 않는다. 검사기 회귀 테스트는 `python -X utf8 -I -m unittest discover -s tests -p test_docs_check.py`다.
+
+서비스 간 공통 계약은 빌드 후 `python -X utf8 -I scripts/verification/api-contract-check.py`로 별도 대조한다. 두 서비스 ErrorCode, 공통 정책·각 api.md 코드표, OpenAPI 오류 6필드·예제·application/json·GET 전용과 page 요청/응답의 1 시작·page 객체 보존을 확인한다. 서비스 빌드에 상대 서비스 소스 의존을 넣지 않는 루트 검증이다. 회귀 검사는 `python -X utf8 -I -m unittest discover -s tests -p test_api_contract_check.py`이며 코드표·미디어 타입·page·정의 외 오류 필드를 의도적으로 바꿔 검출 여부를 확인한다.

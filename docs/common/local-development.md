@@ -117,7 +117,7 @@ source 선택·소속 fixture, 공개 멤버 API와 local 시드를 구현했다
 
 - local 프로필은 `task.group-membership.source=fixture`로 멤버 내부 합성 소속 데이터를 사용한다. 기본 프로필은 http다. fixture는 local 외에서 선택할 수 없다.
 - 루트 Compose는 TASK_GROUP_MEMBERSHIP_SOURCE=http를 명시한다. 멤버 단독 Compose는 생략 시 fixture이며 http 지정 시 외부 그룹 주소가 필요하다. 프로필·설정 바인딩과 두 실행 방식의 실제 fixture 업무 API를 검증했다.
-- 기존 `docker compose up -d --build --wait`로 local 시드와 실제 그룹 HTTP를 적용한 멤버 API를 실행한다. 목록은 `/api/members?page=0&size=20&sort=name,asc`, 상세 예시는 `/api/member/tu3fgxd45k`다. Swagger에서 실제 목록·상세 Try it out을 검증했다. 그룹이 중단돼도 멤버 자기 명세·readiness는 정상이며 그룹이 필요한 업무 조회만 503이다.
+- 기존 `docker compose up -d --build --wait`로 local 시드와 실제 그룹 HTTP를 적용한 멤버 API를 실행한다. 목록은 `/api/members?page=1&size=20&sort=name,asc`, 상세 예시는 `/api/member/tu3fgxd45k`다. Swagger에서 실제 목록·상세 Try it out을 검증했다. 그룹이 중단돼도 멤버 자기 명세·readiness는 정상이며 그룹이 필요한 업무 조회만 503이다.
 - http 선택 시 실제 그룹 주소·키를 사용한다. 실패하면 500/503을 반환하며 fixture로 대체하지 않는다. 제공자 실제 연동과 테스트 대역의 증거는 구분한다.
 - 기존 그룹 명세 전달은 실제 HTTP를 유지한다. 그룹 정지 시 루트 http 업무 조회·그룹 명세는 503, 멤버 단독 fixture 조회는 200이다.
 - local Flyway 경로는 `db/migration/mariadb` + `db/seed/local`이다. 기본 프로필은 migration 경로만 적용한다. 시드 재실행 조건·보호 규칙은 [POL-DATA-004](data-conventions.md#pol-data-004-local-시드), ID·소속 예시는 [멤버 엔티티](../../services/member-service/docs/entities.md#local-시드-m-06-적용)를 따른다.

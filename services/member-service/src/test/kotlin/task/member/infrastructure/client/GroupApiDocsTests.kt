@@ -219,7 +219,7 @@ class GroupApiDocsTests {
         Triple(503, "SERVICE_UNAVAILABLE", "about:blank"),
       )) {
       status.set(code)
-      contentType.set("application/problem+json")
+      contentType.set("application/json")
       val problem =
         """{"type":"$type","title":"합성 오류","status":$code,"detail":"합성 설명","instance":"/api/group/tu3fgxd45k","code":"$error"}"""
       body.set(problem)
@@ -330,7 +330,7 @@ class GroupApiDocsTests {
       status { isBadGateway() }
     }
     status.set(500)
-    contentType.set("application/problem+json")
+    contentType.set("application/json")
     body.set("{\"status\":404,\"code\":\"NOT_FOUND\"}")
     mockMvc.get("/internal-api/group/api/group/tu3fgxd45k").andExpect {
       status { isBadGateway() }
@@ -446,6 +446,18 @@ class GroupApiDocsTests {
   }
 
   @Test
+  fun `중계는 summary count와 반환 목록 크기가 다르면 502로 거부한다`() {
+    for (count in listOf(0, 2)) {
+      body.set(SUMMARY.replace("\"totalMemberCount\":1", "\"totalMemberCount\":$count"))
+      mockMvc.get("/internal-api/group/api/groups/summary").andExpect {
+        status { isBadGateway() }
+        jsonPath("$.code") { value("BAD_GATEWAY") }
+        jsonPath("$.type") { value("urn:problem-type:group-response-contract-violation") }
+      }
+    }
+  }
+
+  @Test
   fun `중계는 본문 수신 시간 초과를 504로 구분한다`() {
     body.set(DETAIL)
     bodyDelay.set(1000)
@@ -549,7 +561,7 @@ class GroupApiDocsTests {
     }
 
     private const val SUMMARY =
-      """{"group":[{"groupId":"arutjf9348","groupName":"Test1","totalMemberCount":2,"members":[{"memberId":"tu3fgxd45k","permission":"Editor"}]}]}"""
+      """{"group":[{"groupId":"arutjf9348","groupName":"Test1","totalMemberCount":1,"members":[{"memberId":"tu3fgxd45k","permission":"Editor"}]}]}"""
     private const val DETAIL =
       """{"memberId":"tu3fgxd45k","groupId":"arutjf9348","groupName":"Test1","registeredDate":"2026-08-15 13:00","pricing":"Premium","permission":"Editor"}"""
 

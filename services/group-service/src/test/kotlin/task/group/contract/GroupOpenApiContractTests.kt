@@ -98,7 +98,7 @@ class GroupOpenApiContractTests {
       )) {
       val response = get(url)
       assertEquals(expected, response.status, url)
-      val media = if (expected == 200) "application/json" else "application/problem+json"
+      val media = if (expected == 200) "application/json" else "application/json"
       assertTrue(contract.errors(path, expected, media, response.contentAsString).isEmpty(), url)
     }
     val notAllowed =
@@ -116,7 +116,7 @@ class GroupOpenApiContractTests {
         .errors(
           "/api/group/{memberId}",
           405,
-          "application/problem+json",
+          "application/json",
           notAllowed.contentAsString,
         )
         .isEmpty()
@@ -126,7 +126,7 @@ class GroupOpenApiContractTests {
       for ((status, response) in pathItem.path("get").path("responses").properties()) {
         if (status == "200") continue
         errorResponses++
-        val examples = response.path("content").path("application/problem+json").path("examples")
+        val examples = response.path("content").path("application/json").path("examples")
         assertEquals(1, examples.size(), status)
         for (example in examples) {
           assertEquals(status.toInt(), example.path("value").path("status").intValue())
@@ -142,7 +142,7 @@ class GroupOpenApiContractTests {
     )
     assertTrue(
       contract
-        .errors("/api/group/{memberId}", 403, "application/problem+json", forbidden.contentAsString)
+        .errors("/api/group/{memberId}", 403, "application/json", forbidden.contentAsString)
         .isEmpty()
     )
     val rows = reader.findByMemberId("tu3fgxd45k")
@@ -155,7 +155,7 @@ class GroupOpenApiContractTests {
           .errors(
             "/api/group/{memberId}",
             500,
-            "application/problem+json",
+            "application/json",
             ambiguous.contentAsString,
           )
           .isEmpty()
@@ -177,7 +177,7 @@ class GroupOpenApiContractTests {
           .errors(
             "/api/group/{memberId}",
             503,
-            "application/problem+json",
+            "application/json",
             unavailable.contentAsString,
           )
           .isEmpty()

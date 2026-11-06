@@ -43,7 +43,7 @@ class CommonPolicyTests {
     type: String = ProblemType.DEFAULT,
   ) = andExpect {
     status { isEqualTo(status) }
-    content { contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON) }
+    content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
     jsonPath("$.status") { value(status) }
     jsonPath("$.code") { value(code) }
     jsonPath("$.type") { value(type) }
@@ -53,10 +53,15 @@ class CommonPolicyTests {
   fun `멤버 서비스 없이도 기동하고 상태 확인은 인증 없이 열려 있으며 준비 상태가 UP이다`() {
     mockMvc.get("/actuator/health").andExpect {
       status { isOk() }
+      content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
       jsonPath("$.status") { value("UP") }
     }
-    mockMvc.get("/actuator/health/readiness").andExpect { jsonPath("$.status") { value("UP") } }
-    mockMvc.get("/actuator/health/liveness").andExpect { jsonPath("$.status") { value("UP") } }
+    for (path in listOf("/actuator/health/readiness", "/actuator/health/liveness")) {
+      mockMvc.get(path).andExpect {
+        content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
+        jsonPath("$.status") { value("UP") }
+      }
+    }
   }
 
   @Test
@@ -140,18 +145,18 @@ class CommonPolicyTests {
       .get("/v3/api-docs") { internal() }
       .andExpect {
         status { isOk() }
-        jsonPath("$.info.version") { value("0.2.0") }
+        jsonPath("$.info.version") { value("0.4.0") }
         jsonPath("$.components.securitySchemes.internalServiceKey.name") { value(KEY_HEADER) }
         for (status in listOf("400", "403", "405", "406", "422", "500", "503")) {
           jsonPath(
-            "$.paths['/api/groups/summary'].get.responses['$status'].content['application/problem+json']"
+            "$.paths['/api/groups/summary'].get.responses['$status'].content['application/json']"
           ) {
             exists()
           }
         }
         for (status in listOf("400", "403", "404", "405", "406", "500", "503")) {
           jsonPath(
-            "$.paths['/api/group/{memberId}'].get.responses['$status'].content['application/problem+json']"
+            "$.paths['/api/group/{memberId}'].get.responses['$status'].content['application/json']"
           ) {
             exists()
           }

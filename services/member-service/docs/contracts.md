@@ -22,7 +22,8 @@
 - 현재 멤버당 소속은 0~1개다. 상세 group은 단일 객체이며 미소속은 null이다. 목록은 group 이름·permission code를 반환한다.
 - 상세 소속의 `registeredDate`·`pricing`은 키가 항상 있고 값은 null일 수 있다. 선택 정보 부재와 그룹 미소속을 구분한다.
 - `permission`·`pricing`은 열린 문자열이다. 소비자는 새 코드를 수용한다. 표시명은 API로 반환하지 않는다.
-- page/size/sort는 반복하지 않는다. 형식 위반은 400, size 0·offset 초과·허용하지 않는 정렬은 422다. 경계는 [API 정의서](api.md#get-apimembers)의 기준을 따른다.
+- 그룹 summary 0.4.0부터 totalMemberCount는 각 members의 크기와 같다. HTTP 소비자와 Swagger 중계는 불일치를 계약 오류로 거부한다. 매핑 없는 ID는 그룹 응답에서 제외되며, 멤버 서비스는 자체 DB에서 조회한 멤버의 미소속을 기존 group/permission=null 공개 계약으로 조합한다. 그룹 API에 null 항목을 생성하는 규칙과는 다르다.
+- page/size/sort는 반복하지 않는다. 형식 위반은 400, page 0·size 0·offset 초과·허용하지 않는 정렬은 422다. 경계는 [API 정의서](api.md#get-apimembers)의 기준을 따른다.
 - 업무 응답은 Asia/Seoul yyyy-MM-dd HH:mm 문자열이다. DB는 UTC TIMESTAMP(6)을 보존한다. OpenAPI는 date-time 대신 pattern 있는 string이다.
 - 실패는 ProblemDetail + `code`다. 소비자는 `status`와 `code`로 분기하고, 같은 상태 안의 세부 원인은 `type` URN으로 구분한다(예: 404 `RESOURCE_NOT_FOUND` + `urn:problem-type:member-not-found`). 429는 `Retry-After`를 따른다. 오류 본문으로 내부 주소·키·그룹 응답·개인정보를 전달하지 않는다. 상세는 `Cache-Control: no-store`다.
 - 클라이언트 SDK는 이 작업에 포함하지 않는다. 소비자 언어·도구를 정할 때 같은 스냅샷으로 생성하고 호환성을 검증한다.
@@ -46,6 +47,8 @@
 
 ## 계약 변경 이력
 
-permissionName 제거와 시각 문자열 변경은 소비자 수정이 필요한 계약 변경이다. 경로와 페이지는 유지한다. REVIEW-002에서 groups 배열을 group으로 바꾸고 createdAt·createdBy를 공개 응답에서 제외했다. 이전 RFC 3339 파서와 permissionName 사용을 수정해야 한다.
+permissionName 제거와 시각 문자열 변경은 소비자 수정이 필요한 계약 변경이다. REVIEW-002에서 groups 배열을 group으로 바꾸고 createdAt·createdBy를 공개 응답에서 제외했다. 이전 RFC 3339 파서와 permissionName 사용을 수정해야 한다.
 
 0.4.0(REVIEW-002 2차): JWT Bearer 필수, 상세 경로 변수 이름 `{memberId}`, 오류 `code`를 상태별 코드표로 교체(`VALIDATION_FAILED`는 422 의미로 변경, 형식 위반은 400 `INVALID_PARAMETER`), 세부 원인 `type` URN 추가, 401·403·405·406·422·429 응답 선언. 성공 응답 본문은 0.3.0과 같다. 오류 `code`로 분기하던 소비자는 새 코드표에 맞춰 수정해야 한다.
+
+0.5.0(REVIEW-002 3차): 요청 page 기본값·최솟값과 응답 page.number가 1로 바뀐다. page 객체와 나머지 필드는 유지한다. 이전에 page=0으로 첫 페이지를 요청하던 소비자는 page=1 또는 생략으로 바꾼다. 성공·오류 응답은 모두 application/json이며 기존 ProblemDetail의 6필드를 유지한다. 오류 미디어 타입으로 분기하던 소비자는 상태 코드와 code/type을 사용한다.

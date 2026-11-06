@@ -96,7 +96,7 @@ class OpenApiConfiguration {
             .content(
               Content()
                 .addMediaType(
-                  "application/problem+json",
+                  "application/json",
                   MediaType()
                     .schema(Schema<Any>().`$ref`("#/components/schemas/$PROBLEM_SCHEMA"))
                     .addExamples(code.code, Example().value(example)),
@@ -109,7 +109,7 @@ class OpenApiConfiguration {
   }
 
   companion object {
-    const val VERSION = "0.2.0"
+    const val VERSION = "0.4.0"
     const val PROBLEM_SCHEMA = "GroupProblemResponse"
   }
 }

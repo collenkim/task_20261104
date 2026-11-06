@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 | --- | --- |
 | 분류 | 구현·검증 기록 |
-| 상태 | 1차·2차 승인 코드·빌드·실제 Compose·Swagger 검증 완료. 로그 제출 보류는 별도 유지 |
+| 상태 | 1~4차 승인 코드·빌드·실제 Compose·Swagger 검증 완료. 로그 제출 보류는 별도 유지 |
 | 검증일 | 2026-11-05~2026-11-06 (Asia/Seoul) |
 | 대상 | feature/REVIEW-002, 기준 aaf0005990fa6dfd8c4e661935472dbe3aebc18a 이후 미커밋 작업 폴더 |
 | 계약 | [승인 결정](../../tasks/REVIEW-002/approved-contract.md)([2차](../../tasks/REVIEW-002/approved-contract.md#2차-승인-2026-11-06)), [멤버 API](../../../services/member-service/docs/api.md), [그룹 API](../../../services/group-service/docs/api.md) |
@@ -86,8 +86,38 @@
 
 ## AI 로그와 병합 상태
 
-2026-11-06 2차 검증 뒤 `python -I scripts/ai_logging/cli.py status`(읽기 전용) 결과는 수집 결과 hold, 보류 124건(이 세션 113건, 세션 29f7d66a 11건: original_rewritten 3·random_string 8)이다. 보류는 값 없이 규칙·위치만 확인했고, 해소(`turns resolve`)는 사용자 작업이다. Codex hook 실제 실행은 여전히 확인되지 않았다.
+2026-11-06 2차 검증 뒤 `python -I scripts/ai_logging/cli.py status`(읽기 전용) 결과는 수집 결과 hold, 보류 124건(이 세션 113건, 세션 29f7d66a 11건: original_rewritten 3·random_string 8)이다. 보류는 값 없이 규칙·위치만 확인했다. 내용 보류는 사용자 판단 후 치환·허용 목록 또는 원본 변경 보존 정책으로 처리한다. `turns resolve`는 종료된 턴의 상태를 정리하는 명령이며 내용 보류를 해소하지 않는다. Codex hook 실제 실행은 여전히 확인되지 않았다.
 
 CODE-05에서는 읽기 전용 상태만 확인했다. 마지막 수집 상태에는 Claude 부속 `.meta.json`의 original_rewritten 보류 3건이 남아 있다. 정상 갱신 메타데이터의 버전 보존 정책(D14)은 미승인이므로 검사 우회·원본 변경·과거 사본 덮어쓰기를 하지 않았다. Codex hook 실제 실행도 아직 확인되지 않아 자동 수집 완전성을 통과로 표시하지 않는다. 상태 명령은 새 sync를 수행하지 않으므로 최종 원본 꼬리까지 검증했다는 뜻이 아니다.
 
-착수 때 develop 스냅샷 60개가 master에 동일하게 포함된 것은 [기준 기록](baseline.md)에서 확인했다. 이번 미커밋 코드의 develop/master 반영, 모든 턴 종료 후 최신 세션의 최종 제출 검사는 아직 수행하지 않았다. 기존 보류 해소와 hook 확인은 최종 로그 제출 전 필요한 별도 항목이다.
+착수 때 develop의 스냅샷 파일 60개가 master에 동일하게 포함된 것은 [기준 기록](baseline.md)에서 확인했다. 3차 재검토에서 manifest는 12개이며, 60은 부속 파일을 포함한 파일 수임을 구분했다. 이번 미커밋 코드의 develop/master 반영, 모든 턴 종료 후 최신 세션의 최종 제출 검사는 아직 수행하지 않았다. 기존 보류 해소와 hook 확인은 최종 로그 제출 전 필요한 별도 항목이다.
+
+## 3차 검증 (2026-11-06)
+
+기준은 f1c17f2 이후 feature/REVIEW-002 작업 폴더다. [전체 요구 재검증](requirements-audit.md)에 기존 구현과 이번 변경, 30개 요구의 코드·검사 근거, 문서와 실제 동작의 차이, AI 로그 범위를 정리했다.
+
+- page 객체를 유지하고 요청 기본값·최솟값 및 응답 번호를 1로 맞췄다. offset은 (page-1)×size이며 저장소 내부는 0 기반이다. pageable 설정 블록을 유지하고 one-indexed-parameters를 추가했다.
+- 업무 성공·오류·중계·필터·health 응답은 application/json이다. 여섯 필드 오류 규격과 상태별 code는 유지한다. Swagger HTML/JS는 본래 형식이다.
+- 두 api.md에 같은 공통 코드표와 실제 발생 범위를 명시했다. OpenAPI 멤버 0.5.0·그룹 0.3.0을 생성했다. 새 루트 검사기가 서비스별 ErrorCode·공통 정책·API 문서·OpenAPI의 차이를 검출한다.
+- 갱신과 build를 함께 요청할 때 Gradle이 감지한 암묵 의존 문제를 수정했다. 갱신 태스크의 출력은 openapi.json 하나이며 일반 build는 갱신하지 않는다.
+
+| 검사 | 결과 |
+| --- | --- |
+| 전체 빌드 | `./gradlew.bat spotlessApply build --no-daemon --console=plain` 성공(1분 53초). 멤버 214개·그룹 69개, 실패/오류/건너뜀 0 |
+| 계약 갱신+빌드 | 두 updateOpenApiSnapshot + build 함께 실행 성공(39초). 이후 일반 build 읽기 전용 대조도 성공 |
+| Docker 재기동 | startLocal 성공(53초). 기존 비밀 파일 유지, 네 컨테이너 healthy |
+| 공통 API 검사기 | 오류 0, 검사기 회귀 7개 통과 |
+| 문서 검사기 회귀 | 6개 통과 |
+| 실제 Compose·독립 실행 | runtime-smoke.py --independence 성공. 정상·오류·health JSON, 1 기반 페이지, 실제 그룹 호출, 그룹 중단 시 업무 503·중계 503/504, 두 앱/DB 단독 기동 후 통합 복구·동시 요청 추적 |
+| Edge Swagger | swagger-browser.mjs 성공. 실제 네 API Try it out 200, page.number=1, Bearer 자동 인증, 내부 키·직접 그룹 주소 비노출 |
+| 최종 문서·공백 검사 | 문서 73개·로컬 링크 610개·정책 55개, 오류 0. git diff --check 통과 |
+
+최초 실제 실행 검사에서 Actuator가 기본 전용 미디어 타입을 반환해 실패했다. 두 서비스에 EndpointMediaTypes 설정과 health/readiness/liveness Content-Type 회귀 검사를 추가한 뒤 전체 빌드를 통과했다. 앞선 문서 page.number=0과 Gradle 순서 오류도 수정 전 실패로 구분한다.
+
+이번 재검토는 AI 로그의 원본·치환 목록·커밋을 변경하지 않았다. develop과 master의 기존 로그 파일은 같지만 최신 수집 보류 124건과 Codex hook 미확인이 남아 있다. 최종 제출은 완료되지 않았다.
+
+## 4차 검증: 그룹 summary 집계 (2026-11-06)
+
+사용자 최종 결정으로 매핑 없는 ID는 제외하고 permission:null 항목을 생성하지 않는다. totalMemberCount는 각 그룹의 실제 반환 members 수이며, 전체 그룹 count 쿼리를 제거했다. 상세 필드와 멤버 API의 미소속 표현은 유지한다. [상세 수정·재현 기록](group-summary-fix.md)을 따른다.
+
+전체 빌드 성공(1분 52초), 멤버 216개·그룹 70개 테스트 통과(실패/오류/건너뜀 0). 실제 MariaDB 조회 1회·집계 일치, 합성 HTTP count 불일치 거부, Docker 재기동 후 실제 API·Edge Swagger를 확인했다. 그룹 OpenAPI는 0.4.0이다. 매핑 있는 ID+없는 ID는 count 1/members 1, 전부 매핑이 없으면 group 빈 배열이다. 커밋·병합은 수행하지 않았다.

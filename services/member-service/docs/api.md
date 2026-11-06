@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 | --- | --- |
 | 분류 | 서비스 정의 |
-| 상태 | 현재(0.4.0) |
+| 상태 | 현재(0.5.0) |
 | 목적 | 현재 HTTP 경로와 적용 중인 업무 계약 소유 |
 | 범위 | 사용자 진입점 http://127.0.0.1:8081 |
 | 관련 코드 | presentation/query/, presentation/error/, infrastructure/security/, infrastructure/web/, infrastructure/configuration/, application.yaml |
@@ -29,9 +29,9 @@
 
 <a id="member-001-공개-계약"></a>
 
-## 공개 계약 (REVIEW-002 개정, 0.4.0)
+## 공개 계약 (REVIEW-002 개정, 0.5.0)
 
-0.4.0은 REVIEW-002에서 JWT 인증·GET 전용·오류 코드표·400/422 구분을 적용한 계약이다. 0.3.0(단일 `group`, 감사 필드 제외) 응답 본문은 바뀌지 않았다. 공통 규칙은 [API 정책](../../../docs/common/api-conventions.md), 승인 표와 변경 이유는 [개정 기록](api-review.md), 실행 결과는 [REVIEW-002 검증](../../../docs/verification/REVIEW-002/verification.md)에 있다. 아래 예제는 현재 코드의 응답이며 계약 테스트가 OpenAPI 스키마로 검사한다.
+현재 0.5.0 계약은 0.3.0의 단일 `group`·감사 필드 제외, 0.4.0의 JWT 인증·GET 전용·오류 코드표·400/422 구분에 이어 페이지 번호를 1부터 시작하고 미디어 타입을 application/json으로 통일한다. `page` 객체는 유지한다. 공통 규칙은 [API 정책](../../../docs/common/api-conventions.md), 승인 표와 변경 이유는 [개정 기록](api-review.md), 실행 결과는 [REVIEW-002 검증](../../../docs/verification/REVIEW-002/verification.md)에 있다. 아래 예제는 현재 코드의 응답이며 계약 테스트가 OpenAPI 스키마로 검사한다.
 
 ### GET /api/members
 
@@ -39,18 +39,18 @@ operationId는 `getMemberSummaries`, 응답 스키마는 `MemberSummaryPageRespo
 
 | 파라미터 | 값이 없을 때 | 허용 범위·표현 |
 | --- | --- | --- |
-| `page` | 0 | ASCII 숫자만, 0~2147483647 |
+| `page` | 1 | ASCII 숫자만, 1~2147483647. 0은 422 |
 | `size` | 20 | ASCII 숫자만, 1~2147483647. 범위 검증 후 `min(size, 100)` 적용 |
 | `sort` | `name,asc` | 정확히 `name,asc` 또는 `name,desc` |
 
 - 형식 위반은 400 `INVALID_PARAMETER`다: 반복 전달(같은 값 포함), 빈 값, 공백(앞뒤 공백 포함), 부호, 음수, 소수, 숫자 외 문자, int32 범위 초과, 빈 `sort`. 생략과 빈 값은 다르다. 선행 0은 숫자로 파싱한다. 첫 값 선택·중복 제거로 보정하지 않는다.
-- 형식은 맞지만 처리할 수 없는 값은 422 `VALIDATION_FAILED`다: `size=0`, `page × 적용 size > 2147483647`(예: `page=21474837&size=100`), 허용하지 않는 정렬(`name`, `id,asc`, `name,ASC`, `name,asc ` 등).
+- 형식은 맞지만 처리할 수 없는 값은 422 `VALIDATION_FAILED`다: `page=0`, `size=0`, `(page - 1) × 적용 size > 2147483647`(예: `page=21474838&size=100`), 허용하지 않는 정렬(`name`, `id,asc`, `name,ASC`, `name,asc ` 등).
 - 두 검사 모두 DB·그룹 호출 전에 끝난다. 허용 범위 안에서 마지막 페이지를 넘으면 200과 빈 `members`다.
 - 원시 파라미터의 개수를 먼저 확인하고 DTO로 변환·검증한다. 자동 `Pageable` 바인딩의 값 보정에 의존하지 않는다.
 - 이름은 DB `utf8mb4_unicode_ci` 기준으로 정렬하며 내부 보조 정렬은 항상 `id ASC`다. `desc`에서도 ID는 ASC다. 서로 다른 요청 사이 데이터 변경까지 막는 스냅샷 보장은 하지 않는다.
-- `page`는 클라이언트가 다음 요청을 만들 수 있도록 응답에 포함한다(사용자 결정). `page.size`는 적용된 크기, `page.number`는 요청 페이지, `totalElements`는 멤버 수다. 전체 0건이면 `totalPages=0`이다.
+- `page`는 클라이언트가 다음 요청을 만들 수 있도록 응답에 포함한다(사용자 결정). `page.size`는 적용된 크기, `page.number`는 1부터 시작하는 요청 페이지, `totalElements`는 멤버 수다. 전체 0건이면 `totalPages=0`이며 기본 요청의 `page.number`는 1이다. 내부 저장소의 0 기반 계산은 응답에 노출하지 않는다.
 
-요청 예: `/api/members?page=0&size=20&sort=name,asc` (헤더 `Authorization: Bearer <토큰>`).
+요청 예: `/api/members?page=1&size=20&sort=name,asc` (헤더 `Authorization: Bearer <토큰>`).
 
 ```json
 {
@@ -70,7 +70,7 @@ operationId는 `getMemberSummaries`, 응답 스키마는 `MemberSummaryPageRespo
   ],
   "page": {
     "size": 20,
-    "number": 0,
+    "number": 1,
     "totalElements": 2,
     "totalPages": 1
   }
@@ -119,7 +119,7 @@ operationId는 `getMemberDetail`, 스키마는 `MemberDetailResponse`다. 요청
 | 없는 경로 | 404 `RESOURCE_NOT_FOUND` | `about:blank` |
 | GET 외 메서드 | 405 `METHOD_NOT_ALLOWED` | `about:blank` |
 | 지원하지 않는 `Accept` | 406 `NOT_ACCEPTABLE` | `about:blank` |
-| size 0·offset 초과·허용하지 않는 정렬 | 422 `VALIDATION_FAILED` | `about:blank` |
+| page 0·size 0·offset 초과·허용하지 않는 정렬 | 422 `VALIDATION_FAILED` | `about:blank` |
 | 호출 수 제한 초과 | 429 `TOO_MANY_REQUESTS` + `Retry-After` | `about:blank` |
 | 상세 미소속 전용 404를 제외한 그룹 4xx·리다이렉트·잘못된 JSON·필수 계약 위반, fixture 누락·손상 | 500 `INTERNAL_SERVER_ERROR` | `about:blank` |
 | 그룹 연결 실패·시간 초과·그룹 5xx | 503 `SERVICE_UNAVAILABLE` | `urn:problem-type:group-service-unavailable` |
@@ -158,3 +158,32 @@ local fixture 모드의 성공은 실제 그룹 연동 성공을 뜻하지 않�
 | 응답 시간 초과·그룹 504 | 504 `GATEWAY_TIMEOUT`, type `urn:problem-type:group-service-timeout` |
 
 업무 API는 그룹 시간 초과를 503으로 알리고(사용자에게 "그룹 정보를 지금 조회할 수 없음"), 중계는 게이트웨이 의미를 그대로 드러내기 위해 504로 구분한다. 500 `INTERNAL_SERVER_ERROR`는 멤버 자체 처리 오류에만 사용한다. 모든 중계 응답은 no-store다.
+
+## 공통 오류 계약과 상태 코드
+
+성공·오류 API 응답은 모두 `application/json`이다. 오류는 type/title/status/detail/instance/code 여섯 필드만 반환한다. 같은 HTTP 상태에는 두 서비스가 아래와 같은 code·의미를 사용하며, 업무 원인은 type URN으로 구분한다. 상태 코드는 HTTP 응답과 본문의 status가 일치해야 한다. 이 표는 공통 정의이며 각 API에서 실제 발생하는 상태는 다음 적용 표를 따른다.
+
+| HTTP | 공통 code | 의미 |
+| --- | --- | --- |
+| 400 | `INVALID_PARAMETER` | 잘못된 요청 |
+| 401 | `UNAUTHORIZED` | 인증 실패 |
+| 403 | `FORBIDDEN` | 접근 권한 없음 |
+| 404 | `RESOURCE_NOT_FOUND` | 리소스 없음 |
+| 405 | `METHOD_NOT_ALLOWED` | 지원하지 않는 Method |
+| 406 | `NOT_ACCEPTABLE` | 지원하지 않는 응답 형식 |
+| 409 | `RESOURCE_CONFLICT` | 리소스 충돌 |
+| 415 | `UNSUPPORTED_MEDIA_TYPE` | 지원하지 않는 미디어 타입 |
+| 422 | `VALIDATION_FAILED` | 처리할 수 없는 요청 값 |
+| 429 | `TOO_MANY_REQUESTS` | 요청 횟수 제한 초과 |
+| 500 | `INTERNAL_SERVER_ERROR` | 서버 내부 오류 |
+| 502 | `BAD_GATEWAY` | 게이트웨이 응답 오류 |
+| 503 | `SERVICE_UNAVAILABLE` | 서비스 이용 불가 |
+| 504 | `GATEWAY_TIMEOUT` | 게이트웨이 응답 시간 초과 |
+
+| API | 성공 | 발생 가능한 오류 |
+| --- | --- | --- |
+| GET /api/members | 200 | 400, 401, 403, 405, 406, 422, 429, 500, 503 |
+| GET /api/member/{memberId} | 200 | 400, 401, 403, 404, 405, 406, 429, 500, 503 |
+| local 그룹 실행 중계 | 200 | JWT 401/403, 원본 그룹 4xx, 메서드 405, 제한 429, 자체 500, 원격 502/503/504 |
+
+401·403은 사용자 JWT와 scope 검사이며 WWW-Authenticate를 유지한다. 429는 Retry-After를 포함한다. GET 전용이므로 409·415는 공통 예약 코드이며 발생하지 않는 동작을 명세에 추가하지 않는다.

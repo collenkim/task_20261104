@@ -18,7 +18,8 @@ private constructor(
   val sort: String?,
 ) {
   fun toQuery(): MemberSummaryQuery {
-    val number = integer(page, 0, 0)
+    // 공개 계약은 1 기반, 저장소의 페이지와 offset은 0 기반이다.
+    val number = integer(page, 1, 1) - 1
     val effectiveSize =
       integer(size, MemberPageRequest.DEFAULT_SIZE, 1).coerceAtMost(MemberPageRequest.MAX_SIZE)
     if (number.toLong() * effectiveSize > MemberPageRequest.MAX_OFFSET) unprocessable()

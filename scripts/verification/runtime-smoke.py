@@ -47,6 +47,8 @@ def send(path, method="GET", auth=True, headers=None):
 
 def check_http(path, expected, code=None, no_store=False, problem_type=None, method="GET", auth=True):
     status, headers, body = send(path, method, auth)
+    if body:
+        assert headers.get_content_type() == "application/json", (path, status, "응답 미디어 타입")
     assert status in (expected if isinstance(expected, tuple) else (expected,)), (path, method, status, expected)
     if no_store:
         assert headers.get("Cache-Control") == "no-store", path
@@ -89,14 +91,15 @@ def check_members():
     expected = ["tu3fgxd45k", "dj8fy4bewk", "k2m9x0p1q3", "j0n8k2m4p6", "q1w2e3r4t5"]
     page = check_http("/api/members", 200)
     assert [m["id"] for m in page["members"]] == expected, "local 시드 목록과 다릅니다. 기존 데이터는 수정하지 않습니다"
-    assert page["page"] == {"number": 0, "size": 20, "totalElements": 5, "totalPages": 1}
+    assert page["page"] == {"number": 1, "size": 20, "totalElements": 5, "totalPages": 1}
     assert isinstance(page["members"][0]["group"], str)
     assert page["members"][0]["permission"] == "Editor"
     assert page["members"][2]["group"] is None and page["members"][2]["permission"] is None
     assert all(set(member) == {"id", "name", "group", "permission"} for member in page["members"])
     ids = []
-    for number in range(3):
+    for number in range(1, 4):
         result = check_http(f"/api/members?page={number}&size=2&sort=name,desc", 200)
+        assert result["page"]["number"] == number
         ids.extend(m["id"] for m in result["members"])
     assert ids == ["j0n8k2m4p6", "q1w2e3r4t5", "k2m9x0p1q3", "dj8fy4bewk", "tu3fgxd45k"]
     assert check_http("/api/members?page=10", 200)["members"] == []
@@ -112,7 +115,7 @@ def check_members():
     for query in ("page=", "size=%20", "page=-1", "size=2147483648", "page=1&page=1",
                   "size=1&size=1", "sort=name,asc&sort=name,asc", "sort="):
         check_http("/api/members?" + query, 400, "INVALID_PARAMETER")
-    for query in ("page=21474837&size=100", "sort=id,asc", "size=0"):
+    for query in ("page=0", "page=21474838&size=100", "sort=id,asc", "size=0"):
         check_http("/api/members?" + query, 422, "VALIDATION_FAILED")
     check_http("/api/member/BAD", 400, "INVALID_PARAMETER")
     check_http("/api/member/missing001", 404, "RESOURCE_NOT_FOUND", problem_type=NOT_FOUND_MEMBER)
@@ -193,6 +196,17 @@ for path, item in group_spec["paths"].items():
 summary = check_http("/internal-api/group/api/groups/summary?memberIds=tu3fgxd45k&memberIds=dj8fy4bewk", 200, no_store=True)
 assert summary["group"][0]["totalMemberCount"] == 2
 assert len(summary["group"][0]["members"]) == 2
+
+# 요청하지 않은 같은 그룹의 멤버나 없는 매핑이 count를 늘리지 않아야 한다.
+subset = check_http("/internal-api/group/api/groups/summary?memberIds=tu3fgxd45k&memberIds=missing001", 200)
+assert len(subset["group"]) == 1
+assert subset["group"][0]["totalMemberCount"] == len(subset["group"][0]["members"]) == 1
+assert check_http("/internal-api/group/api/groups/summary?memberIds=missing001&memberIds=missing002", 200)["group"] == []
+unassigned = check_http("/internal-api/group/api/groups/summary?memberIds=tu3fgxd45k&memberIds=k2m9x0p1q3", 200)
+assert len(unassigned["group"]) == 1
+assert unassigned["group"][0]["totalMemberCount"] == len(unassigned["group"][0]["members"]) == 1
+assert all(m["permission"] is not None for g in unassigned["group"] for m in g["members"])
+assert check_http("/internal-api/group/api/groups/summary?memberIds=k2m9x0p1q3", 200)["group"] == []
 detail = check_http("/internal-api/group/api/group/tu3fgxd45k", 200, no_store=True)
 assert set(detail) == {"memberId", "groupId", "groupName", "registeredDate", "pricing", "permission"}
 assert detail["registeredDate"] == "2026-08-15 13:00"

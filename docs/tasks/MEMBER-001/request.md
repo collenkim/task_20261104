@@ -16,6 +16,8 @@
 
 > 현재 계약은 [멤버 API](../../../services/member-service/docs/api.md)와 [그룹 API](../../../services/group-service/docs/api.md)가 소유한다. 소속은 멤버당 0~1개다. 시각·permissionName·감사 필드·그룹 제공자·Swagger 중계의 후속 변경은 위 두 문서를 따른다. 아래는 MEMBER-001 당시 요구다.
 
+> **REVIEW-002 재검토:** 아래 2~4절의 감사 필드·UTC RFC 3339·임시 그룹 경로·fixture 선행 개발은 후속 계약으로 대체되었다. 현재는 `members`+`page`(번호 1 시작), 단일 `group`, 감사 필드/표시명 미노출, Asia/Seoul 분 단위 문자열, 실제 그룹 `/api/groups/summary`·`/api/group/{memberId}`, JWT, application/json이다. 당시 절차를 다시 구현하지 않는다. [요구 재검증](../../verification/REVIEW-002/requirements-audit.md)을 따른다.
+
 ## 0. 시작 조건과 문서 우선순위
 
 - 작업 저장소는 `C:\IdeaProjects\task_20261104`, 구현 브랜치는 master에서 만든 `feature/MEMBER-001`이다. 실제 브랜치·HEAD·작업 폴더 상태를 먼저 확인하고 보고한다. 문서가 이미 커밋되어 있다고 추정하지 않는다.

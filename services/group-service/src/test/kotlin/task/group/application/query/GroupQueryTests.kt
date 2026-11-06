@@ -39,14 +39,12 @@ class GroupQueryTests {
   }
 
   @Test
-  fun `요청 멤버만 묶고 전체 인원과 정렬은 별도로 보존한다`() {
+  fun `요청 멤버를 묶고 실제 반환 인원과 정렬을 보존한다`() {
     val rows = listOf(row("member0002"), row("member0001"))
     val result =
-      GroupSummaryQueryHandler(
-          GroupSummaryReader { GroupReadSnapshot(rows, mapOf("group00001" to 9L)) }
-        )
+      GroupSummaryQueryHandler(GroupSummaryReader { GroupReadSnapshot(rows) })
         .execute(GroupSummaryQuery(listOf("member0002", "member0001")))
-    assertEquals(9, result.single().totalMemberCount)
+    assertEquals(2, result.single().totalMemberCount)
     assertEquals(listOf("member0001", "member0002"), result.single().members.map { it.memberId })
   }
 
@@ -55,7 +53,7 @@ class GroupQueryTests {
     assertFailsWith<GroupMembershipAmbiguousException> {
       GroupSummaryQueryHandler(
           GroupSummaryReader {
-            GroupReadSnapshot(listOf(row(), row(group = "group00002")), emptyMap())
+            GroupReadSnapshot(listOf(row(), row(group = "group00002")))
           }
         )
         .execute(GroupSummaryQuery(listOf("member0001")))

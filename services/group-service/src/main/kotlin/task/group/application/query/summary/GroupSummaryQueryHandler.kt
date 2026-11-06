@@ -40,7 +40,7 @@ class GroupSummaryQueryHandler(private val reader: GroupSummaryReader) : GetGrou
           GroupSummaryView(
             id,
             members.first().groupName,
-            snapshot.counts.getValue(id),
+            members.size.toLong(),
             members.sortedBy { it.memberId },
           )
         }

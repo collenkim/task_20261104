@@ -63,7 +63,7 @@ class GroupMembershipDecoder(mapper: JsonMapper) {
           total == null ||
           !total.isIntegralNumber ||
           !total.canConvertToLong() ||
-          total.longValue() < members.size
+          total.longValue() != members.size.toLong()
       )
         fail()
       for (rawMember in members) {

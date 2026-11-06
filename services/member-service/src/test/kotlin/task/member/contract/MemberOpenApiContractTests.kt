@@ -109,8 +109,8 @@ class MemberOpenApiContractTests {
     for (name in listOf("page", "size")) {
       val schema = requireNotNull(params[name]).path("schema")
       assertEquals(2147483647, schema.path("maximum").intValue())
-      assertEquals(if (name == "page") 0 else 1, schema.path("minimum").intValue())
-      assertEquals(if (name == "page") 0 else 20, schema.path("default").intValue())
+      assertEquals(1, schema.path("minimum").intValue())
+      assertEquals(if (name == "page") 1 else 20, schema.path("default").intValue())
     }
     assertEquals(
       listOf("name,asc", "name,desc"),
@@ -151,12 +151,12 @@ class MemberOpenApiContractTests {
           errorResponses++
           // 오류 응답은 코드표의 code 하나와 ProblemDetail 예제 하나만 갖는다(POL-API-002).
           assertEquals(
-            setOf("application/problem+json"),
+            setOf("application/json"),
             response.path("content").propertyNames().toSet(),
           )
           assertEquals(
             1,
-            response.path("content").path("application/problem+json").path("examples").size(),
+            response.path("content").path("application/json").path("examples").size(),
           )
         }
         for ((media, content) in response.path("content").properties()) {
@@ -185,7 +185,7 @@ class MemberOpenApiContractTests {
       assertValid(
         path,
         status,
-        if (status == 200) "application/json" else "application/problem+json",
+        if (status == 200) "application/json" else "application/json",
         body,
       )
     }
@@ -232,7 +232,7 @@ class MemberOpenApiContractTests {
         response("/api/members?$query", "/api/members", 400).path("code").stringValue(),
       )
     }
-    for (query in listOf("page=21474837&size=100", "sort=id,asc", "size=0")) {
+    for (query in listOf("page=0", "page=21474838&size=100", "sort=id,asc", "size=0")) {
       assertEquals(
         "VALIDATION_FAILED",
         response("/api/members?$query", "/api/members", 422).path("code").stringValue(),
@@ -272,7 +272,7 @@ class MemberOpenApiContractTests {
       )) {
       val unauthorized = mvc.get(url) { header("Authorization", "") }.andReturn().response
       assertEquals(401, unauthorized.status)
-      assertValid(path, 401, "application/problem+json", unauthorized.contentAsString)
+      assertValid(path, 401, "application/json", unauthorized.contentAsString)
       val forbidden =
         mvc
           .get(url) {
@@ -281,11 +281,11 @@ class MemberOpenApiContractTests {
           .andReturn()
           .response
       assertEquals(403, forbidden.status)
-      assertValid(path, 403, "application/problem+json", forbidden.contentAsString)
+      assertValid(path, 403, "application/json", forbidden.contentAsString)
       val notAllowed = mvc.post(url).andReturn().response
       assertEquals(405, notAllowed.status)
       assertEquals("GET", notAllowed.getHeader("Allow"))
-      assertValid(path, 405, "application/problem+json", notAllowed.contentAsString)
+      assertValid(path, 405, "application/json", notAllowed.contentAsString)
     }
   }
 
@@ -334,7 +334,7 @@ class MemberOpenApiContractTests {
   private fun response(url: String, path: String, status: Int): JsonNode {
     val result = mvc.get(url).andReturn().response
     assertEquals(status, result.status, "HTTP 상태: $path")
-    val media = if (status == 200) "application/json" else "application/problem+json"
+    val media = if (status == 200) "application/json" else "application/json"
     assertEquals(media, result.contentType?.substringBefore(';'))
     if (path == "/api/member/{memberId}" && status == 200)
       assertEquals("no-store", result.getHeader("Cache-Control"))

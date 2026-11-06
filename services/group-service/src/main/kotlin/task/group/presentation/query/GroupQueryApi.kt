@@ -25,7 +25,7 @@ interface GroupQueryApi {
     operationId = "getGroupSummaries",
     summary = "멤버 ID 목록의 그룹 요약",
     description =
-      "members는 요청 멤버만, totalMemberCount는 그룹 전체 인원입니다. 중복 ID는 거부하지 않고 한 번만 조회하며 중복된 ID는 서버 로그(WARN)에 남깁니다. 누락·형식 위반은 400, 원래 입력 100개 초과는 422입니다.",
+      "요청 ID 중 매핑이 조회된 멤버만 반환하며 totalMemberCount는 각 members의 개수와 같습니다. 중복 ID는 한 번만 조회하며 서버 로그(WARN)에 남깁니다. 누락·형식 위반은 400, 원래 입력 100개 초과는 422입니다.",
   )
   @Parameter(
     name = "memberIds",

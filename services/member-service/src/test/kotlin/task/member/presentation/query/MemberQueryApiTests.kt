@@ -97,7 +97,7 @@ class MemberQueryApiTests {
       status { isOk() }
       jsonPath("$.members.length()") { value(5) }
       jsonPath("$.content") { doesNotExist() }
-      jsonPath("$.page.number") { value(0) }
+      jsonPath("$.page.number") { value(1) }
       jsonPath("$.page.size") { value(20) }
       jsonPath("$.page.totalElements") { value(5) }
       jsonPath("$.page.totalPages") { value(1) }
@@ -122,7 +122,7 @@ class MemberQueryApiTests {
         "name,desc" to listOf("j0n8k2m4p6", "q1w2e3r4t5", "k2m9x0p1q3", "dj8fy4bewk", "tu3fgxd45k"),
       )) {
       val actual =
-        (0..4).map { page ->
+        (1..5).map { page ->
           val body =
             mvc
               .get("/api/members") {
@@ -132,6 +132,7 @@ class MemberQueryApiTests {
               }
               .andExpect {
                 status { isOk() }
+                jsonPath("$.page.number") { value(page) }
                 jsonPath("$.page.totalElements") { value(5) }
                 jsonPath("$.page.totalPages") { value(5) }
               }
@@ -173,7 +174,7 @@ class MemberQueryApiTests {
     for (size in listOf("101", "2147483647", "000100")) {
       mvc
         .get("/api/members") {
-          param("page", "0000")
+          param("page", "0001")
           param("size", size)
         }
         .andExpect {
@@ -209,7 +210,8 @@ class MemberQueryApiTests {
       rejected(422, "VALIDATION_FAILED", "sort" to arrayOf(sort))
     }
     rejected(422, "VALIDATION_FAILED", "size" to arrayOf("0"))
-    rejected(422, "VALIDATION_FAILED", "page" to arrayOf("21474837"), "size" to arrayOf("100"))
+    rejected(422, "VALIDATION_FAILED", "page" to arrayOf("0"))
+    rejected(422, "VALIDATION_FAILED", "page" to arrayOf("21474838"), "size" to arrayOf("100"))
     verifyNoInteractions(members, memberships)
   }
 
@@ -333,7 +335,7 @@ class MemberQueryApiTests {
       for (path in listOf("/api/members", "/api/member/tu3fgxd45k")) {
         mvc.get(path).andExpect {
           status { isEqualTo(status) }
-          content { contentTypeCompatibleWith("application/problem+json") }
+          content { contentTypeCompatibleWith("application/json") }
           jsonPath("$.code") { value(code) }
           jsonPath("$.members") { doesNotExist() }
         }
@@ -363,7 +365,7 @@ class MemberQueryApiTests {
       .get("/api/members") { params.forEach { (name, values) -> param(name, *values) } }
       .andExpect {
         status { isEqualTo(status) }
-        content { contentTypeCompatibleWith("application/problem+json") }
+        content { contentTypeCompatibleWith("application/json") }
         jsonPath("$.code") { value(code) }
         jsonPath("$.status") { value(status) }
       }

@@ -53,15 +53,12 @@ class GroupApiProxyClient(
     project: (ObjectNode) -> ObjectNode,
   ): ResponseEntity<ObjectNode> =
     try {
-      request.accept(MediaType.APPLICATION_JSON, MediaType.APPLICATION_PROBLEM_JSON).exchange {
-        _,
-        response ->
+      request.accept(MediaType.APPLICATION_JSON).exchange { _, response ->
         val status = response.statusCode.value()
         if (status == 504) throw GroupServiceTimeoutException()
         if (status == 503) throw GroupServiceUnavailableException()
         if (status != 200 && status !in 400..499) throw GroupUpstreamFailureException()
-        val media =
-          if (status == 200) MediaType.APPLICATION_JSON else MediaType.APPLICATION_PROBLEM_JSON
+        val media = MediaType.APPLICATION_JSON
         val contentType = response.headers.contentType
         if (contentType == null || !media.isCompatibleWith(contentType))
           throw GroupResponseMediaException()

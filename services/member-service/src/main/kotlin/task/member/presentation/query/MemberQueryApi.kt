@@ -26,19 +26,19 @@ interface MemberQueryApi {
     operationId = "getMemberSummaries",
     summary = "멤버 요약 목록 조회",
     description =
-      "이름 정렬과 멤버 기준 페이지. 형식 위반(반복·공백·부호·소수·int32 초과)은 400 INVALID_PARAMETER, 형식은 맞지만 처리할 수 없는 값(size 0, page × 적용 크기 2147483647 초과, 허용하지 않는 sort)은 422 VALIDATION_FAILED. size는 범위 확인 후 최대 100 적용.",
+      "이름 정렬과 멤버 기준 페이지. 형식 위반(반복·공백·부호·소수·int32 초과)은 400 INVALID_PARAMETER, 형식은 맞지만 처리할 수 없는 값(size 0, (page - 1) × 적용 크기 2147483647 초과, 허용하지 않는 sort)은 422 VALIDATION_FAILED. size는 범위 확인 후 최대 100 적용.",
   )
   @Parameters(
     Parameter(
       name = "page",
       `in` = ParameterIn.QUERY,
-      description = "0부터 시작. ASCII 숫자만 허용(부호·공백 400)",
+      description = "1부터 시작. 0은 422. ASCII 숫자만 허용(부호·공백 400)",
       schema =
         Schema(
           type = "integer",
           format = "int32",
-          defaultValue = "0",
-          minimum = "0",
+          defaultValue = "1",
+          minimum = "1",
           maximum = "2147483647",
         ),
     ),

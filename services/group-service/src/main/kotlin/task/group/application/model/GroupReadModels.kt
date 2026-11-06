@@ -14,11 +14,8 @@ data class GroupMembershipRecord(
   val permission: GroupPermissionType,
 )
 
-/** 같은 DB 스냅샷에서 조회한 소속과 전체 인원(POL-GROUP-002). */
-data class GroupReadSnapshot(
-  val memberships: List<GroupMembershipRecord>,
-  val counts: Map<String, Long>,
-)
+/** 요청 ID에 해당하는 소속을 한 번에 읽은 결과(POL-GROUP-002). */
+data class GroupReadSnapshot(val memberships: List<GroupMembershipRecord>)
 
 /** 그룹별 묶기 결과. 실제 응답 DTO와 분리한다(POL-CQRS-004). */
 data class GroupSummaryView(

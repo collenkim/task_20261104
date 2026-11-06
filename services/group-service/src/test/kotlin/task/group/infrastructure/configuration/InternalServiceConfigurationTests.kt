@@ -30,7 +30,7 @@ class InternalServiceConfigurationTests {
       )
       .doFilter(request, response, chain)
     assertThat(response.status).isEqualTo(403)
-    assertThat(response.contentType).startsWith("application/problem+json")
+    assertThat(response.contentType).startsWith("application/json")
     val body = JsonMapper.builder().build().readTree(response.contentAsByteArray)
     assertThat(body.path("code").stringValue()).isEqualTo("FORBIDDEN")
     assertThat(body.path("type").stringValue()).isEqualTo("urn:problem-type:internal-access-denied")

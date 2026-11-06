@@ -133,7 +133,7 @@ docker compose ps
 
 | 선택한 서비스·API | 입력 예시 | 기대 결과 |
 | --- | --- | --- |
-| 멤버 `GET /api/members` | `page=0`, `size=20`, `sort=name,asc` | 200. `members`와 `page`, 각 항목에 id/name/group/permission |
+| 멤버 `GET /api/members` | `page=1`, `size=20`, `sort=name,asc` | 200. `members`와 `page`, 각 항목에 id/name/group/permission |
 | 멤버 `GET /api/member/{memberId}` | `memberId=tu3fgxd45k` | 200. 멤버 기본 정보와 단일 `group` |
 | 그룹 `GET /api/groups/summary` | `memberIds` 배열에 `tu3fgxd45k` 한 개 입력 | 200. `group` 배열, 요청 멤버 소속과 그룹 전체 인원 |
 | 그룹 `GET /api/group/{memberId}` | `memberId=tu3fgxd45k` | 200. memberId/groupId/groupName/registeredDate/pricing/permission |
@@ -148,7 +148,7 @@ docker compose ps
 curl.exe --noproxy "*" -i "http://127.0.0.1:8081/actuator/health/readiness"
 $init = curl.exe --noproxy "*" -s "http://127.0.0.1:8081/swagger-ui/swagger-initializer.js"
 $token = [regex]::Match(($init -join "`n"), '"accessToken":"([^"]+)"').Groups[1].Value
-curl.exe --noproxy "*" -i -H "Authorization: Bearer $token" "http://127.0.0.1:8081/api/members?page=0&size=20&sort=name,asc"
+curl.exe --noproxy "*" -i -H "Authorization: Bearer $token" "http://127.0.0.1:8081/api/members?page=1&size=20&sort=name,asc"
 curl.exe --noproxy "*" -i -H "Authorization: Bearer $token" "http://127.0.0.1:8081/api/member/tu3fgxd45k"
 curl.exe --noproxy "*" -i -H "Authorization: Bearer $token" "http://127.0.0.1:8081/internal-api/group/api/group/tu3fgxd45k"
 # 토큰 없이 호출하면 401 UNAUTHORIZED, GET 외 메서드는 405 METHOD_NOT_ALLOWED
@@ -189,7 +189,7 @@ clone에는 `secrets/`가 포함되지 않으므로 최초 실행 때 1단계로
 
 멤버 API는 JWT(scope `member.read`)가 필요하다. 그룹 경로는 내부 계약이다. local Swagger에서는 멤버의 `/internal-api/group` 아래 두 고정 GET 경로로 실행한다. 저장은 UTC TIMESTAMP(6), 업무 응답 시각은 한국 시간 `yyyy-MM-dd HH:mm`이다. 현재 소속은 멤버당 0~1개이며 응답의 정확한 필드는 서비스 API 정의서가 소유한다.
 
-공유 계약 파일은 [멤버 OpenAPI](services/member-service/docs/openapi.json)와 [그룹 OpenAPI](services/group-service/docs/openapi.json)이다. 소비자는 서비스 구현 대신 이 명세를 사용한다. 현재 멤버 계약은 0.4.0, 그룹 계약은 0.2.0이며 변경·검증 근거는 [REVIEW-002 검증](docs/verification/REVIEW-002/verification.md)에 있다.
+공유 계약 파일은 [멤버 OpenAPI](services/member-service/docs/openapi.json)와 [그룹 OpenAPI](services/group-service/docs/openapi.json)이다. 소비자는 서비스 구현 대신 이 명세를 사용한다. 현재 멤버 계약은 0.5.0, 그룹 계약은 0.4.0이며 변경·검증 근거는 [REVIEW-002 검증](docs/verification/REVIEW-002/verification.md)에 있다.
 
 ## 빌드와 테스트
 
@@ -200,9 +200,10 @@ clone에는 `secrets/`가 포함되지 않으므로 최초 실행 때 1단계로
 ./gradlew.bat :member-service:build --no-daemon --console=plain
 ./gradlew.bat :group-service:build --no-daemon --console=plain
 python -X utf8 -I scripts/verification/docs-check.py
+python -X utf8 -I scripts/verification/api-contract-check.py
 ```
 
-전체 build에는 포맷 검사·테스트·공유 OpenAPI 대조가 포함된다. 일반 build로 저장소의 OpenAPI를 갱신하지 않는다. 실행 검증·공급자별 검증 범위와 정책은 [테스트](docs/common/testing.md), 결과는 [검증 색인](docs/verification/README.md)을 따른다.
+전체 build에는 포맷 검사·테스트·공유 OpenAPI 대조가 포함된다. 일반 build로 저장소의 OpenAPI를 갱신하지 않는다. Python 두 명령은 문서 링크·정책과 서비스 간 공통 오류·JSON·페이지 계약을 각각 대조한다. 실행 검증·공급자별 검증 범위와 정책은 [테스트](docs/common/testing.md), 결과는 [검증 색인](docs/verification/README.md)을 따른다.
 
 루트 Compose를 기동한 상태에서 실제 HTTP·Swagger 동작을 자동 확인할 수도 있다.
 

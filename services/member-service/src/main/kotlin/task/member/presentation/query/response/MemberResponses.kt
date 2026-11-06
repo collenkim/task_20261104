@@ -17,7 +17,8 @@ data class MemberSummaryPageResponse(
 @Schema(additionalProperties = FALSE)
 data class MemberPageResponse(
   @field:Schema(requiredMode = REQUIRED, minimum = "1", maximum = "100") val size: Int,
-  @field:Schema(requiredMode = REQUIRED, minimum = "0") val number: Int,
+  @field:Schema(requiredMode = REQUIRED, minimum = "1", description = "1부터 시작하는 요청 페이지")
+  val number: Int,
   @field:Schema(requiredMode = REQUIRED, minimum = "0") val totalElements: Long,
   @field:Schema(requiredMode = REQUIRED, minimum = "0") val totalPages: Long,
 )
