@@ -1,0 +1,3273 @@
+######## group-service presentation/query/GroupQueryIntegrationTests.kt
+--- /c/Users/****/AppData/Local/Temp/claude/9395585df37056f5/c8b4102f-22af-462b-9d7e-c5a31217692b/scratchpad/old/services_group-service_src_test_kotlin_task_group_GroupQueryIntegrationTests.kt	2026-11-06 08:31:09.570834200 +0900
++++ services/group-service/src/test/kotlin/task/group/presentation/query/GroupQueryIntegrationTests.kt	2026-11-05 17:28:32.373213200 +0900
+@@ -1,243 +1,255 @@
+-package task.group
+-
+-import jakarta.persistence.EntityManagerFactory
+-import java.time.Instant
+-import java.util.concurrent.Callable
+-import java.util.concurrent.Executors
+-import kotlin.test.*
+-import org.hibernate.SessionFactory
+-import org.junit.jupiter.api.BeforeEach
+-import org.junit.jupiter.api.Test
+-import org.junit.jupiter.api.extension.ExtendWith
+-import org.mockito.Mockito.*
+-import org.springframework.beans.factory.annotation.Autowired
+-import org.springframework.boot.test.context.SpringBootTest
+-import org.springframework.boot.test.system.CapturedOutput
+-import org.springframework.boot.test.system.OutputCaptureExtension
+-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+-import org.springframework.context.annotation.Import
+-import org.springframework.dao.DataIntegrityViolationException
+-import org.springframework.jdbc.core.JdbcTemplate
+-import org.springframework.test.context.DynamicPropertyRegistry
+-import org.springframework.test.context.DynamicPropertySource
+-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+-import org.springframework.test.web.servlet.MockMvc
+-import org.springframework.test.web.servlet.get
+-import org.springframework.transaction.support.TransactionSynchronizationManager
+-import task.group.application.model.GroupMembershipRecord
+-import task.group.application.query.summary.GroupSummaryQuery
+-import task.group.application.query.summary.GroupSummaryQueryHandler
+-import task.group.domain.*
+-import task.group.infrastructure.persistence.group.JpaGroupReader
+-import task.group.support.*
+-
+-/** 실제 MariaDB·운영 HTTP 경계의 정합성을 검증한다(POL-TEST-005·006). */
+-@SpringBootTest(
+-  properties =
+-    [TestProperties.NO_LOCAL_SECRETS, "spring.jpa.properties.hibernate.generate_statistics=true"]
+-)
+-@AutoConfigureMockMvc
+-@Import(TestcontainersConfiguration::class, GroupSqlObservationConfiguration::class)
+-@ExtendWith(OutputCaptureExtension::class)
+-class GroupQueryIntegrationTests {
+-  @Autowired lateinit var mvc: MockMvc
+-  @Autowired lateinit var jdbc: JdbcTemplate
+-  @Autowired lateinit var emf: EntityManagerFactory
+-  @Autowired lateinit var handler: GroupSummaryQueryHandler
+-  @MockitoSpyBean lateinit var reader: JpaGroupReader
+-
+-  @BeforeEach
+-  fun setup() {
+-    reset(reader)
+-    jdbc.update("delete from group_membership")
+-    jdbc.update("delete from user_group")
+-    jdbc.update(
+-      "insert into user_group values ('group00001','합성 그룹','Premium','2026-08-01 00:00:00.123456','seed'),('group00002','다른 그룹','Free','2026-08-01 00:00:00.123456','seed')"
+-    )
+-    insert("member0001", "group00001")
+-    insert("member0002", "group00001")
+-  }
+-
+-  private fun insert(member: String, group: String) =
+-    jdbc.update(
+-      "insert into group_membership(group_id,member_id,permission,joined_at,created_at,created_by) values (?,?,'Editor','2026-08-15 15:30:59.123456','2026-08-15 04:00:00.654321','seed')",
+-      group,
+-      member,
+-    )
+-
+-  private fun request(path: String) =
+-    mvc.get(path) {
+-      header("X-Internal-Service-Id", "member-service")
+-      header("X-Internal-Service-Key", TestProperties.internalKey)
+-      header("X-Request-Id", "group-query-test")
+-    }
+-
+-  @Test
+-  fun `summary는 요청 소속과 전체 인원을 구분하고 실제 두 쿼리로 처리한다`() {
+-    val stats = emf.unwrap(SessionFactory::class.java).statistics
+-    stats.clear()
+-    val result = handler.execute(GroupSummaryQuery(listOf("member0001")))
+-    assertEquals(2, result.single().totalMemberCount)
+-    assertEquals(1, result.single().members.size)
+-    assertEquals(2, stats.prepareStatementCount)
+-    assertFalse(TransactionSynchronizationManager.isActualTransactionActive())
+-    stats.clear()
+-    handler.execute(GroupSummaryQuery((1..100).map { "m" + it.toString().padStart(9, '0') }))
+-    assertTrue(stats.prepareStatementCount <= 2)
+-    request("/api/groups/summary?memberIds=member0001").andExpect {
+-      status { isOk() }
+-      jsonPath("$.group[0].totalMemberCount") { value(2) }
+-      jsonPath("$.group[0].members[0].permissionName") { doesNotExist() }
+-    }
+-  }
+-
+-  @Test
+-  fun `상세는 기존 필드와 한국 시각을 반환하고 DB 마이크로초는 보존한다`() {
+-    val response =
+-      request("/api/group/member0001")
+-        .andExpect {
+-          status { isOk() }
+-          jsonPath("$.registeredDate") { value("2026-08-16 00:30") }
+-          jsonPath("$.permission") { value("Editor") }
+-          jsonPath("$.permissionName") { doesNotExist() }
+-          jsonPath("$.groups") { doesNotExist() }
+-          header { string("X-Request-Id", "group-query-test") }
+-        }
+-        .andReturn()
+-        .response
+-    val mapper = tools.jackson.databind.json.JsonMapper.builder().build()
+-    assertEquals(
+-      setOf("memberId", "groupId", "groupName", "registeredDate", "pricing", "permission"),
+-      mapper.readTree(response.contentAsByteArray).propertyNames().toSet(),
+-    )
+-    assertEquals(
+-      123456,
+-      jdbc.queryForObject(
+-        "select microsecond(joined_at) from group_membership where member_id='member0001'",
+-        Int::class.java,
+-      ),
+-    )
+-    assertEquals(
+-      "timestamp",
+-      jdbc.queryForObject(
+-        "select data_type from information_schema.columns where table_schema=database() and table_name='group_membership' and column_name='joined_at'",
+-        String::class.java,
+-      ),
+-    )
+-  }
+-
+-  @Test
+-  fun `단일 소속 제약은 다른 그룹과 동시 입력도 거부한다`() {
+-    assertFailsWith<DataIntegrityViolationException> { insert("member0001", "group00002") }
+-    val pool = Executors.newFixedThreadPool(2)
+-    try {
+-      val futures =
+-        pool.invokeAll(
+-          listOf("group00001", "group00002").map { group ->
+-            Callable { runCatching { insert("member0003", group) }.isSuccess }
+-          }
+-        )
+-      assertEquals(1, futures.count { it.get() })
+-      assertEquals(
+-        1,
+-        jdbc.queryForObject(
+-          "select count(*) from group_membership where member_id='member0003'",
+-          Int::class.java,
+-        ),
+-      )
+-    } finally {
+-      pool.shutdownNow()
+-    }
+-  }
+-
+-  @Test
+-  fun `다건 조회는 500과 전용 예외 ERROR를 남기고 식별자는 로그에 넣지 않는다`(output: CapturedOutput) {
+-    val row =
+-      GroupMembershipRecord(
+-        "privateid1",
+-        "group00001",
+-        "비공개 이름",
+-        Instant.now(),
+-        GroupPricingType.FREE,
+-        GroupPermissionType.VIEWER,
+-      )
+-    doReturn(listOf(row, row.copy(groupId = "group00002")))
+-      .`when`(reader)
+-      .findByMemberId("privateid1")
+-    request("/api/group/privateid1").andExpect {
+-      status { isInternalServerError() }
+-      jsonPath("$.code") { value("GROUP_MEMBERSHIP_AMBIGUOUS") }
+-      jsonPath("$.type") { value("about:blank") }
+-    }
+-    assertTrue(output.out.contains("event=exception.handled"))
+-    assertTrue(output.out.contains("GroupMembershipAmbiguousException"))
+-    assertTrue(output.out.contains("ERROR"))
+-    assertFalse(output.out.contains("privateid1"))
+-    assertFalse(output.out.contains(TestProperties.internalKey))
+-    assertNull(org.slf4j.MDC.get("requestId"))
+-  }
+-
+-  @Test
+-  fun `미소속 경로404 입력오류와 인증오류를 구분한다`() {
+-    request("/api/group/member9999").andExpect {
+-      status { isNotFound() }
+-      jsonPath("$.code") { value("GROUP_MEMBERSHIP_NOT_FOUND") }
+-    }
+-    request("/api/missing").andExpect {
+-      status { isNotFound() }
+-      jsonPath("$.code") { value("NOT_FOUND") }
+-    }
+-    request("/api/groups/summary?memberIds=member0001&memberIds=member0001").andExpect {
+-      status { isBadRequest() }
+-      jsonPath("$.code") { value("VALIDATION_FAILED") }
+-    }
+-    request("/api/groups/summary?memberIds=%20").andExpect { status { isBadRequest() } }
+-    mvc.get("/api/group/member0001").andExpect { status { isForbidden() } }
+-  }
+-
+-  @Test
+-  fun `두 쿼리 사이에 다른 연결이 소속을 추가해도 같은 스냅샷을 읽는다`() {
+-    val pool = Executors.newSingleThreadExecutor()
+-    var observed = false
+-    GroupSqlObservation.observer.set { sql ->
+-      assertTrue(TransactionSynchronizationManager.isActualTransactionActive())
+-      assertTrue(TransactionSynchronizationManager.isCurrentTransactionReadOnly())
+-      assertEquals(
+-        java.sql.Connection.TRANSACTION_REPEATABLE_READ,
+-        TransactionSynchronizationManager.getCurrentTransactionIsolationLevel(),
+-      )
+-      if (sql.contains("count(")) {
+-        GroupSqlObservation.observer.remove()
+-        pool.submit { insert("member0003", "group00001") }.get()
+-        observed = true
+-      }
+-    }
+-    try {
+-      val result = handler.execute(GroupSummaryQuery(listOf("member0001")))
+-      assertTrue(observed)
+-      assertEquals(2, result.single().totalMemberCount)
+-      assertEquals(3, jdbc.queryForObject("select count(*) from group_membership", Int::class.java))
+-      assertFalse(TransactionSynchronizationManager.isActualTransactionActive())
+-    } finally {
+-      GroupSqlObservation.observer.remove()
+-      pool.shutdownNow()
+-    }
+-  }
+-
+-  @Test
+-  fun `알 수 없는 저장 코드는 500이며 원문 값이 예외 로그에 나오지 않는다`(output: CapturedOutput) {
+-    jdbc.update("update user_group set pricing='invalid-sensitive' where id='group00001'")
+-    request("/api/group/member0001").andExpect {
+-      status { isInternalServerError() }
+-      jsonPath("$.code") { value("INTERNAL_ERROR") }
+-    }
+-    assertTrue(output.out.contains("event=exception.handled"))
+-    assertFalse(output.out.contains("invalid-sensitive"))
+-  }
+-
+-  companion object {
+-    @JvmStatic
+-    @DynamicPropertySource
+-    fun properties(registry: DynamicPropertyRegistry) = TestProperties.register(registry)
+-  }
+-}
++package task.group.presentation.query
++
++import jakarta.persistence.EntityManagerFactory
++import java.time.Instant
++import java.util.concurrent.Callable
++import java.util.concurrent.Executors
++import kotlin.test.*
++import org.hibernate.SessionFactory
++import org.junit.jupiter.api.BeforeEach
++import org.junit.jupiter.api.Test
++import org.junit.jupiter.api.extension.ExtendWith
++import org.mockito.Mockito.*
++import org.springframework.beans.factory.annotation.Autowired
++import org.springframework.boot.test.context.SpringBootTest
++import org.springframework.boot.test.system.CapturedOutput
++import org.springframework.boot.test.system.OutputCaptureExtension
++import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
++import org.springframework.context.annotation.Import
++import org.springframework.dao.DataIntegrityViolationException
++import org.springframework.jdbc.core.JdbcTemplate
++import org.springframework.test.context.DynamicPropertyRegistry
++import org.springframework.test.context.DynamicPropertySource
++import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
++import org.springframework.test.web.servlet.MockMvc
++import org.springframework.test.web.servlet.get
++import org.springframework.transaction.support.TransactionSynchronizationManager
++import task.group.application.model.GroupMembershipRecord
++import task.group.application.query.summary.GroupSummaryQuery
++import task.group.application.query.summary.GroupSummaryQueryHandler
++import task.group.domain.*
++import task.group.infrastructure.persistence.group.JpaGroupReader
++import task.group.support.*
++
++/** 실제 MariaDB·운영 HTTP 경계의 정합성을 검증한다(POL-TEST-005·006). */
++@SpringBootTest(
++  properties =
++    [TestProperties.NO_LOCAL_SECRETS, "spring.jpa.properties.hibernate.generate_statistics=true"]
++)
++@AutoConfigureMockMvc
++@Import(TestcontainersConfiguration::class, GroupSqlObservationConfiguration::class)
++@ExtendWith(OutputCaptureExtension::class)
++class GroupQueryIntegrationTests {
++  @Autowired lateinit var mvc: MockMvc
++  @Autowired lateinit var jdbc: JdbcTemplate
++  @Autowired lateinit var emf: EntityManagerFactory
++  @Autowired lateinit var handler: GroupSummaryQueryHandler
++  @MockitoSpyBean lateinit var reader: JpaGroupReader
++
++  @BeforeEach
++  fun setup() {
++    reset(reader)
++    jdbc.update("delete from group_membership")
++    jdbc.update("delete from user_group")
++    jdbc.update(
++      "insert into user_group values ('group00001','합성 그룹','Premium','2026-08-01 00:00:00.123456','seed'),('group00002','다른 그룹','Free','2026-08-01 00:00:00.123456','seed')"
++    )
++    insert("member0001", "group00001")
++    insert("member0002", "group00001")
++  }
++
++  private fun insert(member: String, group: String) =
++    jdbc.update(
++      "insert into group_membership(group_id,member_id,permission,joined_at,created_at,created_by) values (?,?,'Editor','2026-08-15 15:30:59.123456','2026-08-15 04:00:00.654321','seed')",
++      group,
++      member,
++    )
++
++  private fun request(path: String) =
++    mvc.get(path) {
++      header("X-Internal-Service-Id", "member-service")
++      header("X-Internal-Service-Key", TestProperties.internalKey)
++      header("X-Request-Id", "group-query-test")
++    }
++
++  @Test
++  fun `잘못된 상세 식별자는 400이고 미소속 summary는 빈 배열이다`() {
++    request("/api/group/BAD").andExpect {
++      status { isBadRequest() }
++      jsonPath("$.code") { value("VALIDATION_FAILED") }
++    }
++    request("/api/groups/summary?memberIds=missing001").andExpect {
++      status { isOk() }
++      jsonPath("$.group") { isEmpty() }
++    }
++  }
++
++  @Test
++  fun `summary는 요청 소속과 전체 인원을 구분하고 실제 두 쿼리로 처리한다`() {
++    val stats = emf.unwrap(SessionFactory::class.java).statistics
++    stats.clear()
++    val result = handler.execute(GroupSummaryQuery(listOf("member0001")))
++    assertEquals(2, result.single().totalMemberCount)
++    assertEquals(1, result.single().members.size)
++    assertEquals(2, stats.prepareStatementCount)
++    assertFalse(TransactionSynchronizationManager.isActualTransactionActive())
++    stats.clear()
++    handler.execute(GroupSummaryQuery((1..100).map { "m" + it.toString().padStart(9, '0') }))
++    assertTrue(stats.prepareStatementCount <= 2)
++    request("/api/groups/summary?memberIds=member0001").andExpect {
++      status { isOk() }
++      jsonPath("$.group[0].totalMemberCount") { value(2) }
++      jsonPath("$.group[0].members[0].permissionName") { doesNotExist() }
++    }
++  }
++
++  @Test
++  fun `상세는 기존 필드와 한국 시각을 반환하고 DB 마이크로초는 보존한다`() {
++    val response =
++      request("/api/group/member0001")
++        .andExpect {
++          status { isOk() }
++          jsonPath("$.registeredDate") { value("2026-08-16 00:30") }
++          jsonPath("$.permission") { value("Editor") }
++          jsonPath("$.permissionName") { doesNotExist() }
++          jsonPath("$.groups") { doesNotExist() }
++          header { string("X-Request-Id", "group-query-test") }
++        }
++        .andReturn()
++        .response
++    val mapper = tools.jackson.databind.json.JsonMapper.builder().build()
++    assertEquals(
++      setOf("memberId", "groupId", "groupName", "registeredDate", "pricing", "permission"),
++      mapper.readTree(response.contentAsByteArray).propertyNames().toSet(),
++    )
++    assertEquals(
++      123456,
++      jdbc.queryForObject(
++        "select microsecond(joined_at) from group_membership where member_id='member0001'",
++        Int::class.java,
++      ),
++    )
++    assertEquals(
++      "timestamp",
++      jdbc.queryForObject(
++        "select data_type from information_schema.columns where table_schema=database() and table_name='group_membership' and column_name='joined_at'",
++        String::class.java,
++      ),
++    )
++  }
++
++  @Test
++  fun `단일 소속 제약은 다른 그룹과 동시 입력도 거부한다`() {
++    assertFailsWith<DataIntegrityViolationException> { insert("member0001", "group00002") }
++    val pool = Executors.newFixedThreadPool(2)
++    try {
++      val futures =
++        pool.invokeAll(
++          listOf("group00001", "group00002").map { group ->
++            Callable { runCatching { insert("member0003", group) }.isSuccess }
++          }
++        )
++      assertEquals(1, futures.count { it.get() })
++      assertEquals(
++        1,
++        jdbc.queryForObject(
++          "select count(*) from group_membership where member_id='member0003'",
++          Int::class.java,
++        ),
++      )
++    } finally {
++      pool.shutdownNow()
++    }
++  }
++
++  @Test
++  fun `다건 조회는 500과 전용 예외 ERROR를 남기고 식별자는 로그에 넣지 않는다`(output: CapturedOutput) {
++    val row =
++      GroupMembershipRecord(
++        "privateid1",
++        "group00001",
++        "비공개 이름",
++        Instant.now(),
++        GroupPricingType.FREE,
++        GroupPermissionType.VIEWER,
++      )
++    doReturn(listOf(row, row.copy(groupId = "group00002")))
++      .`when`(reader)
++      .findByMemberId("privateid1")
++    request("/api/group/privateid1").andExpect {
++      status { isInternalServerError() }
++      jsonPath("$.code") { value("GROUP_MEMBERSHIP_AMBIGUOUS") }
++      jsonPath("$.type") { value("about:blank") }
++    }
++    assertTrue(output.out.contains("event=exception.handled"))
++    assertTrue(output.out.contains("GroupMembershipAmbiguousException"))
++    assertTrue(output.out.contains("ERROR"))
++    assertFalse(output.out.contains("privateid1"))
++    assertFalse(output.out.contains(TestProperties.internalKey))
++    assertNull(org.slf4j.MDC.get("requestId"))
++  }
++
++  @Test
++  fun `미소속 경로404 입력오류와 인증오류를 구분한다`() {
++    request("/api/group/member9999").andExpect {
++      status { isNotFound() }
++      jsonPath("$.code") { value("GROUP_MEMBERSHIP_NOT_FOUND") }
++    }
++    request("/api/missing").andExpect {
++      status { isNotFound() }
++      jsonPath("$.code") { value("NOT_FOUND") }
++    }
++    request("/api/groups/summary?memberIds=member0001&memberIds=member0001").andExpect {
++      status { isBadRequest() }
++      jsonPath("$.code") { value("VALIDATION_FAILED") }
++    }
++    request("/api/groups/summary?memberIds=%20").andExpect { status { isBadRequest() } }
++    mvc.get("/api/group/member0001").andExpect { status { isForbidden() } }
++  }
++
++  @Test
++  fun `두 쿼리 사이에 다른 연결이 소속을 추가해도 같은 스냅샷을 읽는다`() {
++    val pool = Executors.newSingleThreadExecutor()
++    var observed = false
++    GroupSqlObservation.observer.set { sql ->
++      assertTrue(TransactionSynchronizationManager.isActualTransactionActive())
++      assertTrue(TransactionSynchronizationManager.isCurrentTransactionReadOnly())
++      assertEquals(
++        java.sql.Connection.TRANSACTION_REPEATABLE_READ,
++        TransactionSynchronizationManager.getCurrentTransactionIsolationLevel(),
++      )
++      if (sql.contains("count(")) {
++        GroupSqlObservation.observer.remove()
++        pool.submit { insert("member0003", "group00001") }.get()
++        observed = true
++      }
++    }
++    try {
++      val result = handler.execute(GroupSummaryQuery(listOf("member0001")))
++      assertTrue(observed)
++      assertEquals(2, result.single().totalMemberCount)
++      assertEquals(3, jdbc.queryForObject("select count(*) from group_membership", Int::class.java))
++      assertFalse(TransactionSynchronizationManager.isActualTransactionActive())
++    } finally {
++      GroupSqlObservation.observer.remove()
++      pool.shutdownNow()
++    }
++  }
++
++  @Test
++  fun `알 수 없는 저장 코드는 500이며 원문 값이 예외 로그에 나오지 않는다`(output: CapturedOutput) {
++    jdbc.update("update user_group set pricing='invalid-sensitive' where id='group00001'")
++    request("/api/group/member0001").andExpect {
++      status { isInternalServerError() }
++      jsonPath("$.code") { value("INTERNAL_ERROR") }
++    }
++    assertTrue(output.out.contains("event=exception.handled"))
++    assertFalse(output.out.contains("invalid-sensitive"))
++  }
++
++  companion object {
++    @JvmStatic
++    @DynamicPropertySource
++    fun properties(registry: DynamicPropertyRegistry) = TestProperties.register(registry)
++  }
++}
+######## member-service architecture/MemberArchitectureTests.kt
+--- /c/Users/****/AppData/Local/Temp/claude/9395585df37056f5/c8b4102f-22af-462b-9d7e-c5a31217692b/scratchpad/old/services_member-service_src_test_kotlin_task_member_MemberArchitectureTests.kt	2026-11-06 08:31:12.144056200 +0900
++++ services/member-service/src/test/kotlin/task/member/architecture/MemberArchitectureTests.kt	2026-11-05 17:28:44.298577100 +0900
+@@ -1,79 +1,103 @@
+-package task.member
+-
+-import com.tngtech.archunit.core.importer.ClassFileImporter
+-import com.tngtech.archunit.core.importer.ImportOption
+-import com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
+-import kotlin.test.assertTrue
+-import org.junit.jupiter.api.Test
+-import task.member.application.architecturefixture.ForbiddenReferences
+-
+-/** 바이트코드의 필드·인자·반환·실행 의존성을 검사한다(POL-TEST-005). */
+-class MemberArchitectureTests {
+-  private val classes =
+-    ClassFileImporter()
+-      .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
+-      .importPackages("task.member")
+-  private val applicationRule =
+-    noClasses()
+-      .that()
+-      .resideInAPackage("task.member.application..")
+-      .should()
+-      .dependOnClassesThat()
+-      .resideInAnyPackage(
+-        "task.member.infrastructure..",
+-        "task.member.presentation..",
+-        "jakarta.persistence..",
+-        "org.springframework.data..",
+-        "org.springframework.web..",
+-        "org.springframework.http..",
+-        "jakarta.servlet..",
+-        "java.net..",
+-        "tools.jackson..",
+-        "com.fasterxml.jackson..",
+-        "io.swagger..",
+-        "org.springframework.transaction..",
+-      )
+-
+-  @Test
+-  fun `application과 포트는 기술 계층과 전송 타입 트랜잭션에 의존하지 않는다`() {
+-    applicationRule.check(classes)
+-  }
+-
+-  @Test
+-  fun `presentation은 저장소 외부 DTO 출력 포트와 구체 핸들러를 참조하지 않는다`() {
+-    noClasses()
+-      .that()
+-      .resideInAPackage("task.member.presentation..")
+-      .should()
+-      .dependOnClassesThat()
+-      .resideInAnyPackage(
+-        "task.member.infrastructure..",
+-        "jakarta.persistence..",
+-        "org.springframework.data..",
+-        "task.member.application.port.output..",
+-      )
+-      .check(classes)
+-    noClasses()
+-      .that()
+-      .resideInAPackage("task.member.presentation..")
+-      .should()
+-      .dependOnClassesThat()
+-      .haveSimpleNameEndingWith("QueryHandler")
+-      .check(classes)
+-  }
+-
+-  @Test
+-  fun `서비스 간 코드와 다른 서비스 엔티티를 참조하지 않는다`() {
+-    noClasses().should().dependOnClassesThat().resideInAPackage("task.group..").check(classes)
+-  }
+-
+-  @Test
+-  fun `계층 검사는 의도적으로 만든 엔티티와 응답 DTO 참조를 실제로 검출한다`() {
+-    val failure =
+-      applicationRule.evaluate(ClassFileImporter().importClasses(ForbiddenReferences::class.java))
+-    assertTrue(failure.hasViolation())
+-    val report = failure.failureReport.toString()
+-    assertTrue(report.contains("MemberEntity"))
+-    assertTrue(report.contains("MemberDetailResponse"))
+-  }
+-}
++package task.member.architecture
++
++import com.tngtech.archunit.core.importer.ClassFileImporter
++import com.tngtech.archunit.core.importer.ImportOption
++import com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes
++import com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
++import kotlin.test.assertTrue
++import org.junit.jupiter.api.Test
++import org.springframework.web.bind.annotation.RestController
++import task.member.application.architecturefixture.ForbiddenReferences
++
++/** 바이트코드의 필드·인자·반환·실행 의존성을 검사한다(POL-TEST-005). */
++class MemberArchitectureTests {
++  private val classes =
++    ClassFileImporter()
++      .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
++      .importPackages("task.member")
++  private val applicationRule =
++    noClasses()
++      .that()
++      .resideInAPackage("task.member.application..")
++      .should()
++      .dependOnClassesThat()
++      .resideInAnyPackage(
++        "task.member.infrastructure..",
++        "task.member.presentation..",
++        "jakarta.persistence..",
++        "org.springframework.data..",
++        "org.springframework.web..",
++        "org.springframework.http..",
++        "jakarta.servlet..",
++        "java.net..",
++        "tools.jackson..",
++        "com.fasterxml.jackson..",
++        "io.swagger..",
++        "org.springframework.transaction..",
++      )
++
++  @Test
++  fun `기술 중계 컨트롤러는 명시한 HTTP 경계에 있고 저장소와 업무 핸들러에 의존하지 않는다`() {
++    classes()
++      .that()
++      .areAnnotatedWith(RestController::class.java)
++      .should()
++      .resideInAnyPackage("task.member.presentation..", "task.member.infrastructure.web..")
++      .check(classes)
++    noClasses()
++      .that()
++      .resideInAPackage("task.member.infrastructure.web..")
++      .should()
++      .dependOnClassesThat()
++      .resideInAnyPackage(
++        "task.member.infrastructure.persistence..",
++        "task.member.application.port.output..",
++        "task.member.application.query..",
++        "jakarta.persistence..",
++      )
++      .check(classes)
++  }
++
++  @Test
++  fun `application과 포트는 기술 계층과 전송 타입 트랜잭션에 의존하지 않는다`() {
++    applicationRule.check(classes)
++  }
++
++  @Test
++  fun `presentation은 저장소 외부 DTO 출력 포트와 구체 핸들러를 참조하지 않는다`() {
++    noClasses()
++      .that()
++      .resideInAPackage("task.member.presentation..")
++      .should()
++      .dependOnClassesThat()
++      .resideInAnyPackage(
++        "task.member.infrastructure..",
++        "jakarta.persistence..",
++        "org.springframework.data..",
++        "task.member.application.port.output..",
++      )
++      .check(classes)
++    noClasses()
++      .that()
++      .resideInAPackage("task.member.presentation..")
++      .should()
++      .dependOnClassesThat()
++      .haveSimpleNameEndingWith("QueryHandler")
++      .check(classes)
++  }
++
++  @Test
++  fun `서비스 간 코드와 다른 서비스 엔티티를 참조하지 않는다`() {
++    noClasses().should().dependOnClassesThat().resideInAPackage("task.group..").check(classes)
++  }
++
++  @Test
++  fun `계층 검사는 의도적으로 만든 엔티티와 응답 DTO 참조를 실제로 검출한다`() {
++    val failure =
++      applicationRule.evaluate(ClassFileImporter().importClasses(ForbiddenReferences::class.java))
++    assertTrue(failure.hasViolation())
++    val report = failure.failureReport.toString()
++    assertTrue(report.contains("MemberEntity"))
++    assertTrue(report.contains("MemberDetailResponse"))
++  }
++}
+######## member-service contract/MemberOpenApiContractTests.kt
+--- /c/Users/****/AppData/Local/Temp/claude/9395585df37056f5/c8b4102f-22af-462b-9d7e-c5a31217692b/scratchpad/old/services_member-service_src_test_kotlin_task_member_contract_MemberOpenApiContractTests.kt	2026-11-06 08:31:13.220784700 +0900
++++ services/member-service/src/test/kotlin/task/member/contract/MemberOpenApiContractTests.kt	2026-11-05 17:25:51.389271800 +0900
+@@ -1,310 +1,311 @@
+-package task.member.contract
+-
+-import java.nio.file.Files
+-import java.nio.file.Path
+-import kotlin.test.assertContentEquals
+-import kotlin.test.assertEquals
+-import kotlin.test.assertFalse
+-import kotlin.test.assertTrue
+-import org.junit.jupiter.api.BeforeEach
+-import org.junit.jupiter.api.Test
+-import org.mockito.Mockito.doThrow
+-import org.mockito.Mockito.reset
+-import org.springframework.beans.factory.annotation.Autowired
+-import org.springframework.boot.autoconfigure.AutoConfigurationPackage
+-import org.springframework.boot.autoconfigure.EnableAutoConfiguration
+-import org.springframework.boot.test.context.SpringBootTest
+-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+-import org.springframework.context.annotation.ComponentScan
+-import org.springframework.context.annotation.Configuration
+-import org.springframework.context.annotation.Import
+-import org.springframework.context.annotation.Profile
+-import org.springframework.test.context.ActiveProfiles
+-import org.springframework.test.context.DynamicPropertyRegistry
+-import org.springframework.test.context.DynamicPropertySource
+-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+-import org.springframework.test.web.servlet.MockMvc
+-import org.springframework.test.web.servlet.get
+-import task.member.application.exception.GroupServiceConfigurationException
+-import task.member.application.exception.GroupServiceUnavailableException
+-import task.member.application.port.output.GroupMembershipReader
+-import task.member.support.TestProperties
+-import task.member.support.TestcontainersConfiguration
+-import tools.jackson.databind.JsonNode
+-import tools.jackson.databind.json.JsonMapper
+-import tools.jackson.databind.node.ObjectNode
+-
+-/** 운영 계층만 스캔하여 테스트 Probe가 공유 계약에 들어가지 않게 한다(POL-TEST-007). */
+-@Configuration(proxyBeanMethods = false)
+-@Profile("openapi-contract")
+-@EnableAutoConfiguration
+-@AutoConfigurationPackage(basePackages = ["task.member"])
+-@ComponentScan("task.member.application", "task.member.infrastructure", "task.member.presentation")
+-class MemberContractApplication
+-
+-/** 실제 운영 Controller·MariaDB·local fixture의 계약을 별도 Gradle 작업으로 검증한다. */
+-@SpringBootTest(
+-  classes = [MemberContractApplication::class],
+-  properties = [TestProperties.NO_LOCAL_SECRETS],
+-)
+-@AutoConfigureMockMvc
+-@ActiveProfiles("local", "openapi-contract")
+-@Import(TestcontainersConfiguration::class)
+-class MemberOpenApiContractTests {
+-  @Autowired lateinit var mvc: MockMvc
+-  @Autowired lateinit var mapper: JsonMapper
+-  @MockitoSpyBean lateinit var memberships: GroupMembershipReader
+-
+-  private val spec: JsonNode by lazy {
+-    mapper.readTree(
+-      mvc
+-        .get("/v3/api-docs")
+-        .andExpect { status { isOk() } }
+-        .andReturn()
+-        .response
+-        .contentAsByteArray
+-    )
+-  }
+-  private val contract: OpenApiContract by lazy { OpenApiContract(spec, mapper) }
+-
+-  @BeforeEach
+-  fun restore() {
+-    reset(memberships)
+-  }
+-
+-  @Test
+-  fun `정규화한 운영 명세를 결정적인 UTF8 LF 전체본으로 생성한다`() {
+-    assertEquals(
+-      setOf("/api/members", "/api/member/{id}"),
+-      spec.path("paths").propertyNames().toSet(),
+-    )
+-    val before = spec.toString()
+-    val bytes = contract.canonicalBytes()
+-    assertContentEquals(bytes, contract.canonicalBytes())
+-    assertEquals(before, spec.toString())
+-    assertFalse(bytes.contains(13.toByte()))
+-    val output = Path.of(requireNotNull(System.getProperty("task.openapi.output")))
+-    Files.createDirectories(output.parent)
+-    Files.write(output, bytes)
+-  }
+-
+-  @Test
+-  fun `공식 명세 형식과 요청 범위 필수 null 코드 의미를 검증한다`() {
+-    contract.validateDocument()
+-    assertTrue(spec.path("openapi").stringValue().startsWith("3.1."))
+-    val operations = spec.path("paths").toList().map { it.path("get") }
+-    assertEquals(
+-      setOf("getMemberSummaries", "getMemberDetail"),
+-      operations.map { it.path("operationId").stringValue() }.toSet(),
+-    )
+-    assertEquals(2, operations.map { it.path("operationId").stringValue() }.distinct().size)
+-    val params =
+-      spec.path("paths").path("/api/members").path("get").path("parameters").associateBy {
+-        it.path("name").stringValue()
+-      }
+-    assertEquals(setOf("page", "size", "sort"), params.keys)
+-    for (name in listOf("page", "size")) {
+-      val schema = requireNotNull(params[name]).path("schema")
+-      assertEquals(2147483647, schema.path("maximum").intValue())
+-      assertEquals(if (name == "page") 0 else 1, schema.path("minimum").intValue())
+-      assertEquals(if (name == "page") 0 else 20, schema.path("default").intValue())
+-    }
+-    assertEquals(
+-      listOf("name,asc", "name,desc"),
+-      requireNotNull(params["sort"]).path("schema").path("enum").toList().map { it.stringValue() },
+-    )
+-    val schemas = spec.path("components").path("schemas")
+-    assertEquals(
+-      setOf("id", "name", "email", "address", "registeredDate", "createdAt", "createdBy", "groups"),
+-      schemas
+-        .path("MemberDetailResponse")
+-        .path("required")
+-        .toList()
+-        .map { it.stringValue() }
+-        .toSet(),
+-    )
+-    for (name in listOf("GroupMembershipSummaryResponse", "GroupMembershipDetailResponse")) {
+-      assertFalse(schemas.path(name).path("properties").path("permission").has("enum"))
+-    }
+-    for (name in listOf("joinedAt", "pricing")) {
+-      assertTrue(
+-        schemas
+-          .path("GroupMembershipDetailResponse")
+-          .path("required")
+-          .toList()
+-          .map { it.stringValue() }
+-          .contains(name)
+-      )
+-    }
+-  }
+-
+-  @Test
+-  fun `OpenAPI 오류 예제와 서비스 문서 JSON 예제를 같은 응답 계약으로 검사한다`() {
+-    var examples = 0
+-    for ((path, pathItem) in spec.path("paths").properties()) {
+-      for ((status, response) in pathItem.path("get").path("responses").properties()) {
+-        for ((media, content) in response.path("content").properties()) {
+-          if (content.has("example")) {
+-            assertValid(path, status.toInt(), media, content.path("example").toString())
+-            examples++
+-          }
+-          for (example in content.path("examples")) {
+-            assertValid(path, status.toInt(), media, example.path("value").toString())
+-            examples++
+-          }
+-        }
+-      }
+-    }
+-    assertEquals(7, examples)
+-    val doc = Files.readString(Path.of(requireNotNull(System.getProperty("task.openapi.document"))))
+-    val blocks = Regex("```json\\s*\\n(.*?)```", RegexOption.DOT_MATCHES_ALL).findAll(doc).toList()
+-    assertEquals(3, blocks.size)
+-    for (block in blocks) {
+-      val body = block.groupValues[1]
+-      val node = mapper.readTree(body)
+-      val status = if (node.has("code")) node.path("status").intValue() else 200
+-      val path = if (node.has("email")) "/api/member/{id}" else "/api/members"
+-      assertValid(
+-        path,
+-        status,
+-        if (status == 200) "application/json" else "application/problem+json",
+-        body,
+-      )
+-    }
+-  }
+-
+-  @Test
+-  fun `실제 목록 페이지 정렬 빈 페이지와 다중 소속이 계약에 맞는다`() {
+-    for (query in listOf("", "?size=1&page=1", "?sort=name,desc&size=1", "?page=10", "?size=101")) {
+-      val body = response("/api/members$query", "/api/members", 200)
+-      if (query.isEmpty()) {
+-        assertEquals(5, body.path("members").size())
+-        assertEquals("tu3fgxd45k", body.path("members").path(0).path("id").stringValue())
+-        assertEquals(1, body.path("members").path(0).path("groups").size())
+-        assertEquals(0, body.path("members").path(2).path("groups").size())
+-      }
+-      if (query == "?sort=name,desc&size=1")
+-        assertEquals("j0n8k2m4p6", body.path("members").path(0).path("id").stringValue())
+-      if (query == "?page=10") assertEquals(0, body.path("members").size())
+-      if (query == "?size=101") assertEquals(100, body.path("page").path("size").intValue())
+-    }
+-  }
+-
+-  @Test
+-  fun `실제 상세는 한국 시간 분 단위와 null 소속 정보를 계약대로 반환한다`() {
+-    val detail = response("/api/member/tu3fgxd45k", "/api/member/{id}", 200)
+-    assertEquals("2026-08-15 13:00", detail.path("registeredDate").stringValue())
+-    assertEquals(1, detail.path("groups").size())
+-    assertTrue(detail.path("groups").path(0).has("joinedAt"))
+-    assertTrue(detail.path("groups").path(0).path("joinedAt").isString)
+-    assertEquals(
+-      0,
+-      response("/api/member/k2m9x0p1q3", "/api/member/{id}", 200).path("groups").size(),
+-    )
+-  }
+-
+-  @Test
+-  fun `실제 400 404 500 503 응답의 상태 코드와 스키마를 검증한다`() {
+-    for (query in
+-      listOf(
+-        "page=",
+-        "size=%20",
+-        "page=-1",
+-        "size=2147483648",
+-        "page=1&page=1",
+-        "page=21474837&size=100",
+-        "sort=id,asc",
+-      )) {
+-      assertEquals(
+-        "VALIDATION_FAILED",
+-        response("/api/members?$query", "/api/members", 400).path("code").stringValue(),
+-      )
+-    }
+-    assertEquals(
+-      "VALIDATION_FAILED",
+-      response("/api/member/BAD", "/api/member/{id}", 400).path("code").stringValue(),
+-    )
+-    assertEquals(
+-      "NOT_FOUND",
+-      response("/api/member/missing001", "/api/member/{id}", 404).path("code").stringValue(),
+-    )
+-    for ((status, error, code) in
+-      listOf(
+-        Triple(500, GroupServiceConfigurationException(), "INTERNAL_ERROR"),
+-        Triple(503, GroupServiceUnavailableException(), "GROUP_SERVICE_UNAVAILABLE"),
+-      )) {
+-      doThrow(error).`when`(memberships).findByMemberIds(org.mockito.ArgumentMatchers.anyList())
+-      doThrow(error).`when`(memberships).findByMemberId(org.mockito.ArgumentMatchers.anyString())
+-      for ((url, path) in
+-        listOf("/api/members" to "/api/members", "/api/member/tu3fgxd45k" to "/api/member/{id}")) {
+-        assertEquals(code, response(url, path, status).path("code").stringValue())
+-      }
+-      reset(memberships)
+-    }
+-  }
+-
+-  @Test
+-  fun `검사기는 필수 누락 타입 null 시각 이메일 위반을 검출하고 확장 문자열을 허용한다`() {
+-    val valid = response("/api/member/tu3fgxd45k", "/api/member/{id}", 200)
+-    val changes: List<(ObjectNode) -> Unit> =
+-      listOf(
+-        { it.remove("id") },
+-        { it.put("name", 123) },
+-        { it.putNull("name") },
+-        { it.put("registeredDate", "not-a-date") },
+-        { it.put("email", "invalid-email") },
+-        { (it.path("groups").path(0) as ObjectNode).remove("joinedAt") },
+-      )
+-    for (change in changes) {
+-      val broken = valid.deepCopy() as ObjectNode
+-      change(broken)
+-      assertTrue(
+-        contract.errors("/api/member/{id}", 200, "application/json", broken.toString()).isNotEmpty()
+-      )
+-    }
+-    val extended = valid.deepCopy() as ObjectNode
+-    (extended.path("groups").path(0) as ObjectNode).put("permission", "FuturePermission")
+-    extended.put("futureField", "extension")
+-    assertValid("/api/member/{id}", 200, "application/json", extended.toString())
+-  }
+-
+-  @Test
+-  fun `정규화는 객체 키만 정렬하고 배열 순서와 계약 설명을 보존한다`() {
+-    val source =
+-      mapper.readTree(
+-        """{"z":["b","a"],"description":"계약 설명","servers":[{"url":"http://127.0.0.1:9999","description":"서버 설명"}],"a":{"y":2,"x":1}}"""
+-      )
+-    val normalized = mapper.readTree(contract.canonicalBytes(source))
+-    assertEquals(listOf("a", "description", "servers", "z"), normalized.propertyNames().toList())
+-    assertEquals(listOf("b", "a"), normalized.path("z").toList().map { it.stringValue() })
+-    assertEquals("계약 설명", normalized.path("description").stringValue())
+-    assertEquals("서버 설명", normalized.path("servers").path(0).path("description").stringValue())
+-    assertEquals("/", normalized.path("servers").path(0).path("url").stringValue())
+-  }
+-
+-  private fun response(url: String, path: String, status: Int): JsonNode {
+-    val result = mvc.get(url).andReturn().response
+-    assertEquals(status, result.status, "HTTP 상태: $path")
+-    val media = if (status == 200) "application/json" else "application/problem+json"
+-    assertEquals(media, result.contentType?.substringBefore(';'))
+-    if (path == "/api/member/{id}" && status == 200)
+-      assertEquals("no-store", result.getHeader("Cache-Control"))
+-    assertValid(path, status, media, result.contentAsString)
+-    return mapper.readTree(result.contentAsByteArray)
+-  }
+-
+-  private fun assertValid(path: String, status: Int, media: String, body: String) {
+-    assertEquals(emptyList(), contract.errors(path, status, media, body), "응답 스키마: $path $status")
+-  }
+-
+-  companion object {
+-    @JvmStatic
+-    @DynamicPropertySource
+-    fun properties(registry: DynamicPropertyRegistry) {
+-      TestProperties.register(registry)
+-      registry.add("spring.flyway.locations") {
+-        "classpath:db/migration/mariadb,classpath:db/test-migration,classpath:db/seed/local"
+-      }
+-    }
+-  }
+-}
++package task.member.contract
++
++import java.nio.file.Files
++import java.nio.file.Path
++import kotlin.test.assertContentEquals
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++import org.junit.jupiter.api.BeforeEach
++import org.junit.jupiter.api.Test
++import org.mockito.Mockito.doThrow
++import org.mockito.Mockito.reset
++import org.springframework.beans.factory.annotation.Autowired
++import org.springframework.boot.autoconfigure.AutoConfigurationPackage
++import org.springframework.boot.autoconfigure.EnableAutoConfiguration
++import org.springframework.boot.test.context.SpringBootTest
++import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
++import org.springframework.context.annotation.ComponentScan
++import org.springframework.context.annotation.Configuration
++import org.springframework.context.annotation.Import
++import org.springframework.context.annotation.Profile
++import org.springframework.test.context.ActiveProfiles
++import org.springframework.test.context.DynamicPropertyRegistry
++import org.springframework.test.context.DynamicPropertySource
++import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
++import org.springframework.test.web.servlet.MockMvc
++import org.springframework.test.web.servlet.get
++import task.member.application.exception.GroupServiceConfigurationException
++import task.member.application.exception.GroupServiceUnavailableException
++import task.member.application.port.output.GroupMembershipReader
++import task.member.support.TestProperties
++import task.member.support.TestcontainersConfiguration
++import tools.jackson.databind.JsonNode
++import tools.jackson.databind.json.JsonMapper
++import tools.jackson.databind.node.ObjectNode
++
++/** 운영 계층만 스캔하여 테스트 Probe가 공유 계약에 들어가지 않게 한다(POL-TEST-007). */
++@Configuration(proxyBeanMethods = false)
++@Profile("openapi-contract")
++@EnableAutoConfiguration
++@AutoConfigurationPackage(basePackages = ["task.member"])
++@ComponentScan("task.member.application", "task.member.infrastructure", "task.member.presentation")
++class MemberContractApplication
++
++/** 실제 운영 Controller·MariaDB·local fixture의 계약을 별도 Gradle 작업으로 검증한다. */
++@SpringBootTest(
++  classes = [MemberContractApplication::class],
++  properties = [TestProperties.NO_LOCAL_SECRETS],
++)
++@AutoConfigureMockMvc
++@ActiveProfiles("local", "openapi-contract")
++@Import(TestcontainersConfiguration::class)
++class MemberOpenApiContractTests {
++  @Autowired lateinit var mvc: MockMvc
++  @Autowired lateinit var mapper: JsonMapper
++  @MockitoSpyBean lateinit var memberships: GroupMembershipReader
++
++  private val spec: JsonNode by lazy {
++    mapper.readTree(
++      mvc
++        .get("/v3/api-docs")
++        .andExpect { status { isOk() } }
++        .andReturn()
++        .response
++        .contentAsByteArray
++    )
++  }
++  private val contract: OpenApiContract by lazy { OpenApiContract(spec, mapper) }
++
++  @BeforeEach
++  fun restore() {
++    reset(memberships)
++  }
++
++  @Test
++  fun `정규화한 운영 명세를 결정적인 UTF8 LF 전체본으로 생성한다`() {
++    assertEquals(
++      setOf("/api/members", "/api/member/{id}"),
++      spec.path("paths").propertyNames().toSet(),
++    )
++    val before = spec.toString()
++    val bytes = contract.canonicalBytes()
++    assertContentEquals(bytes, contract.canonicalBytes())
++    assertEquals(before, spec.toString())
++    assertFalse(bytes.contains(13.toByte()))
++    val output = Path.of(requireNotNull(System.getProperty("task.openapi.output")))
++    Files.createDirectories(output.parent)
++    Files.write(output, bytes)
++  }
++
++  @Test
++  fun `공식 명세 형식과 요청 범위 필수 null 코드 의미를 검증한다`() {
++    contract.validateDocument()
++    assertTrue(spec.path("openapi").stringValue().startsWith("3.1."))
++    val operations = spec.path("paths").toList().map { it.path("get") }
++    assertEquals(
++      setOf("getMemberSummaries", "getMemberDetail"),
++      operations.map { it.path("operationId").stringValue() }.toSet(),
++    )
++    assertEquals(2, operations.map { it.path("operationId").stringValue() }.distinct().size)
++    val params =
++      spec.path("paths").path("/api/members").path("get").path("parameters").associateBy {
++        it.path("name").stringValue()
++      }
++    assertEquals(setOf("page", "size", "sort"), params.keys)
++    for (name in listOf("page", "size")) {
++      val schema = requireNotNull(params[name]).path("schema")
++      assertEquals(2147483647, schema.path("maximum").intValue())
++      assertEquals(if (name == "page") 0 else 1, schema.path("minimum").intValue())
++      assertEquals(if (name == "page") 0 else 20, schema.path("default").intValue())
++    }
++    assertEquals(
++      listOf("name,asc", "name,desc"),
++      requireNotNull(params["sort"]).path("schema").path("enum").toList().map { it.stringValue() },
++    )
++    val schemas = spec.path("components").path("schemas")
++    assertEquals(
++      setOf("id", "name", "email", "address", "registeredDate", "group"),
++      schemas
++        .path("MemberDetailResponse")
++        .path("required")
++        .toList()
++        .map { it.stringValue() }
++        .toSet(),
++    )
++    for (name in listOf("MemberSummaryResponse", "GroupMembershipDetailResponse")) {
++      assertFalse(schemas.path(name).path("properties").path("permission").has("enum"))
++    }
++    for (name in listOf("registeredDate", "pricing")) {
++      assertTrue(
++        schemas
++          .path("GroupMembershipDetailResponse")
++          .path("required")
++          .toList()
++          .map { it.stringValue() }
++          .contains(name)
++      )
++    }
++  }
++
++  @Test
++  fun `OpenAPI 오류 예제와 서비스 문서 JSON 예제를 같은 응답 계약으로 검사한다`() {
++    var examples = 0
++    for ((path, pathItem) in spec.path("paths").properties()) {
++      for ((status, response) in pathItem.path("get").path("responses").properties()) {
++        for ((media, content) in response.path("content").properties()) {
++          if (content.has("example")) {
++            assertValid(path, status.toInt(), media, content.path("example").toString())
++            examples++
++          }
++          for (example in content.path("examples")) {
++            assertValid(path, status.toInt(), media, example.path("value").toString())
++            examples++
++          }
++        }
++      }
++    }
++    assertEquals(7, examples)
++    val doc = Files.readString(Path.of(requireNotNull(System.getProperty("task.openapi.document"))))
++    val blocks = Regex("```json\\s*\\n(.*?)```", RegexOption.DOT_MATCHES_ALL).findAll(doc).toList()
++    assertEquals(3, blocks.size)
++    for (block in blocks) {
++      val body = block.groupValues[1]
++      val node = mapper.readTree(body)
++      val status = if (node.has("code")) node.path("status").intValue() else 200
++      val path = if (node.has("email")) "/api/member/{id}" else "/api/members"
++      assertValid(
++        path,
++        status,
++        if (status == 200) "application/json" else "application/problem+json",
++        body,
++      )
++    }
++  }
++
++  @Test
++  fun `실제 목록 페이지 정렬 빈 페이지와 단일 소속이 계약에 맞는다`() {
++    for (query in listOf("", "?size=1&page=1", "?sort=name,desc&size=1", "?page=10", "?size=101")) {
++      val body = response("/api/members$query", "/api/members", 200)
++      if (query.isEmpty()) {
++        assertEquals(5, body.path("members").size())
++        assertEquals("tu3fgxd45k", body.path("members").path(0).path("id").stringValue())
++        assertEquals("Test1", body.path("members").path(0).path("group").stringValue())
++        assertTrue(body.path("members").path(2).path("group").isNull)
++      }
++      if (query == "?sort=name,desc&size=1")
++        assertEquals("j0n8k2m4p6", body.path("members").path(0).path("id").stringValue())
++      if (query == "?page=10") assertEquals(0, body.path("members").size())
++      if (query == "?size=101") assertEquals(100, body.path("page").path("size").intValue())
++    }
++  }
++
++  @Test
++  fun `실제 상세는 한국 시간 분 단위와 null 소속 정보를 계약대로 반환한다`() {
++    val detail = response("/api/member/tu3fgxd45k", "/api/member/{id}", 200)
++    assertEquals("2026-08-15 13:00", detail.path("registeredDate").stringValue())
++    assertEquals(
++      setOf("id", "name", "registeredDate", "permission", "pricing"),
++      detail.path("group").propertyNames().toSet(),
++    )
++    assertTrue(detail.path("group").has("registeredDate"))
++    assertTrue(detail.path("group").path("registeredDate").isString)
++    assertTrue(response("/api/member/k2m9x0p1q3", "/api/member/{id}", 200).path("group").isNull)
++  }
++
++  @Test
++  fun `실제 400 404 500 503 응답의 상태 코드와 스키마를 검증한다`() {
++    for (query in
++      listOf(
++        "page=",
++        "size=%20",
++        "page=-1",
++        "size=2147483648",
++        "page=1&page=1",
++        "page=21474837&size=100",
++        "sort=id,asc",
++      )) {
++      assertEquals(
++        "VALIDATION_FAILED",
++        response("/api/members?$query", "/api/members", 400).path("code").stringValue(),
++      )
++    }
++    assertEquals(
++      "VALIDATION_FAILED",
++      response("/api/member/BAD", "/api/member/{id}", 400).path("code").stringValue(),
++    )
++    assertEquals(
++      "NOT_FOUND",
++      response("/api/member/missing001", "/api/member/{id}", 404).path("code").stringValue(),
++    )
++    for ((status, error, code) in
++      listOf(
++        Triple(500, GroupServiceConfigurationException(), "INTERNAL_ERROR"),
++        Triple(503, GroupServiceUnavailableException(), "GROUP_SERVICE_UNAVAILABLE"),
++      )) {
++      doThrow(error).`when`(memberships).findByMemberIds(org.mockito.ArgumentMatchers.anyList())
++      doThrow(error).`when`(memberships).findByMemberId(org.mockito.ArgumentMatchers.anyString())
++      for ((url, path) in
++        listOf("/api/members" to "/api/members", "/api/member/tu3fgxd45k" to "/api/member/{id}")) {
++        assertEquals(code, response(url, path, status).path("code").stringValue())
++      }
++      reset(memberships)
++    }
++  }
++
++  @Test
++  fun `검사기는 필수 누락 타입 null 시각 이메일 위반을 검출하고 확장 문자열을 허용한다`() {
++    val valid = response("/api/member/tu3fgxd45k", "/api/member/{id}", 200)
++    val changes: List<(ObjectNode) -> Unit> =
++      listOf(
++        { it.remove("id") },
++        { it.put("name", 123) },
++        { it.putNull("name") },
++        { it.put("registeredDate", "not-a-date") },
++        { it.put("email", "invalid-email") },
++        { it.put("futureField", "extension") },
++        { (it.path("group") as ObjectNode).put("futureField", "extension") },
++        { (it.path("group") as ObjectNode).remove("registeredDate") },
++      )
++    for (change in changes) {
++      val broken = valid.deepCopy() as ObjectNode
++      change(broken)
++      assertTrue(
++        contract.errors("/api/member/{id}", 200, "application/json", broken.toString()).isNotEmpty()
++      )
++    }
++    val extended = valid.deepCopy() as ObjectNode
++    (extended.path("group") as ObjectNode).put("permission", "FuturePermission")
++    assertValid("/api/member/{id}", 200, "application/json", extended.toString())
++  }
++
++  @Test
++  fun `정규화는 객체 키만 정렬하고 배열 순서와 계약 설명을 보존한다`() {
++    val source =
++      mapper.readTree(
++        """{"z":["b","a"],"description":"계약 설명","servers":[{"url":"http://127.0.0.1:9999","description":"서버 설명"}],"a":{"y":2,"x":1}}"""
++      )
++    val normalized = mapper.readTree(contract.canonicalBytes(source))
++    assertEquals(listOf("a", "description", "servers", "z"), normalized.propertyNames().toList())
++    assertEquals(listOf("b", "a"), normalized.path("z").toList().map { it.stringValue() })
++    assertEquals("계약 설명", normalized.path("description").stringValue())
++    assertEquals("서버 설명", normalized.path("servers").path(0).path("description").stringValue())
++    assertEquals("/", normalized.path("servers").path(0).path("url").stringValue())
++  }
++
++  private fun response(url: String, path: String, status: Int): JsonNode {
++    val result = mvc.get(url).andReturn().response
++    assertEquals(status, result.status, "HTTP 상태: $path")
++    val media = if (status == 200) "application/json" else "application/problem+json"
++    assertEquals(media, result.contentType?.substringBefore(';'))
++    if (path == "/api/member/{id}" && status == 200)
++      assertEquals("no-store", result.getHeader("Cache-Control"))
++    assertValid(path, status, media, result.contentAsString)
++    return mapper.readTree(result.contentAsByteArray)
++  }
++
++  private fun assertValid(path: String, status: Int, media: String, body: String) {
++    assertEquals(emptyList(), contract.errors(path, status, media, body), "응답 스키마: $path $status")
++  }
++
++  companion object {
++    @JvmStatic
++    @DynamicPropertySource
++    fun properties(registry: DynamicPropertyRegistry) {
++      TestProperties.register(registry)
++      registry.add("spring.flyway.locations") {
++        "classpath:db/migration/mariadb,classpath:db/test-migration,classpath:db/seed/local"
++      }
++    }
++  }
++}
+######## member-service infrastructure/client/HttpGroupMembershipTests.kt
+--- /c/Users/****/AppData/Local/Temp/claude/9395585df37056f5/c8b4102f-22af-462b-9d7e-c5a31217692b/scratchpad/old/services_member-service_src_test_kotlin_task_member_HttpGroupMembershipTests.kt	2026-11-06 08:31:11.973739500 +0900
++++ services/member-service/src/test/kotlin/task/member/infrastructure/client/HttpGroupMembershipTests.kt	2026-11-06 07:59:38.031871100 +0900
+@@ -1,325 +1,335 @@
+-package task.member
+-
+-import com.sun.net.httpserver.HttpServer
+-import java.io.IOException
+-import java.net.InetSocketAddress
+-import java.net.ServerSocket
+-import java.net.URLDecoder
+-import java.nio.charset.StandardCharsets
+-import java.time.Duration
+-import java.util.concurrent.ConcurrentLinkedQueue
+-import java.util.concurrent.Executors
+-import java.util.concurrent.atomic.AtomicInteger
+-import java.util.concurrent.atomic.AtomicReference
+-import kotlin.test.assertEquals
+-import kotlin.test.assertFailsWith
+-import kotlin.test.assertNull
+-import kotlin.test.assertTrue
+-import org.junit.jupiter.api.AfterEach
+-import org.junit.jupiter.api.BeforeEach
+-import org.junit.jupiter.api.Test
+-import org.springframework.core.io.ClassPathResource
+-import org.springframework.web.client.RestClient
+-import task.member.application.exception.GroupServiceConfigurationException
+-import task.member.application.exception.GroupServiceUnavailableException
+-import task.member.application.port.output.GroupMembershipReader
+-import task.member.infrastructure.client.GroupClientConfiguration
+-import task.member.infrastructure.client.GroupClientProperties
+-import task.member.infrastructure.client.InternalServiceProperties
+-import task.member.infrastructure.client.group.GroupMembershipDecoder
+-import task.member.infrastructure.client.group.HttpGroupMembershipReader
+-import task.member.infrastructure.fixture.group.FixtureGroupMembershipReader
+-import task.member.support.GroupMembershipSamples
+-import task.member.support.TestProperties
+-import tools.jackson.databind.json.JsonMapper
+-
+-/** 실제 HTTP로 직렬화·키·장애 분류·기존 재시도 경계를 확인한다. 실제 그룹 제공자 검증은 아니다(POL-TEST-004·006). */
+-class HttpGroupMembershipTests {
+-  private val status = AtomicInteger(200)
+-  private val headerDelay = AtomicInteger()
+-  private val bodyDelay = AtomicInteger()
+-  private val body = AtomicReference(GroupMembershipSamples.SUMMARY)
+-  private val contentType = AtomicReference("application/json")
+-  private val requests = ConcurrentLinkedQueue<Request>()
+-  private val executor = Executors.newCachedThreadPool()
+-  private lateinit var server: HttpServer
+-  private val decoder = GroupMembershipDecoder(JsonMapper.builder().build())
+-
+-  @BeforeEach
+-  fun startServer() {
+-    server =
+-      HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+-        createContext("/") { exchange ->
+-          exchange.use {
+-            requests.add(
+-              Request(
+-                it.requestMethod,
+-                it.requestURI.path,
+-                it.requestURI.rawQuery ?: "",
+-                it.requestHeaders[GroupClientConfiguration.INTERNAL_HEADER].orEmpty(),
+-                it.requestBody.readAllBytes().size,
+-              )
+-            )
+-            try {
+-              Thread.sleep(headerDelay.get().toLong())
+-              val bytes = body.get().toByteArray(Charsets.UTF_8)
+-              it.responseHeaders.set("Content-Type", contentType.get())
+-              it.responseHeaders.set("Location", "/unexpected-redirect")
+-              it.sendResponseHeaders(status.get(), bytes.size.toLong())
+-              it.responseBody.use { out ->
+-                if (bodyDelay.get() > 0 && bytes.isNotEmpty()) {
+-                  out.write(bytes, 0, 1)
+-                  out.flush()
+-                  Thread.sleep(bodyDelay.get().toLong())
+-                  out.write(bytes, 1, bytes.size - 1)
+-                } else out.write(bytes)
+-              }
+-            } catch (_: IOException) {
+-              // 시간 초과 검증에서 클라이언트가 먼저 연결을 닫는다.
+-            } catch (_: InterruptedException) {
+-              Thread.currentThread().interrupt()
+-            }
+-          }
+-        }
+-        this.executor = this@HttpGroupMembershipTests.executor
+-        start()
+-      }
+-  }
+-
+-  @AfterEach
+-  fun stopServer() {
+-    server.stop(0)
+-    executor.shutdownNow()
+-  }
+-
+-  @Test
+-  fun `GET 반복 파라미터와 서버 키를 한 번 보내고 순서와 무관하게 소속을 결합한다`() {
+-    val result = reader().findByMemberIds(listOf("member0001", "member0002"))
+-    assertEquals(listOf("member0001", "member0002"), result.keys.toList())
+-    assertEquals(
+-      listOf("group00002"),
+-      result.getValue("member0001").map { it.groupId },
+-    )
+-    assertEquals(emptyList(), result.getValue("member0002"))
+-    val request = requests.single()
+-    assertEquals("GET", request.method)
+-    assertEquals("/api/groups/summary", request.path)
+-    assertEquals(
+-      listOf("memberIds=member0001", "memberIds=member0002"),
+-      request.query.split('&').map { URLDecoder.decode(it, StandardCharsets.UTF_8) },
+-    )
+-    assertEquals(listOf(TestProperties.internalKey), request.keys)
+-    assertEquals(0, request.bodySize)
+-  }
+-
+-  @Test
+-  fun `100개 경계까지 단일 일괄 요청을 허용하고 요청 위반은 전송 전에 거부한다`() {
+-    val ids = (0 until 100).map { "m" + it.toString().padStart(9, '0') }
+-    body.set("""{"group":[]}""")
+-    assertEquals(ids.toSet(), reader().findByMemberIds(ids).keys)
+-    assertEquals(100, requests.single().query.split('&').size)
+-    requests.clear()
+-    for (invalid in
+-      listOf(
+-        emptyList(),
+-        ids + "x000000000",
+-        listOf("member0001", "member0001"),
+-        listOf("MEMBER0001"),
+-        listOf("member0001&x=y"),
+-      )) {
+-      assertFailsWith<GroupServiceConfigurationException> { reader().findByMemberIds(invalid) }
+-    }
+-    assertTrue(requests.isEmpty())
+-  }
+-
+-  @Test
+-  fun `응답 ID의 누락 추가 중복과 핵심 계약 오류를 실패로 처리하고 재시도하지 않는다`() {
+-    for (payload in
+-      listOf(
+-        "{\"members\":[]}",
+-        "{\"members\":[{\"memberId\":\"member0001\",\"memberships\":[]},{\"memberId\":\"member0003\",\"memberships\":[]}]}",
+-        "{\"members\":[{\"memberId\":\"member0001\",\"memberships\":[]},{\"memberId\":\"member0001\",\"memberships\":[]}]}",
+-        "{\"members\":[{\"memberId\":\"member0001\"}]}",
+-        "not-json",
+-      )) {
+-      requests.clear()
+-      body.set(payload)
+-      assertFailsWith<GroupServiceConfigurationException> {
+-        reader().findByMemberIds(listOf("member0001"))
+-      }
+-      assertEquals(1, requests.size)
+-    }
+-  }
+-
+-  @Test
+-  fun `그룹 4xx와 리다이렉트는 내부 설정 오류이며 본문 키 주소를 예외에 담지 않는다`() {
+-    for (code in listOf(400, 401, 403, 404, 429, 301, 302, 307)) {
+-      requests.clear()
+-      status.set(code)
+-      body.set("upstream-private-body")
+-      val error =
+-        assertFailsWith<GroupServiceConfigurationException> {
+-          reader().findByMemberIds(listOf("member0001"))
+-        }
+-      assertEquals("그룹 호출 설정 또는 응답 계약 오류", error.message)
+-      assertNull(error.cause)
+-      assertEquals(1, requests.size)
+-      assertEquals("/api/groups/summary", requests.single().path)
+-    }
+-  }
+-
+-  @Test
+-  fun `그룹 5xx는 이용 불가이며 임시 데이터로 대체하거나 재시도하지 않는다`() {
+-    for (code in listOf(500, 502, 503)) {
+-      requests.clear()
+-      status.set(code)
+-      body.set("upstream-private-body")
+-      val error =
+-        assertFailsWith<GroupServiceUnavailableException> {
+-          reader().findByMemberIds(listOf("tu3fgxd45k"))
+-        }
+-      assertEquals("그룹 서비스 이용 불가", error.message)
+-      assertNull(error.cause)
+-      assertEquals(1, requests.size)
+-    }
+-  }
+-
+-  @Test
+-  fun `응답 전 시간 초과는 기존 전송 정책으로 한 번 재시도한 뒤 이용 불가이다`() {
+-    headerDelay.set(1200)
+-    assertFailsWith<GroupServiceUnavailableException> {
+-      reader(Duration.ofMillis(300)).findByMemberIds(listOf("member0001", "member0002"))
+-    }
+-    assertEquals(2, requests.size)
+-  }
+-
+-  @Test
+-  fun `본문 수신 중 시간 초과는 이용 불가이며 이미 받은 응답을 재시도하지 않는다`() {
+-    bodyDelay.set(1200)
+-    assertFailsWith<GroupServiceUnavailableException> {
+-      reader(Duration.ofMillis(300)).findByMemberIds(listOf("member0001", "member0002"))
+-    }
+-    assertEquals(1, requests.size)
+-  }
+-
+-  @Test
+-  fun `연결 실패는 빈 응답이나 계약 오류가 아닌 이용 불가이다`() {
+-    val port = ServerSocket(0).use { it.localPort }
+-    assertFailsWith<GroupServiceUnavailableException> {
+-      reader(url = "http://127.0.0.1:$port").findByMemberIds(listOf("member0001"))
+-    }
+-    assertTrue(requests.isEmpty())
+-  }
+-
+-  @Test
+-  fun `성공 상태라도 JSON이 아닌 응답이나 계약 외 상태를 거부한다`() {
+-    for (type in listOf("text/html", "text/plain", "invalid")) {
+-      contentType.set(type)
+-      assertFailsWith<GroupServiceConfigurationException> {
+-        reader().findByMemberIds(listOf("member0001", "member0002"))
+-      }
+-    }
+-    contentType.set("application/json")
+-    status.set(201)
+-    assertFailsWith<GroupServiceConfigurationException> {
+-      reader().findByMemberIds(listOf("member0001", "member0002"))
+-    }
+-  }
+-
+-  @Test
+-  fun `같은 포트에서 HTTP와 fixture를 교체해도 소속 의미와 반환 모델은 같다`() {
+-    val resource = ClassPathResource("fixtures/local/group-memberships.json")
+-    val fixtureText = resource.getContentAsString(Charsets.UTF_8)
+-    val ids = listOf("q1w2e3r4t5", "j0n8k2m4p6", "k2m9x0p1q3", "dj8fy4bewk", "tu3fgxd45k")
+-    body.set(GroupMembershipSamples.summary(fixtureText, ids))
+-    val fixture: GroupMembershipReader = FixtureGroupMembershipReader(resource, decoder)
+-    val http: GroupMembershipReader = reader()
+-    val result = http.findByMemberIds(ids)
+-    assertEquals(fixture.findByMemberIds(ids), result)
+-    assertEquals(listOf(1, 0, 0, 1, 1), ids.map { result.getValue(it).size })
+-    assertEquals(1, requests.size)
+-  }
+-
+-  private fun reader(
+-    timeout: Duration = Duration.ofSeconds(3),
+-    url: String = "http://127.0.0.1:${server.address.port}",
+-  ): GroupMembershipReader {
+-    val configuration = GroupClientConfiguration()
+-    val properties = GroupClientProperties(url, readTimeout = timeout)
+-    val client =
+-      configuration.groupRestClient(
+-        RestClient.builder(),
+-        properties,
+-        InternalServiceProperties(TestProperties.internalKey),
+-        configuration.groupRetryInterceptor(
+-          properties,
+-          configuration.retryJitter(),
+-          configuration.retrySleeper(),
+-        ),
+-      )
+-    return HttpGroupMembershipReader(client, decoder)
+-  }
+-
+-  private data class Request(
+-    val method: String,
+-    val path: String,
+-    val query: String,
+-    val keys: List<String>,
+-    val bodySize: Int,
+-  )
+-
+-  @Test
+-  fun `상세는 단일 경로와 여섯 필드 계약을 해석하고 목록 한명도 summary를 사용한다`() {
+-    body.set(
+-      """{"memberId":"member0001","groupId":"group00001","groupName":"합성 그룹","registeredDate":"2026-08-16 00:30","pricing":"Premium","permission":"Editor"}"""
+-    )
+-    val result = kotlin.test.assertNotNull(reader().findByMemberId("member0001"))
+-    assertEquals(java.time.Instant.parse("2026-08-15T15:30:00Z"), result.joinedAt)
+-    assertEquals("Editor", result.permission)
+-    assertEquals("/api/group/member0001", requests.single().path)
+-    requests.clear()
+-    body.set("""{"group":[]}""")
+-    assertTrue(reader().findByMemberIds(listOf("member0001")).getValue("member0001").isEmpty())
+-    assertEquals("/api/groups/summary", requests.single().path)
+-  }
+-
+-  @Test
+-  fun `상세의 전용 미소속 404만 빈 목록으로 바꾸며 다른 상태와 계약 위반은 숨기지 않는다`() {
+-    status.set(404)
+-    contentType.set("application/problem+json")
+-    body.set("""{"status":404,"code":"GROUP_MEMBERSHIP_NOT_FOUND"}""")
+-    assertNull(reader().findByMemberId("member0001"))
+-    for (invalid in
+-      listOf(
+-        """{"status":404,"code":"NOT_FOUND"}""",
+-        """{"status":4294967700,"code":"GROUP_MEMBERSHIP_NOT_FOUND"}""",
+-        """{"status":"404","code":"GROUP_MEMBERSHIP_NOT_FOUND"}""",
+-      )) {
+-      requests.clear()
+-      body.set(invalid)
+-      assertFailsWith<GroupServiceConfigurationException> { reader().findByMemberId("member0001") }
+-      assertEquals(1, requests.size)
+-    }
+-    status.set(200)
+-    contentType.set("application/json")
+-    val valid =
+-      """{"memberId":"member0001","groupId":"group00001","groupName":"합성","registeredDate":"2026-08-15 13:00","pricing":"Premium","permission":"Editor"}"""
+-    for (invalid in
+-      listOf(
+-        valid.replace("member0001", "member0002"),
+-        valid.replace("2026-08-15 13:00", "2026-02-30 13:00"),
+-        valid.replace("2026-08-15 13:00", "2026-08-15T04:00:00Z"),
+-        valid.replace("2026-08-15 13:00", "2026-08-15 13:00:00"),
+-        "[$valid]",
+-        valid.replace("\"permission\":\"Editor\"", "\"permission\":null"),
+-      )) {
+-      requests.clear()
+-      body.set(invalid)
+-      assertFailsWith<GroupServiceConfigurationException> { reader().findByMemberId("member0001") }
+-      assertEquals(1, requests.size)
+-    }
+-    status.set(500)
+-    body.set("""{"status":500,"code":"GROUP_MEMBERSHIP_AMBIGUOUS"}""")
+-    assertFailsWith<GroupServiceUnavailableException> { reader().findByMemberId("member0001") }
+-  }
+-}
++package task.member.infrastructure.client
++
++import com.sun.net.httpserver.HttpServer
++import java.io.IOException
++import java.net.InetSocketAddress
++import java.net.ServerSocket
++import java.net.URLDecoder
++import java.nio.charset.StandardCharsets
++import java.time.Duration
++import java.util.concurrent.ConcurrentLinkedQueue
++import java.util.concurrent.Executors
++import java.util.concurrent.atomic.AtomicInteger
++import java.util.concurrent.atomic.AtomicReference
++import kotlin.test.assertEquals
++import kotlin.test.assertFailsWith
++import kotlin.test.assertNull
++import kotlin.test.assertTrue
++import org.junit.jupiter.api.AfterEach
++import org.junit.jupiter.api.BeforeEach
++import org.junit.jupiter.api.Test
++import org.springframework.core.io.ClassPathResource
++import org.springframework.web.client.RestClient
++import task.member.application.exception.GroupServiceConfigurationException
++import task.member.application.exception.GroupServiceUnavailableException
++import task.member.application.port.output.GroupMembershipReader
++import task.member.infrastructure.client.group.GroupMembershipDecoder
++import task.member.infrastructure.client.group.HttpGroupMembershipReader
++import task.member.infrastructure.fixture.group.FixtureGroupMembershipReader
++import task.member.support.GroupMembershipSamples
++import task.member.support.TestProperties
++import tools.jackson.databind.json.JsonMapper
++
++/** 실제 HTTP로 직렬화·키·장애 분류·기존 재시도 경계를 확인한다. 실제 그룹 제공자 검증은 아니다(POL-TEST-004·006). */
++class HttpGroupMembershipTests {
++  private val status = AtomicInteger(200)
++  private val headerDelay = AtomicInteger()
++  private val bodyDelay = AtomicInteger()
++  private val body = AtomicReference(GroupMembershipSamples.SUMMARY)
++  private val contentType = AtomicReference("application/json")
++  private val requests = ConcurrentLinkedQueue<Request>()
++  private val executor = Executors.newCachedThreadPool()
++  private lateinit var server: HttpServer
++  private val decoder = GroupMembershipDecoder(JsonMapper.builder().build())
++
++  @BeforeEach
++  fun startServer() {
++    server =
++      HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
++        createContext("/") { exchange ->
++          exchange.use {
++            requests.add(
++              Request(
++                it.requestMethod,
++                it.requestURI.path,
++                it.requestURI.rawQuery ?: "",
++                it.requestHeaders[GroupClientConfiguration.INTERNAL_HEADER].orEmpty(),
++                it.requestBody.readAllBytes().size,
++              )
++            )
++            try {
++              Thread.sleep(headerDelay.get().toLong())
++              val bytes = body.get().toByteArray(Charsets.UTF_8)
++              it.responseHeaders.set("Content-Type", contentType.get())
++              it.responseHeaders.set("Location", "/unexpected-redirect")
++              it.sendResponseHeaders(status.get(), bytes.size.toLong())
++              it.responseBody.use { out ->
++                if (bodyDelay.get() > 0 && bytes.isNotEmpty()) {
++                  out.write(bytes, 0, 1)
++                  out.flush()
++                  Thread.sleep(bodyDelay.get().toLong())
++                  out.write(bytes, 1, bytes.size - 1)
++                } else out.write(bytes)
++              }
++            } catch (_: IOException) {
++              // 시간 초과 검증에서 클라이언트가 먼저 연결을 닫는다.
++            } catch (_: InterruptedException) {
++              Thread.currentThread().interrupt()
++            }
++          }
++        }
++        this.executor = this@HttpGroupMembershipTests.executor
++        start()
++      }
++  }
++
++  @AfterEach
++  fun stopServer() {
++    server.stop(0)
++    executor.shutdownNow()
++  }
++
++  @Test
++  fun `업무 응답은 1MiB 경계를 허용하고 초과하면 재시도 없이 계약 오류다`() {
++    val valid = """{"group":[]}"""
++    body.set(valid + " ".repeat(1024 * 1024 - valid.toByteArray().size))
++    assertTrue(reader().findByMemberIds(listOf("member0001")).getValue("member0001").isEmpty())
++    requests.clear()
++    body.set(body.get() + " ")
++    assertFailsWith<GroupServiceConfigurationException> {
++      reader().findByMemberIds(listOf("member0001"))
++    }
++    assertEquals(1, requests.size)
++  }
++
++  @Test
++  fun `GET 반복 파라미터와 서버 키를 한 번 보내고 순서와 무관하게 소속을 결합한다`() {
++    val result = reader().findByMemberIds(listOf("member0001", "member0002"))
++    assertEquals(listOf("member0001", "member0002"), result.keys.toList())
++    assertEquals(
++      listOf("group00002"),
++      result.getValue("member0001").map { it.groupId },
++    )
++    assertEquals(emptyList(), result.getValue("member0002"))
++    val request = requests.single()
++    assertEquals("GET", request.method)
++    assertEquals("/api/groups/summary", request.path)
++    assertEquals(
++      listOf("memberIds=member0001", "memberIds=member0002"),
++      request.query.split('&').map { URLDecoder.decode(it, StandardCharsets.UTF_8) },
++    )
++    assertEquals(listOf(TestProperties.internalKey), request.keys)
++    assertEquals(0, request.bodySize)
++  }
++
++  @Test
++  fun `100개 경계까지 단일 일괄 요청을 허용하고 요청 위반은 전송 전에 거부한다`() {
++    val ids = (0 until 100).map { "m" + it.toString().padStart(9, '0') }
++    body.set("""{"group":[]}""")
++    assertEquals(ids.toSet(), reader().findByMemberIds(ids).keys)
++    assertEquals(100, requests.single().query.split('&').size)
++    requests.clear()
++    for (invalid in
++      listOf(
++        emptyList(),
++        ids + "x000000000",
++        listOf("member0001", "member0001"),
++        listOf("MEMBER0001"),
++        listOf("member0001&x=y"),
++      )) {
++      assertFailsWith<GroupServiceConfigurationException> { reader().findByMemberIds(invalid) }
++    }
++    assertTrue(requests.isEmpty())
++  }
++
++  @Test
++  fun `응답 ID의 누락 추가 중복과 핵심 계약 오류를 실패로 처리하고 재시도하지 않는다`() {
++    for (payload in
++      listOf(
++        "{\"members\":[]}",
++        "{\"members\":[{\"memberId\":\"member0001\",\"memberships\":[]},{\"memberId\":\"member0003\",\"memberships\":[]}]}",
++        "{\"members\":[{\"memberId\":\"member0001\",\"memberships\":[]},{\"memberId\":\"member0001\",\"memberships\":[]}]}",
++        "{\"members\":[{\"memberId\":\"member0001\"}]}",
++        "not-json",
++      )) {
++      requests.clear()
++      body.set(payload)
++      assertFailsWith<GroupServiceConfigurationException> {
++        reader().findByMemberIds(listOf("member0001"))
++      }
++      assertEquals(1, requests.size)
++    }
++  }
++
++  @Test
++  fun `그룹 4xx와 리다이렉트는 내부 설정 오류이며 본문 키 주소를 예외에 담지 않는다`() {
++    for (code in listOf(400, 401, 403, 404, 429, 301, 302, 307)) {
++      requests.clear()
++      status.set(code)
++      body.set("upstream-private-body")
++      val error =
++        assertFailsWith<GroupServiceConfigurationException> {
++          reader().findByMemberIds(listOf("member0001"))
++        }
++      assertEquals("그룹 호출 설정 또는 응답 계약 오류", error.message)
++      assertNull(error.cause)
++      assertEquals(1, requests.size)
++      assertEquals("/api/groups/summary", requests.single().path)
++    }
++  }
++
++  @Test
++  fun `그룹 5xx는 이용 불가이며 임시 데이터로 대체하거나 재시도하지 않는다`() {
++    for (code in listOf(500, 502, 503)) {
++      requests.clear()
++      status.set(code)
++      body.set("upstream-private-body")
++      val error =
++        assertFailsWith<GroupServiceUnavailableException> {
++          reader().findByMemberIds(listOf("tu3fgxd45k"))
++        }
++      assertEquals("그룹 서비스 이용 불가", error.message)
++      assertNull(error.cause)
++      assertEquals(1, requests.size)
++    }
++  }
++
++  @Test
++  fun `응답 전 시간 초과는 기존 전송 정책으로 한 번 재시도한 뒤 이용 불가이다`() {
++    headerDelay.set(1200)
++    assertFailsWith<GroupServiceUnavailableException> {
++      reader(Duration.ofMillis(300)).findByMemberIds(listOf("member0001", "member0002"))
++    }
++    assertEquals(2, requests.size)
++  }
++
++  @Test
++  fun `본문 수신 중 시간 초과는 이용 불가이며 이미 받은 응답을 재시도하지 않는다`() {
++    bodyDelay.set(1200)
++    assertFailsWith<GroupServiceUnavailableException> {
++      reader(Duration.ofMillis(300)).findByMemberIds(listOf("member0001", "member0002"))
++    }
++    assertEquals(1, requests.size)
++  }
++
++  @Test
++  fun `연결 실패는 빈 응답이나 계약 오류가 아닌 이용 불가이다`() {
++    val port = ServerSocket(0).use { it.localPort }
++    assertFailsWith<GroupServiceUnavailableException> {
++      reader(url = "http://127.0.0.1:$port").findByMemberIds(listOf("member0001"))
++    }
++    assertTrue(requests.isEmpty())
++  }
++
++  @Test
++  fun `성공 상태라도 JSON이 아닌 응답이나 계약 외 상태를 거부한다`() {
++    for (type in listOf("text/html", "text/plain", "invalid")) {
++      contentType.set(type)
++      assertFailsWith<GroupServiceConfigurationException> {
++        reader().findByMemberIds(listOf("member0001", "member0002"))
++      }
++    }
++    contentType.set("application/json")
++    status.set(201)
++    assertFailsWith<GroupServiceConfigurationException> {
++      reader().findByMemberIds(listOf("member0001", "member0002"))
++    }
++  }
++
++  @Test
++  fun `같은 포트에서 HTTP와 fixture를 교체해도 소속 의미와 반환 모델은 같다`() {
++    val resource = ClassPathResource("fixtures/local/group-memberships.json")
++    val fixtureText = resource.getContentAsString(Charsets.UTF_8)
++    val ids = listOf("q1w2e3r4t5", "j0n8k2m4p6", "k2m9x0p1q3", "dj8fy4bewk", "tu3fgxd45k")
++    body.set(GroupMembershipSamples.summary(fixtureText, ids))
++    val fixture: GroupMembershipReader = FixtureGroupMembershipReader(resource, decoder)
++    val http: GroupMembershipReader = reader()
++    val result = http.findByMemberIds(ids)
++    assertEquals(fixture.findByMemberIds(ids), result)
++    assertEquals(listOf(1, 0, 0, 1, 1), ids.map { result.getValue(it).size })
++    assertEquals(1, requests.size)
++  }
++
++  private fun reader(
++    timeout: Duration = Duration.ofSeconds(3),
++    url: String = "http://127.0.0.1:${server.address.port}",
++  ): GroupMembershipReader {
++    val configuration = GroupClientConfiguration()
++    val properties = GroupClientProperties(url, readTimeout = timeout)
++    val client =
++      configuration.groupRestClient(
++        RestClient.builder(),
++        properties,
++        InternalServiceProperties(TestProperties.internalKey),
++        configuration.groupRetryInterceptor(
++          properties,
++          configuration.retryJitter(),
++          configuration.retrySleeper(),
++        ),
++      )
++    return HttpGroupMembershipReader(client, decoder)
++  }
++
++  private data class Request(
++    val method: String,
++    val path: String,
++    val query: String,
++    val keys: List<String>,
++    val bodySize: Int,
++  )
++
++  @Test
++  fun `상세는 단일 경로와 여섯 필드 계약을 해석하고 목록 한명도 summary를 사용한다`() {
++    body.set(
++      """{"memberId":"member0001","groupId":"group00001","groupName":"합성 그룹","registeredDate":"2026-08-16 00:30","pricing":"Premium","permission":"Editor"}"""
++    )
++    val result = kotlin.test.assertNotNull(reader().findByMemberId("member0001"))
++    assertEquals(java.time.Instant.parse("2026-08-15T15:30:00Z"), result.joinedAt)
++    assertEquals("Editor", result.permission)
++    assertEquals("/api/group/member0001", requests.single().path)
++    requests.clear()
++    body.set("""{"group":[]}""")
++    assertTrue(reader().findByMemberIds(listOf("member0001")).getValue("member0001").isEmpty())
++    assertEquals("/api/groups/summary", requests.single().path)
++  }
++
++  @Test
++  fun `상세의 전용 미소속 404만 빈 목록으로 바꾸며 다른 상태와 계약 위반은 숨기지 않는다`() {
++    status.set(404)
++    contentType.set("application/problem+json")
++    body.set("""{"status":404,"code":"GROUP_MEMBERSHIP_NOT_FOUND"}""")
++    assertNull(reader().findByMemberId("member0001"))
++    for (invalid in
++      listOf(
++        """{"status":404,"code":"NOT_FOUND"}""",
++        """{"status":4294967700,"code":"GROUP_MEMBERSHIP_NOT_FOUND"}""",
++        """{"status":"404","code":"GROUP_MEMBERSHIP_NOT_FOUND"}""",
++      )) {
++      requests.clear()
++      body.set(invalid)
++      assertFailsWith<GroupServiceConfigurationException> { reader().findByMemberId("member0001") }
++      assertEquals(1, requests.size)
++    }
++    status.set(200)
++    contentType.set("application/json")
++    val valid =
++      """{"memberId":"member0001","groupId":"group00001","groupName":"합성","registeredDate":"2026-08-15 13:00","pricing":"Premium","permission":"Editor"}"""
++    for (invalid in
++      listOf(
++        valid.replace("member0001", "member0002"),
++        valid.replace("2026-08-15 13:00", "2026-02-30 13:00"),
++        valid.replace("2026-08-15 13:00", "2026-08-15T04:00:00Z"),
++        valid.replace("2026-08-15 13:00", "2026-08-15 13:00:00"),
++        "[$valid]",
++        valid.replace("\"permission\":\"Editor\"", "\"permission\":null"),
++      )) {
++      requests.clear()
++      body.set(invalid)
++      assertFailsWith<GroupServiceConfigurationException> { reader().findByMemberId("member0001") }
++      assertEquals(1, requests.size)
++    }
++    status.set(500)
++    body.set("""{"status":500,"code":"GROUP_MEMBERSHIP_AMBIGUOUS"}""")
++    assertFailsWith<GroupServiceUnavailableException> { reader().findByMemberId("member0001") }
++  }
++}
+######## member-service presentation/error/CommonPolicyTests.kt
+--- /c/Users/****/AppData/Local/Temp/claude/9395585df37056f5/c8b4102f-22af-462b-9d7e-c5a31217692b/scratchpad/old/services_member-service_src_test_kotlin_task_member_CommonPolicyTests.kt	2026-11-06 08:31:11.046073600 +0900
++++ services/member-service/src/test/kotlin/task/member/presentation/error/CommonPolicyTests.kt	2026-11-05 17:35:23.988838100 +0900
+@@ -1,127 +1,127 @@
+-package task.member
+-
+-import kotlin.test.assertEquals
+-import org.junit.jupiter.api.Test
+-import org.springframework.beans.factory.annotation.Autowired
+-import org.springframework.boot.test.context.SpringBootTest
+-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+-import org.springframework.context.annotation.Import
+-import org.springframework.http.HttpHeaders
+-import org.springframework.http.MediaType
+-import org.springframework.jdbc.core.JdbcTemplate
+-import org.springframework.test.context.DynamicPropertyRegistry
+-import org.springframework.test.context.DynamicPropertySource
+-import org.springframework.test.web.servlet.MockMvc
+-import org.springframework.test.web.servlet.ResultActionsDsl
+-import org.springframework.test.web.servlet.get
+-import org.springframework.test.web.servlet.post
+-import org.springframework.test.web.servlet.put
+-import task.member.support.TestProperties
+-import task.member.support.TestcontainersConfiguration
+-
+-/** 공통 정책이 멤버 서비스에 적용됐는지 확인한다: 사용자 무인증·오류 응답·페이지네이션·상태 확인·API 문서·DB 마이그레이션. */
+-@SpringBootTest(properties = [TestProperties.NO_LOCAL_SECRETS])
+-@AutoConfigureMockMvc
+-@Import(TestcontainersConfiguration::class)
+-class CommonPolicyTests {
+-  @Autowired lateinit var mockMvc: MockMvc
+-  @Autowired lateinit var jdbcTemplate: JdbcTemplate
+-
+-  private fun ResultActionsDsl.problem(status: Int, code: String) = andExpect {
+-    status { isEqualTo(status) }
+-    content { contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON) }
+-    jsonPath("$.status") { value(status) }
+-    jsonPath("$.code") { value(code) }
+-  }
+-
+-  @Test
+-  fun `상태 확인은 인증 없이 열려 있고 DB를 포함한 준비 상태가 UP이다`() {
+-    mockMvc.get("/actuator/health").andExpect {
+-      status { isOk() }
+-      jsonPath("$.status") { value("UP") }
+-    }
+-    mockMvc.get("/actuator/health/readiness").andExpect { jsonPath("$.status") { value("UP") } }
+-    mockMvc.get("/actuator/health/liveness").andExpect { jsonPath("$.status") { value("UP") } }
+-  }
+-
+-  @Test
+-  fun `사용자 인증 없이 요청하며 기존 Bearer 헤더도 인증에 사용하지 않는다`() {
+-    mockMvc.get("/test-probe/page").andExpect { status { isOk() } }
+-    mockMvc
+-      .get("/test-probe/page") {
+-        header(HttpHeaders.AUTHORIZATION, listOf("Bearer", "unused").joinToString(" "))
+-      }
+-      .andExpect { status { isOk() } }
+-  }
+-
+-  @Test
+-  fun `요청이 통과하고 페이지 크기는 기본 20, 최대 100이다`() {
+-    mockMvc
+-      .get("/test-probe/page") {}
+-      .andExpect {
+-        status { isOk() }
+-        jsonPath("$.page") { value(0) }
+-        jsonPath("$.size") { value(20) }
+-      }
+-    mockMvc.get("/test-probe/page?size=1000") {}.andExpect { jsonPath("$.size") { value(100) } }
+-  }
+-
+-  @Test
+-  fun `오류 응답은 ProblemDetail과 code를 갖고 내부 정보를 넣지 않는다`() {
+-    mockMvc.get("/test-probe/none") {}.problem(404, "NOT_FOUND")
+-    mockMvc.put("/test-probe/page") {}.problem(405, "METHOD_NOT_ALLOWED")
+-    mockMvc.get("/test-probe/number?value=abc") {}.problem(400, "BAD_REQUEST")
+-    mockMvc
+-      .post("/test-probe/validated") {
+-        contentType = MediaType.APPLICATION_JSON
+-        content = """{"name": ""}"""
+-      }
+-      .problem(400, "VALIDATION_FAILED")
+-    mockMvc
+-      .get("/test-probe/boom") {}
+-      .problem(500, "INTERNAL_ERROR")
+-      .andExpect {
+-        content { string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("내부 상세"))) }
+-        jsonPath("$.title") { value("내부 처리 오류") }
+-        jsonPath("$.detail") { value("요청을 처리하지 못했습니다.") }
+-      }
+-  }
+-
+-  @Test
+-  fun `멤버 명세와 Swagger는 키 없이 열리고 내부 문서 전달 경로는 명세에서 제외한다`() {
+-    mockMvc.get("/v3/api-docs").andExpect {
+-      status { isOk() }
+-      jsonPath("$.info.version") { value("0.2.0") }
+-      jsonPath("$.security") { doesNotExist() }
+-      jsonPath("$.paths['/internal-docs/group']") { doesNotExist() }
+-    }
+-    mockMvc.get("/swagger-ui/index.html").andExpect { status { isOk() } }
+-    mockMvc.get("/swagger-ui/swagger-initializer.js").andExpect {
+-      status { isOk() }
+-      content { string(org.hamcrest.Matchers.containsString("supportedSubmitMethods")) }
+-      content {
+-        string(
+-          org.hamcrest.Matchers.not(
+-            org.hamcrest.Matchers.containsString(TestProperties.internalKey)
+-          )
+-        )
+-      }
+-    }
+-  }
+-
+-  @Test
+-  fun `Flyway가 서비스 전용 스키마에 마이그레이션 이력을 남긴다`() {
+-    val applied =
+-      jdbcTemplate.queryForObject(
+-        "select count(*) from member_service.flyway_schema_history where version = '1' and success",
+-        Int::class.java,
+-      )
+-    assertEquals(1, applied)
+-  }
+-
+-  companion object {
+-    @JvmStatic
+-    @DynamicPropertySource
+-    fun properties(registry: DynamicPropertyRegistry) = TestProperties.register(registry)
+-  }
+-}
++package task.member.presentation.error
++
++import kotlin.test.assertEquals
++import org.junit.jupiter.api.Test
++import org.springframework.beans.factory.annotation.Autowired
++import org.springframework.boot.test.context.SpringBootTest
++import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
++import org.springframework.context.annotation.Import
++import org.springframework.http.HttpHeaders
++import org.springframework.http.MediaType
++import org.springframework.jdbc.core.JdbcTemplate
++import org.springframework.test.context.DynamicPropertyRegistry
++import org.springframework.test.context.DynamicPropertySource
++import org.springframework.test.web.servlet.MockMvc
++import org.springframework.test.web.servlet.ResultActionsDsl
++import org.springframework.test.web.servlet.get
++import org.springframework.test.web.servlet.post
++import org.springframework.test.web.servlet.put
++import task.member.support.TestProperties
++import task.member.support.TestcontainersConfiguration
++
++/** 공통 정책이 멤버 서비스에 적용됐는지 확인한다: 사용자 무인증·오류 응답·페이지네이션·상태 확인·API 문서·DB 마이그레이션. */
++@SpringBootTest(properties = [TestProperties.NO_LOCAL_SECRETS])
++@AutoConfigureMockMvc
++@Import(TestcontainersConfiguration::class)
++class CommonPolicyTests {
++  @Autowired lateinit var mockMvc: MockMvc
++  @Autowired lateinit var jdbcTemplate: JdbcTemplate
++
++  private fun ResultActionsDsl.problem(status: Int, code: String) = andExpect {
++    status { isEqualTo(status) }
++    content { contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON) }
++    jsonPath("$.status") { value(status) }
++    jsonPath("$.code") { value(code) }
++  }
++
++  @Test
++  fun `상태 확인은 인증 없이 열려 있고 DB를 포함한 준비 상태가 UP이다`() {
++    mockMvc.get("/actuator/health").andExpect {
++      status { isOk() }
++      jsonPath("$.status") { value("UP") }
++    }
++    mockMvc.get("/actuator/health/readiness").andExpect { jsonPath("$.status") { value("UP") } }
++    mockMvc.get("/actuator/health/liveness").andExpect { jsonPath("$.status") { value("UP") } }
++  }
++
++  @Test
++  fun `사용자 인증 없이 요청하며 기존 Bearer 헤더도 인증에 사용하지 않는다`() {
++    mockMvc.get("/test-probe/page").andExpect { status { isOk() } }
++    mockMvc
++      .get("/test-probe/page") {
++        header(HttpHeaders.AUTHORIZATION, listOf("Bearer", "unused").joinToString(" "))
++      }
++      .andExpect { status { isOk() } }
++  }
++
++  @Test
++  fun `요청이 통과하고 페이지 크기는 기본 20, 최대 100이다`() {
++    mockMvc
++      .get("/test-probe/page") {}
++      .andExpect {
++        status { isOk() }
++        jsonPath("$.page") { value(0) }
++        jsonPath("$.size") { value(20) }
++      }
++    mockMvc.get("/test-probe/page?size=1000") {}.andExpect { jsonPath("$.size") { value(100) } }
++  }
++
++  @Test
++  fun `오류 응답은 ProblemDetail과 code를 갖고 내부 정보를 넣지 않는다`() {
++    mockMvc.get("/test-probe/none") {}.problem(404, "NOT_FOUND")
++    mockMvc.put("/test-probe/page") {}.problem(405, "METHOD_NOT_ALLOWED")
++    mockMvc.get("/test-probe/number?value=abc") {}.problem(400, "BAD_REQUEST")
++    mockMvc
++      .post("/test-probe/validated") {
++        contentType = MediaType.APPLICATION_JSON
++        content = """{"name": ""}"""
++      }
++      .problem(400, "VALIDATION_FAILED")
++    mockMvc
++      .get("/test-probe/boom") {}
++      .problem(500, "INTERNAL_ERROR")
++      .andExpect {
++        content { string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("내부 상세"))) }
++        jsonPath("$.title") { value("내부 처리 오류") }
++        jsonPath("$.detail") { value("요청을 처리하지 못했습니다.") }
++      }
++  }
++
++  @Test
++  fun `멤버 명세와 Swagger는 키 없이 열리고 내부 문서 전달 경로는 명세에서 제외한다`() {
++    mockMvc.get("/v3/api-docs").andExpect {
++      status { isOk() }
++      jsonPath("$.info.version") { value("0.3.0") }
++      jsonPath("$.security") { doesNotExist() }
++      jsonPath("$.paths['/internal-docs/group']") { doesNotExist() }
++    }
++    mockMvc.get("/swagger-ui/index.html").andExpect { status { isOk() } }
++    mockMvc.get("/swagger-ui/swagger-initializer.js").andExpect {
++      status { isOk() }
++      content { string(org.hamcrest.Matchers.containsString("supportedSubmitMethods")) }
++      content {
++        string(
++          org.hamcrest.Matchers.not(
++            org.hamcrest.Matchers.containsString(TestProperties.internalKey)
++          )
++        )
++      }
++    }
++  }
++
++  @Test
++  fun `Flyway가 서비스 전용 스키마에 마이그레이션 이력을 남긴다`() {
++    val applied =
++      jdbcTemplate.queryForObject(
++        "select count(*) from member_service.flyway_schema_history where version = '1' and success",
++        Int::class.java,
++      )
++    assertEquals(1, applied)
++  }
++
++  companion object {
++    @JvmStatic
++    @DynamicPropertySource
++    fun properties(registry: DynamicPropertyRegistry) = TestProperties.register(registry)
++  }
++}
+######## member-service presentation/query/MemberQueryApiTests.kt
+--- /c/Users/****/AppData/Local/Temp/claude/9395585df37056f5/c8b4102f-22af-462b-9d7e-c5a31217692b/scratchpad/old/services_member-service_src_test_kotlin_task_member_MemberQueryApiTests.kt	2026-11-06 08:31:12.535864800 +0900
++++ services/member-service/src/test/kotlin/task/member/presentation/query/MemberQueryApiTests.kt	2026-11-05 17:28:32.347133900 +0900
+@@ -1,311 +1,311 @@
+-package task.member
+-
+-import java.util.concurrent.CopyOnWriteArrayList
+-import kotlin.test.assertEquals
+-import kotlin.test.assertFalse
+-import kotlin.test.assertTrue
+-import org.junit.jupiter.api.AfterEach
+-import org.junit.jupiter.api.BeforeEach
+-import org.junit.jupiter.api.Test
+-import org.mockito.Mockito.clearInvocations
+-import org.mockito.Mockito.doAnswer
+-import org.mockito.Mockito.doThrow
+-import org.mockito.Mockito.reset
+-import org.mockito.Mockito.times
+-import org.mockito.Mockito.verify
+-import org.mockito.Mockito.verifyNoInteractions
+-import org.springframework.beans.factory.annotation.Autowired
+-import org.springframework.boot.test.context.SpringBootTest
+-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+-import org.springframework.context.annotation.Import
+-import org.springframework.core.io.ClassPathResource
+-import org.springframework.jdbc.core.JdbcTemplate
+-import org.springframework.jdbc.datasource.init.ScriptUtils
+-import org.springframework.test.context.ActiveProfiles
+-import org.springframework.test.context.DynamicPropertyRegistry
+-import org.springframework.test.context.DynamicPropertySource
+-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+-import org.springframework.test.web.servlet.MockMvc
+-import org.springframework.test.web.servlet.get
+-import org.springframework.transaction.support.TransactionSynchronizationManager
+-import task.member.application.exception.GroupServiceConfigurationException
+-import task.member.application.exception.GroupServiceUnavailableException
+-import task.member.application.port.output.GroupMembershipReader
+-import task.member.application.port.output.MemberReader
+-import task.member.support.TestProperties
+-import task.member.support.TestcontainersConfiguration
+-import tools.jackson.databind.json.JsonMapper
+-
+-/** 실제 MariaDB와 local fixture를 통한 공개 API·입력·결합·트랜잭션 경계(POL-TEST-005·006). */
+-@SpringBootTest(properties = [TestProperties.NO_LOCAL_SECRETS])
+-@AutoConfigureMockMvc
+-@ActiveProfiles("local")
+-@Import(TestcontainersConfiguration::class)
+-class MemberQueryApiTests {
+-  @Autowired lateinit var mvc: MockMvc
+-  @Autowired lateinit var jdbc: JdbcTemplate
+-  @Autowired lateinit var json: JsonMapper
+-  @MockitoSpyBean lateinit var memberships: GroupMembershipReader
+-  @MockitoSpyBean lateinit var members: MemberReader
+-  private val observations = CopyOnWriteArrayList<Pair<Long, Boolean>>()
+-
+-  @BeforeEach
+-  fun prepare() {
+-    reset(memberships, members)
+-    jdbc.execute("delete from member")
+-    requireNotNull(jdbc.dataSource).connection.use {
+-      ScriptUtils.executeSqlScript(it, ClassPathResource("db/seed/local/R__seed_member.sql"))
+-    }
+-    observations.clear()
+-    doAnswer { call ->
+-        observations +=
+-          Thread.currentThread().threadId() to
+-            TransactionSynchronizationManager.isActualTransactionActive()
+-        assertFalse(TransactionSynchronizationManager.isSynchronizationActive())
+-        call.callRealMethod()
+-      }
+-      .`when`(memberships)
+-      .findByMemberIds(org.mockito.ArgumentMatchers.anyList())
+-    doAnswer { call ->
+-        observations +=
+-          Thread.currentThread().threadId() to
+-            TransactionSynchronizationManager.isActualTransactionActive()
+-        assertFalse(TransactionSynchronizationManager.isSynchronizationActive())
+-        call.callRealMethod()
+-      }
+-      .`when`(memberships)
+-      .findByMemberId(org.mockito.ArgumentMatchers.anyString())
+-
+-    clearInvocations(memberships, members)
+-  }
+-
+-  @AfterEach
+-  fun restore() {
+-    reset(memberships, members)
+-  }
+-
+-  @Test
+-  fun `기본 목록은 멤버 다섯 명과 단일 소속을 한 번의 일괄 조회로 결합한다`() {
+-    mvc.get("/api/members").andExpect {
+-      status { isOk() }
+-      jsonPath("$.members.length()") { value(5) }
+-      jsonPath("$.content") { doesNotExist() }
+-      jsonPath("$.page.number") { value(0) }
+-      jsonPath("$.page.size") { value(20) }
+-      jsonPath("$.page.totalElements") { value(5) }
+-      jsonPath("$.page.totalPages") { value(1) }
+-      jsonPath("$.members[0].id") { value("tu3fgxd45k") }
+-      jsonPath("$.members[0].groups[0].id") { value("arutjf9348") }
+-      jsonPath("$.members[0].groups[0].permission") { value("Editor") }
+-      jsonPath("$.members[0].groups[0].permissionName") { doesNotExist() }
+-      jsonPath("$.members[0].groups[0].joinedAt") { doesNotExist() }
+-      jsonPath("$.members[0].groups[0].pricing") { doesNotExist() }
+-      jsonPath("$.members[0].email") { doesNotExist() }
+-      jsonPath("$.members[2].groups") { isEmpty() }
+-    }
+-    verify(memberships, times(1))
+-      .findByMemberIds(listOf("tu3fgxd45k", "dj8fy4bewk", "k2m9x0p1q3", "j0n8k2m4p6", "q1w2e3r4t5"))
+-  }
+-
+-  @Test
+-  fun `두 정렬 방향의 페이지는 동명이인 ID 순서를 유지하고 누락 중복이 없다`() {
+-    for ((sort, expected) in
+-      mapOf(
+-        "name,asc" to listOf("tu3fgxd45k", "dj8fy4bewk", "k2m9x0p1q3", "j0n8k2m4p6", "q1w2e3r4t5"),
+-        "name,desc" to listOf("j0n8k2m4p6", "q1w2e3r4t5", "k2m9x0p1q3", "dj8fy4bewk", "tu3fgxd45k"),
+-      )) {
+-      val actual =
+-        (0..4).map { page ->
+-          val body =
+-            mvc
+-              .get("/api/members") {
+-                param("page", "$page")
+-                param("size", "1")
+-                param("sort", sort)
+-              }
+-              .andExpect {
+-                status { isOk() }
+-                jsonPath("$.page.totalElements") { value(5) }
+-                jsonPath("$.page.totalPages") { value(5) }
+-              }
+-              .andReturn()
+-              .response
+-              .contentAsString
+-          json.readTree(body).path("members").path(0).path("id").asString()
+-        }
+-      assertEquals(expected, actual)
+-    }
+-  }
+-
+-  @Test
+-  fun `허용된 범위의 초과 페이지와 빈 테이블에서는 그룹을 호출하지 않는다`() {
+-    for ((page, size) in listOf("99" to "20", "2147483647" to "1", "21474836" to "100")) {
+-      mvc
+-        .get("/api/members") {
+-          param("page", page)
+-          param("size", size)
+-        }
+-        .andExpect {
+-          status { isOk() }
+-          jsonPath("$.members") { isEmpty() }
+-          jsonPath("$.page.totalElements") { value(5) }
+-        }
+-    }
+-    jdbc.execute("delete from member")
+-    mvc.get("/api/members").andExpect {
+-      status { isOk() }
+-      jsonPath("$.members") { isEmpty() }
+-      jsonPath("$.page.totalElements") { value(0) }
+-      jsonPath("$.page.totalPages") { value(0) }
+-    }
+-    verifyNoInteractions(memberships)
+-  }
+-
+-  @Test
+-  fun `정상 숫자는 선행 0을 허용하고 크기를 정수 검증 후 100으로 제한한다`() {
+-    for (size in listOf("101", "2147483647", "000100")) {
+-      mvc
+-        .get("/api/members") {
+-          param("page", "0000")
+-          param("size", size)
+-        }
+-        .andExpect {
+-          status { isOk() }
+-          jsonPath("$.page.size") { value(100) }
+-        }
+-    }
+-  }
+-
+-  @Test
+-  fun `잘못된 입력과 반복 파라미터는 DB와 그룹 호출 전에 400이다`() {
+-    for (name in listOf("page", "size")) {
+-      for (raw in listOf("", " ", " 1", "1 ", "+1", "-1", "1.5", "abc", "１", "2147483648")) {
+-        invalid(name to arrayOf(raw))
+-      }
+-    }
+-    for (name in listOf("page", "size", "sort")) {
+-      val valid = if (name == "sort") "name,asc" else "1"
+-      invalid(name to arrayOf(valid, valid))
+-      invalid(name to arrayOf(valid, if (name == "sort") "name,desc" else "2"))
+-    }
+-    for (sort in listOf("", "name", "id,asc", "name,ASC", "name,asc ")) invalid(
+-      "sort" to arrayOf(sort)
+-    )
+-    invalid("size" to arrayOf("0"))
+-    invalid("page" to arrayOf("21474837"), "size" to arrayOf("100"))
+-    verifyNoInteractions(members, memberships)
+-  }
+-
+-  @Test
+-  fun `상세는 감사 정보 한국 시간 분 단위 단일 소속과 null 키 및 no-store를 유지한다`() {
+-    val body =
+-      mvc
+-        .get("/api/member/tu3fgxd45k")
+-        .andExpect {
+-          status { isOk() }
+-          header { string("Cache-Control", "no-store") }
+-          jsonPath("$.email") { value("tu3fgxd45k@example.invalid") }
+-          jsonPath("$.address") { value("가상 주소 1") }
+-          jsonPath("$.registeredDate") { value("2026-08-15 13:00") }
+-          jsonPath("$.createdAt") { value("2026-08-15 13:01") }
+-          jsonPath("$.createdBy") { value("seed") }
+-          jsonPath("$.groups.length()") { value(1) }
+-          jsonPath("$.groups[0].joinedAt") { value("2026-08-15 13:00") }
+-          jsonPath("$.groups[0].pricing") { value("Premium") }
+-        }
+-        .andReturn()
+-        .response
+-        .contentAsString
+-    val optional = json.readTree(body).path("groups").path(0)
+-    assertTrue(optional.has("joinedAt") && optional.path("joinedAt").isString)
+-    assertTrue(optional.has("pricing") && optional.path("pricing").isString)
+-    verify(memberships).findByMemberId("tu3fgxd45k")
+-    mvc.get("/api/member/k2m9x0p1q3").andExpect {
+-      status { isOk() }
+-      jsonPath("$.groups") { isEmpty() }
+-    }
+-  }
+-
+-  @Test
+-  fun `없는 멤버와 잘못된 ID는 그룹을 조회하지 않는다`() {
+-    for (id in listOf("BAD", "TU3FGXD45K", "member000_")) {
+-      mvc.get("/api/member/$id").andExpect {
+-        status { isBadRequest() }
+-        jsonPath("$.code") { value("VALIDATION_FAILED") }
+-      }
+-    }
+-    verifyNoInteractions(members)
+-    mvc.get("/api/member/missing001").andExpect {
+-      status { isNotFound() }
+-      jsonPath("$.code") { value("NOT_FOUND") }
+-    }
+-    verifyNoInteractions(memberships)
+-  }
+-
+-  @Test
+-  fun `두 유스케이스에서 그룹 진입은 같은 호출 스레드의 트랜잭션 밖이다`() {
+-    assertFalse(TransactionSynchronizationManager.isActualTransactionActive())
+-    mvc.get("/api/members").andExpect { status { isOk() } }
+-    mvc.get("/api/member/tu3fgxd45k").andExpect { status { isOk() } }
+-    assertEquals(2, observations.size)
+-    assertTrue(observations.all { it.first == Thread.currentThread().threadId() && !it.second })
+-  }
+-
+-  @Test
+-  fun `공급자 장애와 계약 위반은 빈 소속으로 변환하지 않는다`() {
+-    for ((failure, status, code) in
+-      listOf(
+-        Triple(GroupServiceUnavailableException(), 503, "GROUP_SERVICE_UNAVAILABLE"),
+-        Triple(GroupServiceConfigurationException(), 500, "INTERNAL_ERROR"),
+-      )) {
+-      doThrow(failure).`when`(memberships).findByMemberIds(org.mockito.ArgumentMatchers.anyList())
+-      doThrow(failure).`when`(memberships).findByMemberId(org.mockito.ArgumentMatchers.anyString())
+-      for (path in listOf("/api/members", "/api/member/tu3fgxd45k")) {
+-        mvc.get(path).andExpect {
+-          status { isEqualTo(status) }
+-          content { contentTypeCompatibleWith("application/problem+json") }
+-          jsonPath("$.code") { value(code) }
+-          jsonPath("$.members") { doesNotExist() }
+-        }
+-      }
+-    }
+-  }
+-
+-  @Test
+-  fun `업무 OpenAPI는 고정 operationId와 분리된 스키마 및 입력 제한을 제공한다`() {
+-    mvc.get("/v3/api-docs").andExpect {
+-      status { isOk() }
+-      jsonPath("$.paths['/api/members'].get.operationId") { value("getMemberSummaries") }
+-      jsonPath("$.paths['/api/member/{id}'].get.operationId") { value("getMemberDetail") }
+-      jsonPath("$.components.schemas.MemberSummaryPageResponse.properties.members") { exists() }
+-      jsonPath("$.components.schemas.MemberDetailResponse.properties.registeredDate.format") {
+-        doesNotExist()
+-      }
+-      jsonPath("$.components.schemas.GroupMembershipDetailResponse.properties.permission.enum") {
+-        doesNotExist()
+-      }
+-    }
+-  }
+-
+-  private fun invalid(vararg params: Pair<String, Array<String>>) {
+-    mvc
+-      .get("/api/members") { params.forEach { (name, values) -> param(name, *values) } }
+-      .andExpect {
+-        status { isBadRequest() }
+-        content { contentTypeCompatibleWith("application/problem+json") }
+-        jsonPath("$.code") { value("VALIDATION_FAILED") }
+-      }
+-  }
+-
+-  companion object {
+-    @JvmStatic
+-    @DynamicPropertySource
+-    fun properties(registry: DynamicPropertyRegistry) {
+-      TestProperties.register(registry)
+-      registry.add("task.group-membership.source") { "fixture" }
+-      registry.add("spring.flyway.locations") {
+-        "classpath:db/migration/mariadb,classpath:db/test-migration,classpath:db/seed/local"
+-      }
+-    }
+-  }
+-}
++package task.member.presentation.query
++
++import java.util.concurrent.CopyOnWriteArrayList
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++import org.junit.jupiter.api.AfterEach
++import org.junit.jupiter.api.BeforeEach
++import org.junit.jupiter.api.Test
++import org.mockito.Mockito.clearInvocations
++import org.mockito.Mockito.doAnswer
++import org.mockito.Mockito.doThrow
++import org.mockito.Mockito.reset
++import org.mockito.Mockito.times
++import org.mockito.Mockito.verify
++import org.mockito.Mockito.verifyNoInteractions
++import org.springframework.beans.factory.annotation.Autowired
++import org.springframework.boot.test.context.SpringBootTest
++import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
++import org.springframework.context.annotation.Import
++import org.springframework.core.io.ClassPathResource
++import org.springframework.jdbc.core.JdbcTemplate
++import org.springframework.jdbc.datasource.init.ScriptUtils
++import org.springframework.test.context.ActiveProfiles
++import org.springframework.test.context.DynamicPropertyRegistry
++import org.springframework.test.context.DynamicPropertySource
++import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
++import org.springframework.test.web.servlet.MockMvc
++import org.springframework.test.web.servlet.get
++import org.springframework.transaction.support.TransactionSynchronizationManager
++import task.member.application.exception.GroupServiceConfigurationException
++import task.member.application.exception.GroupServiceUnavailableException
++import task.member.application.port.output.GroupMembershipReader
++import task.member.application.port.output.MemberReader
++import task.member.support.TestProperties
++import task.member.support.TestcontainersConfiguration
++import tools.jackson.databind.json.JsonMapper
++
++/** 실제 MariaDB와 local fixture를 통한 공개 API·입력·결합·트랜잭션 경계(POL-TEST-005·006). */
++@SpringBootTest(properties = [TestProperties.NO_LOCAL_SECRETS])
++@AutoConfigureMockMvc
++@ActiveProfiles("local")
++@Import(TestcontainersConfiguration::class)
++class MemberQueryApiTests {
++  @Autowired lateinit var mvc: MockMvc
++  @Autowired lateinit var jdbc: JdbcTemplate
++  @Autowired lateinit var json: JsonMapper
++  @MockitoSpyBean lateinit var memberships: GroupMembershipReader
++  @MockitoSpyBean lateinit var members: MemberReader
++  private val observations = CopyOnWriteArrayList<Pair<Long, Boolean>>()
++
++  @BeforeEach
++  fun prepare() {
++    reset(memberships, members)
++    jdbc.execute("delete from member")
++    requireNotNull(jdbc.dataSource).connection.use {
++      ScriptUtils.executeSqlScript(it, ClassPathResource("db/seed/local/R__seed_member.sql"))
++    }
++    observations.clear()
++    doAnswer { call ->
++        observations +=
++          Thread.currentThread().threadId() to
++            TransactionSynchronizationManager.isActualTransactionActive()
++        assertFalse(TransactionSynchronizationManager.isSynchronizationActive())
++        call.callRealMethod()
++      }
++      .`when`(memberships)
++      .findByMemberIds(org.mockito.ArgumentMatchers.anyList())
++    doAnswer { call ->
++        observations +=
++          Thread.currentThread().threadId() to
++            TransactionSynchronizationManager.isActualTransactionActive()
++        assertFalse(TransactionSynchronizationManager.isSynchronizationActive())
++        call.callRealMethod()
++      }
++      .`when`(memberships)
++      .findByMemberId(org.mockito.ArgumentMatchers.anyString())
++
++    clearInvocations(memberships, members)
++  }
++
++  @AfterEach
++  fun restore() {
++    reset(memberships, members)
++  }
++
++  @Test
++  fun `기본 목록은 멤버 다섯 명과 단일 소속을 한 번의 일괄 조회로 결합한다`() {
++    mvc.get("/api/members").andExpect {
++      status { isOk() }
++      jsonPath("$.members.length()") { value(5) }
++      jsonPath("$.content") { doesNotExist() }
++      jsonPath("$.page.number") { value(0) }
++      jsonPath("$.page.size") { value(20) }
++      jsonPath("$.page.totalElements") { value(5) }
++      jsonPath("$.page.totalPages") { value(1) }
++      jsonPath("$.members[0].id") { value("tu3fgxd45k") }
++      jsonPath("$.members[0].group") { value("Test1") }
++      jsonPath("$.members[0].permission") { value("Editor") }
++      jsonPath("$.members[0].permissionName") { doesNotExist() }
++      jsonPath("$.members[0].joinedAt") { doesNotExist() }
++      jsonPath("$.members[0].pricing") { doesNotExist() }
++      jsonPath("$.members[0].email") { doesNotExist() }
++      jsonPath("$.members[2].group") { value(org.hamcrest.Matchers.nullValue()) }
++    }
++    verify(memberships, times(1))
++      .findByMemberIds(listOf("tu3fgxd45k", "dj8fy4bewk", "k2m9x0p1q3", "j0n8k2m4p6", "q1w2e3r4t5"))
++  }
++
++  @Test
++  fun `두 정렬 방향의 페이지는 동명이인 ID 순서를 유지하고 누락 중복이 없다`() {
++    for ((sort, expected) in
++      mapOf(
++        "name,asc" to listOf("tu3fgxd45k", "dj8fy4bewk", "k2m9x0p1q3", "j0n8k2m4p6", "q1w2e3r4t5"),
++        "name,desc" to listOf("j0n8k2m4p6", "q1w2e3r4t5", "k2m9x0p1q3", "dj8fy4bewk", "tu3fgxd45k"),
++      )) {
++      val actual =
++        (0..4).map { page ->
++          val body =
++            mvc
++              .get("/api/members") {
++                param("page", "$page")
++                param("size", "1")
++                param("sort", sort)
++              }
++              .andExpect {
++                status { isOk() }
++                jsonPath("$.page.totalElements") { value(5) }
++                jsonPath("$.page.totalPages") { value(5) }
++              }
++              .andReturn()
++              .response
++              .contentAsString
++          json.readTree(body).path("members").path(0).path("id").asString()
++        }
++      assertEquals(expected, actual)
++    }
++  }
++
++  @Test
++  fun `허용된 범위의 초과 페이지와 빈 테이블에서는 그룹을 호출하지 않는다`() {
++    for ((page, size) in listOf("99" to "20", "2147483647" to "1", "21474836" to "100")) {
++      mvc
++        .get("/api/members") {
++          param("page", page)
++          param("size", size)
++        }
++        .andExpect {
++          status { isOk() }
++          jsonPath("$.members") { isEmpty() }
++          jsonPath("$.page.totalElements") { value(5) }
++        }
++    }
++    jdbc.execute("delete from member")
++    mvc.get("/api/members").andExpect {
++      status { isOk() }
++      jsonPath("$.members") { isEmpty() }
++      jsonPath("$.page.totalElements") { value(0) }
++      jsonPath("$.page.totalPages") { value(0) }
++    }
++    verifyNoInteractions(memberships)
++  }
++
++  @Test
++  fun `정상 숫자는 선행 0을 허용하고 크기를 정수 검증 후 100으로 제한한다`() {
++    for (size in listOf("101", "2147483647", "000100")) {
++      mvc
++        .get("/api/members") {
++          param("page", "0000")
++          param("size", size)
++        }
++        .andExpect {
++          status { isOk() }
++          jsonPath("$.page.size") { value(100) }
++        }
++    }
++  }
++
++  @Test
++  fun `잘못된 입력과 반복 파라미터는 DB와 그룹 호출 전에 400이다`() {
++    for (name in listOf("page", "size")) {
++      for (raw in listOf("", " ", " 1", "1 ", "+1", "-1", "1.5", "abc", "１", "2147483648")) {
++        invalid(name to arrayOf(raw))
++      }
++    }
++    for (name in listOf("page", "size", "sort")) {
++      val valid = if (name == "sort") "name,asc" else "1"
++      invalid(name to arrayOf(valid, valid))
++      invalid(name to arrayOf(valid, if (name == "sort") "name,desc" else "2"))
++    }
++    for (sort in listOf("", "name", "id,asc", "name,ASC", "name,asc ")) invalid(
++      "sort" to arrayOf(sort)
++    )
++    invalid("size" to arrayOf("0"))
++    invalid("page" to arrayOf("21474837"), "size" to arrayOf("100"))
++    verifyNoInteractions(members, memberships)
++  }
++
++  @Test
++  fun `상세는 감사 정보 한국 시간 분 단위 단일 소속과 null 키 및 no-store를 유지한다`() {
++    val body =
++      mvc
++        .get("/api/member/tu3fgxd45k")
++        .andExpect {
++          status { isOk() }
++          header { string("Cache-Control", "no-store") }
++          jsonPath("$.email") { value("tu3fgxd45k@example.invalid") }
++          jsonPath("$.address") { value("가상 주소 1") }
++          jsonPath("$.registeredDate") { value("2026-08-15 13:00") }
++          jsonPath("$.createdAt") { doesNotExist() }
++          jsonPath("$.createdBy") { doesNotExist() }
++          jsonPath("$.group.id") { value("arutjf9348") }
++          jsonPath("$.group.registeredDate") { value("2026-08-15 13:00") }
++          jsonPath("$.group.pricing") { value("Premium") }
++        }
++        .andReturn()
++        .response
++        .contentAsString
++    val optional = json.readTree(body).path("group")
++    assertTrue(optional.has("registeredDate") && optional.path("registeredDate").isString)
++    assertTrue(optional.has("pricing") && optional.path("pricing").isString)
++    verify(memberships).findByMemberId("tu3fgxd45k")
++    mvc.get("/api/member/k2m9x0p1q3").andExpect {
++      status { isOk() }
++      jsonPath("$.group") { value(org.hamcrest.Matchers.nullValue()) }
++    }
++  }
++
++  @Test
++  fun `없는 멤버와 잘못된 ID는 그룹을 조회하지 않는다`() {
++    for (id in listOf("BAD", "TU3FGXD45K", "member000_")) {
++      mvc.get("/api/member/$id").andExpect {
++        status { isBadRequest() }
++        jsonPath("$.code") { value("VALIDATION_FAILED") }
++      }
++    }
++    verifyNoInteractions(members)
++    mvc.get("/api/member/missing001").andExpect {
++      status { isNotFound() }
++      jsonPath("$.code") { value("NOT_FOUND") }
++    }
++    verifyNoInteractions(memberships)
++  }
++
++  @Test
++  fun `두 유스케이스에서 그룹 진입은 같은 호출 스레드의 트랜잭션 밖이다`() {
++    assertFalse(TransactionSynchronizationManager.isActualTransactionActive())
++    mvc.get("/api/members").andExpect { status { isOk() } }
++    mvc.get("/api/member/tu3fgxd45k").andExpect { status { isOk() } }
++    assertEquals(2, observations.size)
++    assertTrue(observations.all { it.first == Thread.currentThread().threadId() && !it.second })
++  }
++
++  @Test
++  fun `공급자 장애와 계약 위반은 빈 소속으로 변환하지 않는다`() {
++    for ((failure, status, code) in
++      listOf(
++        Triple(GroupServiceUnavailableException(), 503, "GROUP_SERVICE_UNAVAILABLE"),
++        Triple(GroupServiceConfigurationException(), 500, "INTERNAL_ERROR"),
++      )) {
++      doThrow(failure).`when`(memberships).findByMemberIds(org.mockito.ArgumentMatchers.anyList())
++      doThrow(failure).`when`(memberships).findByMemberId(org.mockito.ArgumentMatchers.anyString())
++      for (path in listOf("/api/members", "/api/member/tu3fgxd45k")) {
++        mvc.get(path).andExpect {
++          status { isEqualTo(status) }
++          content { contentTypeCompatibleWith("application/problem+json") }
++          jsonPath("$.code") { value(code) }
++          jsonPath("$.members") { doesNotExist() }
++        }
++      }
++    }
++  }
++
++  @Test
++  fun `업무 OpenAPI는 고정 operationId와 분리된 스키마 및 입력 제한을 제공한다`() {
++    mvc.get("/v3/api-docs").andExpect {
++      status { isOk() }
++      jsonPath("$.paths['/api/members'].get.operationId") { value("getMemberSummaries") }
++      jsonPath("$.paths['/api/member/{id}'].get.operationId") { value("getMemberDetail") }
++      jsonPath("$.components.schemas.MemberSummaryPageResponse.properties.members") { exists() }
++      jsonPath("$.components.schemas.MemberDetailResponse.properties.registeredDate.format") {
++        doesNotExist()
++      }
++      jsonPath("$.components.schemas.GroupMembershipDetailResponse.properties.permission.enum") {
++        doesNotExist()
++      }
++    }
++  }
++
++  private fun invalid(vararg params: Pair<String, Array<String>>) {
++    mvc
++      .get("/api/members") { params.forEach { (name, values) -> param(name, *values) } }
++      .andExpect {
++        status { isBadRequest() }
++        content { contentTypeCompatibleWith("application/problem+json") }
++        jsonPath("$.code") { value("VALIDATION_FAILED") }
++      }
++  }
++
++  companion object {
++    @JvmStatic
++    @DynamicPropertySource
++    fun properties(registry: DynamicPropertyRegistry) {
++      TestProperties.register(registry)
++      registry.add("task.group-membership.source") { "fixture" }
++      registry.add("spring.flyway.locations") {
++        "classpath:db/migration/mariadb,classpath:db/test-migration,classpath:db/seed/local"
++      }
++    }
++  }
++}
+######## member-service presentation/query/MemberQueryHttpIntegrationTests.kt
+--- /c/Users/****/AppData/Local/Temp/claude/9395585df37056f5/c8b4102f-22af-462b-9d7e-c5a31217692b/scratchpad/old/services_member-service_src_test_kotlin_task_member_MemberQueryHttpIntegrationTests.kt	2026-11-06 08:31:12.602245900 +0900
++++ services/member-service/src/test/kotlin/task/member/presentation/query/MemberQueryHttpIntegrationTests.kt	2026-11-05 17:28:32.347133900 +0900
+@@ -1,204 +1,204 @@
+-package task.member
+-
+-import com.sun.net.httpserver.HttpServer
+-import java.net.InetSocketAddress
+-import java.net.URLDecoder
+-import java.util.concurrent.CopyOnWriteArrayList
+-import java.util.concurrent.Executors
+-import java.util.concurrent.atomic.AtomicInteger
+-import kotlin.test.assertEquals
+-import kotlin.test.assertFalse
+-import kotlin.test.assertTrue
+-import org.aopalliance.intercept.MethodInterceptor
+-import org.junit.jupiter.api.AfterAll
+-import org.junit.jupiter.api.AfterEach
+-import org.junit.jupiter.api.BeforeEach
+-import org.junit.jupiter.api.Test
+-import org.mockito.Mockito.doAnswer
+-import org.mockito.Mockito.reset
+-import org.springframework.aop.framework.Advised
+-import org.springframework.beans.factory.annotation.Autowired
+-import org.springframework.boot.test.context.SpringBootTest
+-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+-import org.springframework.context.annotation.Import
+-import org.springframework.core.io.ClassPathResource
+-import org.springframework.test.context.DynamicPropertyRegistry
+-import org.springframework.test.context.DynamicPropertySource
+-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+-import org.springframework.test.web.servlet.MockMvc
+-import org.springframework.test.web.servlet.get
+-import org.springframework.transaction.support.TransactionSynchronizationManager
+-import task.member.application.port.output.GroupMembershipReader
+-import task.member.infrastructure.persistence.member.MemberJpaRepository
+-import task.member.support.TestProperties
+-import task.member.support.TestcontainersConfiguration
+-import tools.jackson.databind.json.JsonMapper
+-
+-/** 실제 HTTP 어댑터로 같은 공개 유스케이스를 실행한다. 실제 그룹 제공자 검증은 아니다(POL-TEST-008). */
+-@SpringBootTest(properties = [TestProperties.NO_LOCAL_SECRETS])
+-@AutoConfigureMockMvc
+-@Import(TestcontainersConfiguration::class)
+-class MemberQueryHttpIntegrationTests {
+-  @Autowired lateinit var mvc: MockMvc
+-  @Autowired lateinit var repository: MemberJpaRepository
+-  @MockitoSpyBean lateinit var memberships: GroupMembershipReader
+-  private val observations = mutableListOf<Pair<Long, Boolean>>()
+-  private val databaseObservations = mutableListOf<Triple<Long, Boolean, Boolean>>()
+-  private val databaseProbe = MethodInterceptor {
+-    if (it.method.name in setOf("findSummaries", "findById")) {
+-      databaseObservations +=
+-        Triple(
+-          Thread.currentThread().threadId(),
+-          TransactionSynchronizationManager.isActualTransactionActive(),
+-          TransactionSynchronizationManager.isCurrentTransactionReadOnly(),
+-        )
+-    }
+-    it.proceed()
+-  }
+-
+-  @BeforeEach
+-  fun prepare() {
+-    reset(memberships)
+-    hits.set(0)
+-    status.set(200)
+-    received.clear()
+-    observations.clear()
+-    databaseObservations.clear()
+-    (repository as Advised).addAdvice(0, databaseProbe)
+-    doAnswer { call ->
+-        observations +=
+-          Thread.currentThread().threadId() to
+-            TransactionSynchronizationManager.isActualTransactionActive()
+-        assertFalse(TransactionSynchronizationManager.isSynchronizationActive())
+-        call.callRealMethod()
+-      }
+-      .`when`(memberships)
+-      .findByMemberIds(org.mockito.ArgumentMatchers.anyList())
+-    doAnswer { call ->
+-        observations +=
+-          Thread.currentThread().threadId() to
+-            TransactionSynchronizationManager.isActualTransactionActive()
+-        assertFalse(TransactionSynchronizationManager.isSynchronizationActive())
+-        call.callRealMethod()
+-      }
+-      .`when`(memberships)
+-      .findByMemberId(org.mockito.ArgumentMatchers.anyString())
+-  }
+-
+-  @AfterEach
+-  fun restore() {
+-    (repository as Advised).removeAdvice(databaseProbe)
+-    reset(memberships)
+-  }
+-
+-  @Test
+-  fun `HTTP 공급자로도 같은 유스케이스가 단일 소속과 빈 소속을 정렬해 반환한다`() {
+-    mvc.get("/api/members").andExpect {
+-      status { isOk() }
+-      jsonPath("$.page.totalElements") { value(5) }
+-      jsonPath("$.members[0].groups[0].id") { value("arutjf9348") }
+-      jsonPath("$.members[2].groups") { isEmpty() }
+-    }
+-    assertEquals(1, hits.get())
+-    assertEquals(5, received.single().size)
+-    mvc.get("/api/member/tu3fgxd45k").andExpect {
+-      status { isOk() }
+-      jsonPath("$.registeredDate") { value("2026-08-15 13:00") }
+-      jsonPath("$.groups[0].permission") { value("Editor") }
+-      header { string("Cache-Control", "no-store") }
+-    }
+-    assertEquals(2, hits.get())
+-    assertEquals(listOf("tu3fgxd45k"), received.last())
+-    assertEquals(2, observations.size)
+-    assertTrue(observations.all { it.first == Thread.currentThread().threadId() && !it.second })
+-    assertEquals(2, databaseObservations.size)
+-    assertTrue(
+-      databaseObservations.all {
+-        it.first == Thread.currentThread().threadId() && it.second && it.third
+-      }
+-    )
+-  }
+-
+-  @Test
+-  fun `실제 HTTP 오류는 공개 오류로 분류하고 다른 공급자로 대체하지 않는다`() {
+-    for ((remoteStatus, publicStatus, code) in
+-      listOf(
+-        Triple(503, 503, "GROUP_SERVICE_UNAVAILABLE"),
+-        Triple(403, 500, "INTERNAL_ERROR"),
+-        Triple(302, 500, "INTERNAL_ERROR"),
+-      )) {
+-      status.set(remoteStatus)
+-      hits.set(0)
+-      mvc.get("/api/member/tu3fgxd45k").andExpect {
+-        status { isEqualTo(publicStatus) }
+-        jsonPath("$.code") { value(code) }
+-        jsonPath("$.groups") { doesNotExist() }
+-      }
+-      assertEquals(1, hits.get())
+-    }
+-  }
+-
+-  companion object {
+-    private val hits = AtomicInteger()
+-    private val status = AtomicInteger(200)
+-    private val received = CopyOnWriteArrayList<List<String>>()
+-    private val executor = Executors.newCachedThreadPool()
+-    private val json = JsonMapper.builder().build()
+-    private val fixture =
+-      json.readTree(
+-        ClassPathResource("fixtures/local/group-memberships.json")
+-          .getContentAsString(Charsets.UTF_8)
+-      )
+-    private val server =
+-      HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+-        createContext("/api/") { exchange ->
+-          hits.incrementAndGet()
+-          val detail = exchange.requestURI.path.startsWith("/api/group/")
+-          val ids =
+-            if (detail) listOf(exchange.requestURI.path.substringAfterLast('/'))
+-            else
+-              exchange.requestURI.rawQuery.split("&").map {
+-                URLDecoder.decode(it.substringAfter("="), Charsets.UTF_8)
+-              }
+-          received += ids
+-          val payload =
+-            (if (detail)
+-                task.member.support.GroupMembershipSamples.detail(fixture.toString(), ids.single())
+-              else task.member.support.GroupMembershipSamples.summary(fixture.toString(), ids))
+-              .toByteArray()
+-          val responseStatus =
+-            if (
+-              exchange.requestHeaders.getFirst("X-Internal-Service-Key") ==
+-                TestProperties.internalKey
+-            )
+-              status.get()
+-            else 401
+-          exchange.responseHeaders.set("Content-Type", "application/json")
+-          exchange.responseHeaders.set("Location", "/unexpected")
+-          exchange.sendResponseHeaders(responseStatus, payload.size.toLong())
+-          exchange.responseBody.use { it.write(payload) }
+-          exchange.close()
+-        }
+-        this.executor = MemberQueryHttpIntegrationTests.executor
+-        start()
+-      }
+-
+-    @JvmStatic
+-    @AfterAll
+-    fun stop() {
+-      server.stop(0)
+-      executor.shutdownNow()
+-    }
+-
+-    @JvmStatic
+-    @DynamicPropertySource
+-    fun properties(registry: DynamicPropertyRegistry) {
+-      TestProperties.register(registry)
+-      registry.add("task.group-membership.source") { "http" }
+-      registry.add("task.group-client.base-url") { "http://127.0.0.1:${server.address.port}" }
+-      registry.add("spring.flyway.locations") {
+-        "classpath:db/migration/mariadb,classpath:db/test-migration,classpath:db/seed/local"
+-      }
+-    }
+-  }
+-}
++package task.member.presentation.query
++
++import com.sun.net.httpserver.HttpServer
++import java.net.InetSocketAddress
++import java.net.URLDecoder
++import java.util.concurrent.CopyOnWriteArrayList
++import java.util.concurrent.Executors
++import java.util.concurrent.atomic.AtomicInteger
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++import org.aopalliance.intercept.MethodInterceptor
++import org.junit.jupiter.api.AfterAll
++import org.junit.jupiter.api.AfterEach
++import org.junit.jupiter.api.BeforeEach
++import org.junit.jupiter.api.Test
++import org.mockito.Mockito.doAnswer
++import org.mockito.Mockito.reset
++import org.springframework.aop.framework.Advised
++import org.springframework.beans.factory.annotation.Autowired
++import org.springframework.boot.test.context.SpringBootTest
++import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
++import org.springframework.context.annotation.Import
++import org.springframework.core.io.ClassPathResource
++import org.springframework.test.context.DynamicPropertyRegistry
++import org.springframework.test.context.DynamicPropertySource
++import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
++import org.springframework.test.web.servlet.MockMvc
++import org.springframework.test.web.servlet.get
++import org.springframework.transaction.support.TransactionSynchronizationManager
++import task.member.application.port.output.GroupMembershipReader
++import task.member.infrastructure.persistence.member.MemberJpaRepository
++import task.member.support.TestProperties
++import task.member.support.TestcontainersConfiguration
++import tools.jackson.databind.json.JsonMapper
++
++/** 실제 HTTP 어댑터로 같은 공개 유스케이스를 실행한다. 실제 그룹 제공자 검증은 아니다(POL-TEST-008). */
++@SpringBootTest(properties = [TestProperties.NO_LOCAL_SECRETS])
++@AutoConfigureMockMvc
++@Import(TestcontainersConfiguration::class)
++class MemberQueryHttpIntegrationTests {
++  @Autowired lateinit var mvc: MockMvc
++  @Autowired lateinit var repository: MemberJpaRepository
++  @MockitoSpyBean lateinit var memberships: GroupMembershipReader
++  private val observations = mutableListOf<Pair<Long, Boolean>>()
++  private val databaseObservations = mutableListOf<Triple<Long, Boolean, Boolean>>()
++  private val databaseProbe = MethodInterceptor {
++    if (it.method.name in setOf("findSummaries", "findById")) {
++      databaseObservations +=
++        Triple(
++          Thread.currentThread().threadId(),
++          TransactionSynchronizationManager.isActualTransactionActive(),
++          TransactionSynchronizationManager.isCurrentTransactionReadOnly(),
++        )
++    }
++    it.proceed()
++  }
++
++  @BeforeEach
++  fun prepare() {
++    reset(memberships)
++    hits.set(0)
++    status.set(200)
++    received.clear()
++    observations.clear()
++    databaseObservations.clear()
++    (repository as Advised).addAdvice(0, databaseProbe)
++    doAnswer { call ->
++        observations +=
++          Thread.currentThread().threadId() to
++            TransactionSynchronizationManager.isActualTransactionActive()
++        assertFalse(TransactionSynchronizationManager.isSynchronizationActive())
++        call.callRealMethod()
++      }
++      .`when`(memberships)
++      .findByMemberIds(org.mockito.ArgumentMatchers.anyList())
++    doAnswer { call ->
++        observations +=
++          Thread.currentThread().threadId() to
++            TransactionSynchronizationManager.isActualTransactionActive()
++        assertFalse(TransactionSynchronizationManager.isSynchronizationActive())
++        call.callRealMethod()
++      }
++      .`when`(memberships)
++      .findByMemberId(org.mockito.ArgumentMatchers.anyString())
++  }
++
++  @AfterEach
++  fun restore() {
++    (repository as Advised).removeAdvice(databaseProbe)
++    reset(memberships)
++  }
++
++  @Test
++  fun `HTTP 공급자로도 같은 유스케이스가 단일 소속과 빈 소속을 정렬해 반환한다`() {
++    mvc.get("/api/members").andExpect {
++      status { isOk() }
++      jsonPath("$.page.totalElements") { value(5) }
++      jsonPath("$.members[0].group") { value("Test1") }
++      jsonPath("$.members[2].group") { value(org.hamcrest.Matchers.nullValue()) }
++    }
++    assertEquals(1, hits.get())
++    assertEquals(5, received.single().size)
++    mvc.get("/api/member/tu3fgxd45k").andExpect {
++      status { isOk() }
++      jsonPath("$.registeredDate") { value("2026-08-15 13:00") }
++      jsonPath("$.group.permission") { value("Editor") }
++      header { string("Cache-Control", "no-store") }
++    }
++    assertEquals(2, hits.get())
++    assertEquals(listOf("tu3fgxd45k"), received.last())
++    assertEquals(2, observations.size)
++    assertTrue(observations.all { it.first == Thread.currentThread().threadId() && !it.second })
++    assertEquals(2, databaseObservations.size)
++    assertTrue(
++      databaseObservations.all {
++        it.first == Thread.currentThread().threadId() && it.second && it.third
++      }
++    )
++  }
++
++  @Test
++  fun `실제 HTTP 오류는 공개 오류로 분류하고 다른 공급자로 대체하지 않는다`() {
++    for ((remoteStatus, publicStatus, code) in
++      listOf(
++        Triple(503, 503, "GROUP_SERVICE_UNAVAILABLE"),
++        Triple(403, 500, "INTERNAL_ERROR"),
++        Triple(302, 500, "INTERNAL_ERROR"),
++      )) {
++      status.set(remoteStatus)
++      hits.set(0)
++      mvc.get("/api/member/tu3fgxd45k").andExpect {
++        status { isEqualTo(publicStatus) }
++        jsonPath("$.code") { value(code) }
++        jsonPath("$.groups") { doesNotExist() }
++      }
++      assertEquals(1, hits.get())
++    }
++  }
++
++  companion object {
++    private val hits = AtomicInteger()
++    private val status = AtomicInteger(200)
++    private val received = CopyOnWriteArrayList<List<String>>()
++    private val executor = Executors.newCachedThreadPool()
++    private val json = JsonMapper.builder().build()
++    private val fixture =
++      json.readTree(
++        ClassPathResource("fixtures/local/group-memberships.json")
++          .getContentAsString(Charsets.UTF_8)
++      )
++    private val server =
++      HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
++        createContext("/api/") { exchange ->
++          hits.incrementAndGet()
++          val detail = exchange.requestURI.path.startsWith("/api/group/")
++          val ids =
++            if (detail) listOf(exchange.requestURI.path.substringAfterLast('/'))
++            else
++              exchange.requestURI.rawQuery.split("&").map {
++                URLDecoder.decode(it.substringAfter("="), Charsets.UTF_8)
++              }
++          received += ids
++          val payload =
++            (if (detail)
++                task.member.support.GroupMembershipSamples.detail(fixture.toString(), ids.single())
++              else task.member.support.GroupMembershipSamples.summary(fixture.toString(), ids))
++              .toByteArray()
++          val responseStatus =
++            if (
++              exchange.requestHeaders.getFirst("X-Internal-Service-Key") ==
++                TestProperties.internalKey
++            )
++              status.get()
++            else 401
++          exchange.responseHeaders.set("Content-Type", "application/json")
++          exchange.responseHeaders.set("Location", "/unexpected")
++          exchange.sendResponseHeaders(responseStatus, payload.size.toLong())
++          exchange.responseBody.use { it.write(payload) }
++          exchange.close()
++        }
++        this.executor = MemberQueryHttpIntegrationTests.executor
++        start()
++      }
++
++    @JvmStatic
++    @AfterAll
++    fun stop() {
++      server.stop(0)
++      executor.shutdownNow()
++    }
++
++    @JvmStatic
++    @DynamicPropertySource
++    fun properties(registry: DynamicPropertyRegistry) {
++      TestProperties.register(registry)
++      registry.add("task.group-membership.source") { "http" }
++      registry.add("task.group-client.base-url") { "http://127.0.0.1:${server.address.port}" }
++      registry.add("spring.flyway.locations") {
++        "classpath:db/migration/mariadb,classpath:db/test-migration,classpath:db/seed/local"
++      }
++    }
++  }
++}
