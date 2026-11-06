@@ -20,7 +20,7 @@
             "type": "command",
             "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/ai_logging/cli.py\" hook codex SessionStart",
             "commandWindows": "python -I -c \"import runpy,subprocess,sys;r=subprocess.run(['git','rev-parse','--show-toplevel'],capture_output=True,text=True).stdout.strip() or '.';sys.argv=['cli.py','hook','codex','SessionStart'];runpy.run_path(r+'/scripts/ai_logging/cli.py',run_name='__main__')\"",
-            "timeout": 120,
+            "timeout": 600,
             "statusMessage": "AI 세션 로그 등록"
           }
         ]
@@ -33,7 +33,7 @@
             "type": "command",
             "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/ai_logging/cli.py\" hook codex Stop",
             "commandWindows": "python -I -c \"import runpy,subprocess,sys;r=subprocess.run(['git','rev-parse','--show-toplevel'],capture_output=True,text=True).stdout.strip() or '.';sys.argv=['cli.py','hook','codex','Stop'];runpy.run_path(r+'/scripts/ai_logging/cli.py',run_name='__main__')\"",
-            "timeout": 120,
+            "timeout": 600,
             "statusMessage": "AI 세션 로그 동기화"
           }
         ]
