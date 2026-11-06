@@ -3,31 +3,35 @@
 | 항목 | 내용 |
 | --- | --- |
 | 분류 | 서비스 정의 |
-| 상태 | 현재 · 적용 예정 사항은 해당 절에서 구분 |
+| 상태 | 현재(0.5.0) |
 | 목적 | 현재 HTTP 경로와 적용 중인 업무 계약 소유 |
 | 범위 | 사용자 진입점 http://127.0.0.1:8081 |
-| 관련 코드 | presentation/query/, presentation/error/, infrastructure/configuration/, application.yaml |
+| 관련 코드 | presentation/query/, presentation/error/, infrastructure/security/, infrastructure/web/, infrastructure/configuration/, application.yaml |
 
 ## 현재 제공 경로
 
-| 방법·경로 | 호출 조건 | 응답 |
-| --- | --- | --- |
-| GET `/actuator/health` | 키 없음 | 상태 JSON |
-| GET `/actuator/health/liveness` | 키 없음 | 생존 상태 |
-| GET `/actuator/health/readiness` | 키 없음 | 자기 DB 포함 준비 상태 |
-| GET `/v3/api-docs` | 사용자 인증 없음 | 멤버 OpenAPI JSON |
-| GET `/swagger-ui.html`, `/swagger-ui/index.html` | 사용자 인증 없음 | 두 명세 선택 화면 |
-| GET `/internal-docs/group` | 사용자 인증 없음 | 서버 키로 받은 그룹 명세. 실행 주소는 멤버 중계, no-store |
-| GET `/api/members` | 사용자 인증 없음 | 멤버 요약 페이지 + 단일 소속 |
-| GET `/api/member/{id}` | 사용자 인증 없음 | 기본 정보·감사 정보 + 소속. no-store |
+모든 경로는 GET만 제공한다. HEAD·OPTIONS·POST·PUT·PATCH·DELETE·TRACE는 인증·핸들러보다 먼저 405 `METHOD_NOT_ALLOWED`와 `Allow: GET`으로 거부한다([POL-API-008](../../../docs/common/api-conventions.md#pol-api-008)).
 
-그룹 명세 전달은 모든 프로필에 제공한다. 내부 서버 주소·브라우저 인증 요구를 제거하고 공개 업무 명세에서는 전달 컨트롤러를 제외한다. 그룹 연결 실패·시간 초과·5xx는 503 GROUP_SERVICE_UNAVAILABLE, 내부 키 거부·명세 계약 오류는 500 INTERNAL_ERROR다.
+| 경로 | 호출 조건 | 응답 |
+| --- | --- | --- |
+| `/actuator/health`, `/actuator/health/liveness`, `/actuator/health/readiness` | 인증 없음 | 상태 JSON(준비 상태는 자기 DB 포함) |
+| `/v3/api-docs` | 인증 없음 | 멤버 OpenAPI JSON(데이터 없음) |
+| `/swagger-ui.html`, `/swagger-ui/index.html`, `/swagger-ui/swagger-initializer.js` | 인증 없음 | Swagger 화면. local 프로필은 초기화 스크립트에 짧은 만료 토큰을 넣는다(no-store) |
+| `/.well-known/oauth-protected-resource` | 인증 없음 | RFC 9728 보호 자원 메타데이터(자원 이름·scope·Bearer 헤더 방식) |
+| `/api/members` | JWT, scope `member.read` | 멤버 요약 페이지 + 단일 소속 |
+| `/api/member/{memberId}` | JWT, scope `member.read` | 기본 정보 + 소속. no-store |
+| `/internal-docs/group` | 인증 없음, `task.group-proxy.enabled=true`일 때만 등록 | 서버 키로 받은 그룹 명세. 실행 주소는 멤버 중계, no-store |
+| `/internal-api/group/api/groups/summary`, `/internal-api/group/api/group/{memberId}` | JWT, scope `group.read`, `task.group-proxy.enabled=true`일 때만 등록 | 그룹 조회 실행 중계. no-store |
+
+- 인증은 RS256 JWT Bearer다. 발급자·대상·만료·사용 시작·subject를 검증하고 경로별 scope를 요구한다([POL-SEC-001](../../../docs/common/security.md#pol-sec-001)). 토큰이 없거나 검증에 실패하면 401 `UNAUTHORIZED`, scope가 모자라면 403 `FORBIDDEN`이다. 두 응답 모두 RFC 6750 `WWW-Authenticate: Bearer ...` 헤더를 보낸다.
+- 그룹 중계와 그룹 명세 전달은 local 프로필만 켠다(기본 `false`). 다른 프로필에서는 경로가 없으므로 404다([POL-SEC-006](../../../docs/common/security.md#pol-sec-006)).
+- 업무·중계 경로는 인증된 subject별 토큰 버킷(기본 용량 100, 초당 50 보충)으로 제한한다. 초과하면 429 `TOO_MANY_REQUESTS`와 `Retry-After`(초)를 보낸다. 서버 한 대 메모리 기준이며 분산 제한은 앞단 게이트웨이 책임이다([POL-SEC-007](../../../docs/common/security.md#pol-sec-007)).
 
 <a id="member-001-공개-계약"></a>
 
-## 공개 계약 (GROUP-001 개정, 0.2.0)
+## 공개 계약 (REVIEW-002 개정, 0.5.0)
 
-현재 0.2.0 계약은 GROUP-001에서 적용했다. 실제 제공자 연동과 Swagger 실행 결과는 [GROUP-001 검증](../../../docs/verification/GROUP-001/group-query-verification.md)에 있다. [MEMBER-001 검증](../../../docs/verification/MEMBER-001/stage-3.md)은 당시 계약의 증거다. 공통 규칙은 [API 정책](../../../docs/common/api-conventions.md)을 따른다. REVIEW-002의 응답 변경 제안은 [개정안](api-review.md)에서 승인 상태와 함께 관리하며, 아래 예제는 현재 코드의 응답이다.
+현재 0.5.0 계약은 0.3.0의 단일 `group`·감사 필드 제외, 0.4.0의 JWT 인증·GET 전용·오류 코드표·400/422 구분에 이어 페이지 번호를 1부터 시작하고 미디어 타입을 application/json으로 통일한다. `page` 객체는 유지한다. 공통 규칙은 [API 정책](../../../docs/common/api-conventions.md), 승인 표와 변경 이유는 [개정 기록](api-review.md), 실행 결과는 [REVIEW-002 검증](../../../docs/verification/REVIEW-002/verification.md)에 있다. 아래 예제는 현재 코드의 응답이며 계약 테스트가 OpenAPI 스키마로 검사한다.
 
 ### GET /api/members
 
@@ -35,18 +39,18 @@ operationId는 `getMemberSummaries`, 응답 스키마는 `MemberSummaryPageRespo
 
 | 파라미터 | 값이 없을 때 | 허용 범위·표현 |
 | --- | --- | --- |
-| `page` | 0 | ASCII 숫자만, 0~2147483647 |
+| `page` | 1 | ASCII 숫자만, 1~2147483647. 0은 422 |
 | `size` | 20 | ASCII 숫자만, 1~2147483647. 범위 검증 후 `min(size, 100)` 적용 |
 | `sort` | `name,asc` | 정확히 `name,asc` 또는 `name,desc` |
 
-- `page`·`size`·`sort`는 각각 최대 한 번이다. 같은 값이어도 반복 전달하면 400 `VALIDATION_FAILED`로 거부한다. 임의로 첫 값 선택·중복 제거하지 않는다.
-- 빈 값, 공백(앞뒤 공백 포함), 부호, 음수, 소수, 숫자 외 문자, 정수 범위 초과는 400이다. 생략과 빈 값은 다르다. 선행 0은 숫자로 파싱한다.
-- `page.toLong() * effectiveSize.toLong() <= 2147483647`을 DB 호출 전에 검증한다. 예: `page=21474837&size=100`은 400이다. 허용 범위 안에서 마지막 페이지를 넘으면 200과 빈 `members`다.
-- 원시 파라미터의 개수를 먼저 확인하고 DTO로 변환·검증한다. 자동 `Pageable` 바인딩의 값 보정에 의존하지 않는다. 기존 `spring.data.web.pageable` 설정 블록은 유지한다.
-- 이름은 DB `utf8mb4_unicode_ci` 기준으로 정렬하며 내부 보조 정렬은 항상 `id ASC`다. `desc`에서도 ID는 ASC다. 고정 데이터에서 순서가 결정적이며, 서로 다른 요청 사이 데이터 변경까지 막는 스냅샷 보장은 하지 않는다.
-- `totalElements`는 멤버 수다. 단일 소속으로 멤버 행·건수를 늘리지 않는다. `page.size`는 적용된 크기, `page.number`는 요청 페이지다. 전체 0건이면 `totalPages=0`이다.
+- 형식 위반은 400 `INVALID_PARAMETER`다: 반복 전달(같은 값 포함), 빈 값, 공백(앞뒤 공백 포함), 부호, 음수, 소수, 숫자 외 문자, int32 범위 초과, 빈 `sort`. 생략과 빈 값은 다르다. 선행 0은 숫자로 파싱한다. 첫 값 선택·중복 제거로 보정하지 않는다.
+- 형식은 맞지만 처리할 수 없는 값은 422 `VALIDATION_FAILED`다: `page=0`, `size=0`, `(page - 1) × 적용 size > 2147483647`(예: `page=21474838&size=100`), 허용하지 않는 정렬(`name`, `id,asc`, `name,ASC`, `name,asc ` 등).
+- 두 검사 모두 DB·그룹 호출 전에 끝난다. 허용 범위 안에서 마지막 페이지를 넘으면 200과 빈 `members`다.
+- 원시 파라미터의 개수를 먼저 확인하고 DTO로 변환·검증한다. 자동 `Pageable` 바인딩의 값 보정에 의존하지 않는다.
+- 이름은 DB `utf8mb4_unicode_ci` 기준으로 정렬하며 내부 보조 정렬은 항상 `id ASC`다. `desc`에서도 ID는 ASC다. 서로 다른 요청 사이 데이터 변경까지 막는 스냅샷 보장은 하지 않는다.
+- `page`는 클라이언트가 다음 요청을 만들 수 있도록 응답에 포함한다(사용자 결정). `page.size`는 적용된 크기, `page.number`는 1부터 시작하는 요청 페이지, `totalElements`는 멤버 수다. 전체 0건이면 `totalPages=0`이며 기본 요청의 `page.number`는 1이다. 내부 저장소의 0 기반 계산은 응답에 노출하지 않는다.
 
-요청 예: `/api/members?page=0&size=20&sort=name,asc`.
+요청 예: `/api/members?page=1&size=20&sort=name,asc` (헤더 `Authorization: Bearer <토큰>`).
 
 ```json
 {
@@ -54,34 +58,30 @@ operationId는 `getMemberSummaries`, 응답 스키마는 `MemberSummaryPageRespo
     {
       "id": "tu3fgxd45k",
       "name": "user1",
-      "groups": [
-        {
-          "id": "arutjf9348",
-          "name": "개발팀",
-          "permission": "Editor"
-        }
-      ]
+      "group": "개발팀",
+      "permission": "Editor"
     },
     {
       "id": "k2m9x0p1q3",
       "name": "user3",
-      "groups": []
+      "group": null,
+      "permission": null
     }
   ],
   "page": {
     "size": 20,
-    "number": 0,
+    "number": 1,
     "totalElements": 2,
     "totalPages": 1
   }
 }
 ```
 
-위 예시는 2명만 있는 데이터셋이며 전체 local 시드 목록의 복사본이 아니다. `members`, `page`, 항목의 `id`, `name`, `groups`, 각 그룹의 세 필드는 필수·비null이다. `permission`은 안정적인 코드 문자열이다. 표시명은 응답에 포함하지 않는다. 목록에는 과금 정보·소속 시각·감사 정보를 요구하거나 노출하지 않는다.
+위 예시는 2명만 있는 데이터셋이며 local 시드 목록의 복사본이 아니다. `members`와 `page`는 필수·비null이다. 항목의 필수 키는 id/name/group/permission이며 group은 그룹명이다. 미소속이면 group과 permission은 함께 null이다. `permission`은 안정적인 코드 문자열이며 표시명은 응답에 포함하지 않는다. 목록에는 과금 정보·소속 시각·감사 정보를 노출하지 않는다.
 
-### GET /api/member/{id}
+### GET /api/member/{memberId}
 
-operationId는 `getMemberDetail`, 스키마는 `MemberDetailResponse`다. 요청한 단수 경로를 유지한다. `id`는 `^[a-z0-9]{10}$`이며 형식 오류는 400, 멤버 없음은 404다. 두 경우 그룹 공급자를 호출하지 않는다. 성공은 200이며 `Cache-Control: no-store`를 사용한다.
+operationId는 `getMemberDetail`, 스키마는 `MemberDetailResponse`다. 요청한 단수 경로를 유지한다. `memberId`는 `^[a-z0-9]{10}$`이며 형식 오류는 400 `INVALID_PARAMETER`, 멤버 없음은 404 `RESOURCE_NOT_FOUND`(type `urn:problem-type:member-not-found`)다. 두 경우 그룹 공급자를 호출하지 않는다. 성공은 200이며 `Cache-Control: no-store`를 사용한다.
 
 ```json
 {
@@ -90,56 +90,100 @@ operationId는 `getMemberDetail`, 스키마는 `MemberDetailResponse`다. 요청
   "email": "user1@example.invalid",
   "address": "가상 주소 1",
   "registeredDate": "2026-08-15 13:00",
-  "createdAt": "2026-08-15 13:00",
-  "createdBy": "seed",
-  "groups": [
-    {
-      "id": "arutjf9348",
-      "name": "개발팀",
-      "permission": "Editor",
-      "joinedAt": "2026-08-15 13:00",
-      "pricing": "Premium"
-    }
-  ]
+  "group": {
+    "id": "arutjf9348",
+    "name": "개발팀",
+    "permission": "Editor",
+    "pricing": "Premium",
+    "registeredDate": "2026-08-15 13:00"
+  }
 }
 ```
 
-- `registeredDate`는 멤버 가입 시각, `createdAt`은 행 생성 시각, `createdBy`는 생성 주체다. 원래 기본 정보 요구를 충족하도록 상세에 포함한다. 가입 시각을 그룹 소속 시각으로 재사용하지 않는다.
-- 멤버 기본 필드와 `groups`는 필수·비null이다. 그룹 핵심 세 필드는 목록과 동일하다. 상세의 `joinedAt`·`pricing` 키는 항상 있고 값은 null 가능하다. null은 선택 정보를 알 수 없음을 뜻하며 미소속은 `groups: []`다.
+- 최상위 registeredDate는 멤버 가입일, group.registeredDate는 그룹 가입일이다. 두 값은 각자의 원본 시각에서 따로 변환한다(local 시드 `dj8fy4bewk`: 멤버 `2026-08-16 13:00`, 그룹 `2026-08-16 00:30`). DB 감사 정보 createdAt·createdBy는 공개하지 않는다.
+- 상세는 id/name/email/address/registeredDate/group 여섯 키만 반환한다. 미소속은 group:null이다. 소속 객체는 id/name/registeredDate/pricing/permission이며 선택 정보 registeredDate·pricing의 null 허용은 유지한다.
 - 업무 시각은 Asia/Seoul 기준 yyyy-MM-dd HH:mm 문자열이다. DB의 TIMESTAMP(6) 정밀도는 유지하고 응답에서만 초 이하를 생략한다. OpenAPI에 date-time 형식을 붙이지 않는다.
-- `pricing`은 요청서의 상세 과금 표시 요구를 유지하는 선택 정보다. 없어도 목록·상세 조회는 성공한다. 빈 문자열은 알려진 값이 아니므로 어댑터에서 null로 정규화한다. 알려지지 않은 비어 있지 않은 코드는 그대로 수용한다.
-- 목록 `GroupMembershipSummaryResponse`와 상세 `GroupMembershipDetailResponse`는 공통 핵심 필드의 이름·타입·의미를 맞춘다. DTO 상속이나 공유 서비스 모듈을 요구하지 않는다. 내부 `MembershipView`를 각 용도에 투영한다.
-- 권한·과금의 코드값은 OpenAPI에서 문자열로 표현하며 닫힌 enum으로 고정하지 않는다. 코드명·설명은 분기 기준이 아니다. 권한 자체의 정의·상태·설명은 그룹 정책이 소유한다.
+- `pricing`은 선택 정보다. 없어도 목록·상세 조회는 성공한다. 빈 문자열은 어댑터에서 null로 정규화한다. 알려지지 않은 비어 있지 않은 코드는 그대로 수용한다.
+- 권한·과금의 코드값은 OpenAPI에서 문자열로 표현하며 닫힌 enum으로 고정하지 않는다. 코드명·설명은 분기 기준이 아니다. 권한 자체의 정의는 그룹 정책이 소유한다.
 
-### 오류와 공급자별 의미
+### 오류 응답
 
-| 상황 | 응답 |
-| --- | --- |
-| 입력 형식·반복·정수 범위·offset·정렬 위반 | 400 `VALIDATION_FAILED` |
-| 상세 멤버 없음 | 404 `NOT_FOUND` |
-| HTTP 연결 실패·시간 초과·그룹 5xx | 503 `GROUP_SERVICE_UNAVAILABLE` |
-| 상세 미소속 전용 404를 제외한 그룹 4xx·리다이렉트·잘못된 JSON·필수 계약 위반 | 500 `INTERNAL_ERROR` |
-| fixture에 요청 ID가 누락되거나 fixture가 손상됨 | 500 `INTERNAL_ERROR` (시작 시 가능한 오류는 기동 실패) |
+오류는 RFC 9457 ProblemDetail 여섯 필드(`type`, `title`, `status`, `detail`, `instance`, `code`)다. `code`는 [공통 코드표](../../../docs/common/api-conventions.md#pol-api-002)의 값 하나이며, 같은 상태 안에서 구분이 필요한 원인만 `type`에 고정 URN을 쓴다. 구분이 없으면 `type`은 `about:blank`다. OpenAPI에는 각 상태의 ProblemDetail 예제와 `code` 허용 값이 있다.
 
-문법이 올바른 공개 파라미터라도 DB 조회 범위를 벗어나면 400이다. 다른 기존 API의 일반 `BAD_REQUEST` 매핑까지 일괄 변경하지 않는다. 멤버용 요청 검증 예외/바인딩 처리로 `VALIDATION_FAILED`를 보장하고 회귀 테스트를 유지한다.
+| 상황 | 상태·code | type |
+| --- | --- | --- |
+| 입력 형식·반복·ID 형식 위반 | 400 `INVALID_PARAMETER` | `about:blank` |
+| 토큰 없음·서명·발급자·대상·만료·subject 위반 | 401 `UNAUTHORIZED` | `about:blank` |
+| scope 부족 | 403 `FORBIDDEN` | `about:blank` |
+| 상세 멤버 없음 | 404 `RESOURCE_NOT_FOUND` | `urn:problem-type:member-not-found` |
+| 없는 경로 | 404 `RESOURCE_NOT_FOUND` | `about:blank` |
+| GET 외 메서드 | 405 `METHOD_NOT_ALLOWED` | `about:blank` |
+| 지원하지 않는 `Accept` | 406 `NOT_ACCEPTABLE` | `about:blank` |
+| page 0·size 0·offset 초과·허용하지 않는 정렬 | 422 `VALIDATION_FAILED` | `about:blank` |
+| 호출 수 제한 초과 | 429 `TOO_MANY_REQUESTS` + `Retry-After` | `about:blank` |
+| 상세 미소속 전용 404를 제외한 그룹 4xx·리다이렉트·잘못된 JSON·필수 계약 위반, fixture 누락·손상 | 500 `INTERNAL_SERVER_ERROR` | `about:blank` |
+| 그룹 연결 실패·시간 초과·그룹 5xx | 503 `SERVICE_UNAVAILABLE` | `urn:problem-type:group-service-unavailable` |
+
+406 `NOT_ACCEPTABLE`은 사용자가 준 코드표에 없던 상태를 같은 규칙으로 추가한 값이다. 409·415는 GET 전용 조회 API에서 발생하지 않으므로 코드표에만 있고 이 API의 OpenAPI 응답에는 선언하지 않는다.
 
 ```json
 {
   "type": "about:blank",
-  "title": "입력값 검증 실패",
-  "status": 400,
-  "detail": "요청 값이 허용된 조건을 충족하지 않습니다.",
+  "title": "처리할 수 없는 요청 값",
+  "status": 422,
+  "detail": "요청 데이터의 형식은 유효하지만 의미상 처리할 수 없습니다.",
   "instance": "/api/members",
   "code": "VALIDATION_FAILED"
 }
 ```
 
-404·500·503도 ProblemDetail + `code`이며 각 코드의 고정 문구를 따른다. 네 오류의 OpenAPI 예시는 코드에 반영했다. 실제 응답의 상태·코드 검사는 수행했으며, 공유 OpenAPI와 실제 200·400·404·500·503 응답의 스키마·예제를 검증했다. 멤버 오류 응답은 필수 `type`을 `about:blank`로 명시한다. 공유 파일과 갱신 방법은 [계약 공유](contracts.md)를 따른다. 그룹 주소·본문·키·이메일·주소를 오류에 포함하지 않는다. 장애를 빈 그룹 배열로 바꾸지 않는다.
+그룹 주소·본문·키·토큰·이메일·주소를 오류에 포함하지 않는다. 그룹 장애를 미소속 null로 바꾸지 않는다. 공유 파일과 갱신 방법은 [계약 공유](contracts.md)를 따른다.
 
-local fixture 모드의 성공은 실제 그룹 연동 성공을 뜻하지 않는다. 외부 공개 DTO에 개발용 모드 플래그를 추가하지 않고 실행 모드·검증 기록으로 구분한다. HTTP 모드는 [통신 정책](../../../docs/common/service-communication.md)의 지수 백오프·Full Jitter를 따르며 전체 API의 최대 지연을 고정 수치로 약속하지 않는다.
-
-GROUP-001 변경: 그룹 상세의 404 GROUP_MEMBERSHIP_NOT_FOUND만 빈 groups로 변환한다. 그룹 500(다건 포함)은 멤버 503이다. groups 배열 형태는 유지하며 현재 멤버당 최대 한 소속이다. permissionName 삭제와 시각 형식 변경은 소비자 계약 변경이므로 0.2.0으로 공유한다.
+local fixture 모드의 성공은 실제 그룹 연동 성공을 뜻하지 않는다. HTTP 모드는 [통신 정책](../../../docs/common/service-communication.md)의 지수 백오프·Full Jitter를 따르며 전체 API의 최대 지연을 고정 수치로 약속하지 않는다.
 
 ## 그룹 Swagger 실행 중계
 
-GET /internal-api/group/api/groups/summary 및 GET /internal-api/group/api/group/{memberId}는 그룹 조회를 실행하는 기술 중계다. 입력/응답 계약은 [그룹 API](../../group-service/docs/api.md)가 소유한다. 멤버 업무 명세에서는 숨기며 /internal-docs/group의 servers로 제공한다. 그룹 상태와 표준 오류 본문을 보존하고 키/내부 헤더는 전달하지 않는다. 서버 간 통신 장애는 503 GROUP_SERVICE_UNAVAILABLE, 잘못된 upstream 응답은 500이다. 모든 응답은 no-store다.
+`/internal-api/group/api/groups/summary`와 `/internal-api/group/api/group/{memberId}`는 local에서 Swagger로 그룹 조회를 실행하는 기술 중계다. 입력·응답 계약은 [그룹 API](../../group-service/docs/api.md)가 소유한다. 멤버 업무 명세에서는 숨기며 `/internal-docs/group`의 servers로 제공한다. 전달 명세에는 내부 키 대신 `bearerAuth`(scope `group.read`)를 표시한다.
+
+| 그룹 응답·상황 | 중계 응답 |
+| --- | --- |
+| 200 | 정의된 필드만 선별해 200 |
+| 4xx(400·403·404·422 등) | 정의된 ProblemDetail 필드만 보존해 같은 상태 |
+| 500 등 그 밖의 상태, 리다이렉트 | 502 `BAD_GATEWAY`, type `urn:problem-type:group-upstream-failure` |
+| 잘못된 JSON | 502 `BAD_GATEWAY`, type `urn:problem-type:group-response-invalid-json` |
+| 규격 위반 | 502 `BAD_GATEWAY`, type `urn:problem-type:group-response-contract-violation` |
+| 매체 유형 오류 | 502 `BAD_GATEWAY`, type `urn:problem-type:group-response-unsupported-media-type` |
+| 크기 초과(중계 1MiB, 명세 2MiB) | 502 `BAD_GATEWAY`, type `urn:problem-type:group-response-too-large` |
+| 연결 불가·그룹 503 | 503 `SERVICE_UNAVAILABLE`, type `urn:problem-type:group-service-unavailable` |
+| 응답 시간 초과·그룹 504 | 504 `GATEWAY_TIMEOUT`, type `urn:problem-type:group-service-timeout` |
+
+업무 API는 그룹 시간 초과를 503으로 알리고(사용자에게 "그룹 정보를 지금 조회할 수 없음"), 중계는 게이트웨이 의미를 그대로 드러내기 위해 504로 구분한다. 500 `INTERNAL_SERVER_ERROR`는 멤버 자체 처리 오류에만 사용한다. 모든 중계 응답은 no-store다.
+
+## 공통 오류 계약과 상태 코드
+
+성공·오류 API 응답은 모두 `application/json`이다. 오류는 type/title/status/detail/instance/code 여섯 필드만 반환한다. 같은 HTTP 상태에는 두 서비스가 아래와 같은 code·의미를 사용하며, 업무 원인은 type URN으로 구분한다. 상태 코드는 HTTP 응답과 본문의 status가 일치해야 한다. 이 표는 공통 정의이며 각 API에서 실제 발생하는 상태는 다음 적용 표를 따른다.
+
+| HTTP | 공통 code | 의미 |
+| --- | --- | --- |
+| 400 | `INVALID_PARAMETER` | 잘못된 요청 |
+| 401 | `UNAUTHORIZED` | 인증 실패 |
+| 403 | `FORBIDDEN` | 접근 권한 없음 |
+| 404 | `RESOURCE_NOT_FOUND` | 리소스 없음 |
+| 405 | `METHOD_NOT_ALLOWED` | 지원하지 않는 Method |
+| 406 | `NOT_ACCEPTABLE` | 지원하지 않는 응답 형식 |
+| 409 | `RESOURCE_CONFLICT` | 리소스 충돌 |
+| 415 | `UNSUPPORTED_MEDIA_TYPE` | 지원하지 않는 미디어 타입 |
+| 422 | `VALIDATION_FAILED` | 처리할 수 없는 요청 값 |
+| 429 | `TOO_MANY_REQUESTS` | 요청 횟수 제한 초과 |
+| 500 | `INTERNAL_SERVER_ERROR` | 서버 내부 오류 |
+| 502 | `BAD_GATEWAY` | 게이트웨이 응답 오류 |
+| 503 | `SERVICE_UNAVAILABLE` | 서비스 이용 불가 |
+| 504 | `GATEWAY_TIMEOUT` | 게이트웨이 응답 시간 초과 |
+
+| API | 성공 | 발생 가능한 오류 |
+| --- | --- | --- |
+| GET /api/members | 200 | 400, 401, 403, 405, 406, 422, 429, 500, 503 |
+| GET /api/member/{memberId} | 200 | 400, 401, 403, 404, 405, 406, 429, 500, 503 |
+| local 그룹 실행 중계 | 200 | JWT 401/403, 원본 그룹 4xx, 메서드 405, 제한 429, 자체 500, 원격 502/503/504 |
+
+401·403은 사용자 JWT와 scope 검사이며 WWW-Authenticate를 유지한다. 429는 Retry-After를 포함한다. GET 전용이므로 409·415는 공통 예약 코드이며 발생하지 않는 동작을 명세에 추가하지 않는다.

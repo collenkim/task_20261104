@@ -62,10 +62,10 @@ delay(n) = UniformInteger(0, upper(n) 밀리초)
 
 ## POL-COMM-004 인증과 실패 처리
 
-- `X-Internal-Service-Id: member-service`와 해당 호출자의 `X-Internal-Service-Key`를 서버 설정값으로 추가한다([보안](security.md#pol-sec-003-내부-호출-키)). 사용자 인증은 없다.
-- 명세 조회 연결 실패·시간 초과·그룹 5xx: 503 `GROUP_SERVICE_UNAVAILABLE`.
-- 그룹의 401·403, 리다이렉트·잘못된 명세·명세 404: 호출 설정/계약 오류이므로 500 `INTERNAL_ERROR`.
-- 상세의 404 + GROUP_MEMBERSHIP_NOT_FOUND + ProblemDetail status=404만 미소속이다. 다른 4xx·리다이렉트·계약 오류는 멤버 500이다. 그룹 500(다건 포함)·503은 멤버 503이다.
+- `X-Internal-Service-Id: member-service`와 해당 호출자의 `X-Internal-Service-Key`를 서버 설정값으로 추가한다([보안](security.md#pol-sec-003-내부-호출-키)). 사용자 JWT는 멤버에서 검증하고 그룹에 전달하지 않는다.
+- 멤버 업무 조회에서 그룹 연결 실패·시간 초과·5xx(다건 500 포함)는 503 `SERVICE_UNAVAILABLE`(type `urn:problem-type:group-service-unavailable`)이다.
+- 멤버 업무 조회에서 그룹 401·403·리다이렉트·계약 위반은 500 `INTERNAL_SERVER_ERROR`다. Swagger API/명세 중계는 별도 경계이며 원격 문제를 502/503/504로 구분한다([중계 오류](api-conventions.md#그룹-api-실행-중계)).
+- 상세의 404 중 `code=RESOURCE_NOT_FOUND`, `type=urn:problem-type:group-membership-not-found`, `status=404`가 모두 맞는 응답만 미소속이다. 경로 404(type `about:blank`)와 다른 4xx·리다이렉트·계약 오류는 멤버 500이다.
 - 실패를 빈 결과로 숨기지 않는다. 사용자 응답은 공통 ProblemDetail이며 내부 응답·주소·키를 공개하지 않는다.
 
 ## POL-COMM-005 계약 소유
@@ -73,6 +73,7 @@ delay(n) = UniformInteger(0, upper(n) 밀리초)
 그룹 내부 계약은 `services/group-service/docs/api.md`가 소유한다. 멤버는 자기 코드의 모델로 읽는다. 제공자 OpenAPI와 소비자 HTTP 테스트를 별도 검증하고 실제 제공자 연동을 Compose에서 검사한다.
 
 - 목록은 /api/groups/summary를 페이지당 1회 호출한다. 1명 페이지도 summary다. sparse 응답에 없는 요청 ID만 미소속으로 변환한다.
+- 원격 업무 응답은 1MiB까지만 읽고 초과하면 업무 계약 오류(500 `INTERNAL_SERVER_ERROR`)로 처리한다. Swagger 실행 중계는 1MiB, 명세 중계는 2MiB이며 초과 시 502 `BAD_GATEWAY`(type `urn:problem-type:group-response-too-large`)다. 세 경계 모두 초과 본문을 끝까지 읽거나 재시도하지 않는다.
 - 상세는 /api/group/{memberId}를 1회 호출한다. 6개 필드에서 구성하며 추가 이름 조회는 없다.
 - 중복 그룹·멤버 중복 소속·요청 밖 ID·잘못된 타입·필수값 누락은 계약 오류다. 비어 있지 않은 새 code와 추가 필드는 수용한다.
 

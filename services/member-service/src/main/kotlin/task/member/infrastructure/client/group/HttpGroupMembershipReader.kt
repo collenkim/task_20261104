@@ -42,19 +42,18 @@ class HttpGroupMembershipReader(
 
   private fun read(request: RestClient.RequestHeadersSpec<*>, allowMissing: Boolean): Payload =
     try {
-      request.accept(MediaType.APPLICATION_JSON, MediaType.APPLICATION_PROBLEM_JSON).exchange {
-        _,
-        response ->
+      request.accept(MediaType.APPLICATION_JSON).exchange { _, response ->
         val status = response.statusCode.value()
         if (response.statusCode.is5xxServerError) throw GroupServiceUnavailableException()
         if (status != 200 && !(allowMissing && status == 404))
           throw GroupServiceConfigurationException()
-        val media =
-          if (status == 404) MediaType.APPLICATION_PROBLEM_JSON else MediaType.APPLICATION_JSON
+        val media = MediaType.APPLICATION_JSON
         val contentType = response.headers.contentType
         if (contentType == null || !media.isCompatibleWith(contentType))
           throw GroupServiceConfigurationException()
-        Payload(status, response.body.readAllBytes())
+        val bytes = response.body.readNBytes(MAX_RESPONSE_BYTES + 1)
+        if (bytes.size > MAX_RESPONSE_BYTES) throw GroupServiceConfigurationException()
+        Payload(status, bytes)
       }
     } catch (_: ResourceAccessException) {
       throw GroupServiceUnavailableException()
@@ -67,4 +66,8 @@ class HttpGroupMembershipReader(
     }
 
   private data class Payload(val status: Int, val body: ByteArray)
+
+  private companion object {
+    const val MAX_RESPONSE_BYTES = 1024 * 1024
+  }
 }

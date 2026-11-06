@@ -43,6 +43,7 @@ class GroupClientConfiguration {
       ExponentialRetryBackoff(properties.retryBaseDelay, properties.retryMaxDelay),
       jitter,
       sleeper,
+      properties.readTimeout,
     )
 
   @Bean

@@ -1,7 +1,6 @@
 package task.group.infrastructure.persistence.group
 
 import jakarta.persistence.EntityManager
-import jakarta.persistence.Tuple
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Repository
 import org.springframework.transaction.annotation.Isolation
@@ -11,7 +10,7 @@ import task.group.application.model.GroupReadSnapshot
 import task.group.application.port.output.GroupSummaryReader
 import task.group.application.port.output.MemberGroupReader
 
-/** 두 조회를 같은 일관 읽기 스냅샷에서 수행한다(POL-GROUP-002). */
+/** 요청 ID의 소속만 한 번 조회한다. 인원은 반환할 행에서 계산한다(POL-GROUP-002). */
 @Repository
 class JpaGroupReader(private val entityManager: EntityManager) :
   GroupSummaryReader, MemberGroupReader {
@@ -26,26 +25,12 @@ class JpaGroupReader(private val entityManager: EntityManager) :
         .createQuery(SELECT + " where m.memberId in :ids", GroupMembershipRecord::class.java)
         .setParameter("ids", memberIds)
         .resultList
-    val counts =
-      if (rows.isEmpty()) emptyMap()
-      else
-        entityManager
-          .createQuery(
-            "select m.groupId as groupId, count(m) as total from GroupMembershipEntity m where m.groupId in :ids group by m.groupId",
-            Tuple::class.java,
-          )
-          .setParameter("ids", rows.map { it.groupId }.distinct())
-          .resultList
-          .associate {
-            it.get("groupId", String::class.java) to
-              it.get("total", Long::class.javaObjectType).toLong()
-          }
     log.info(
       "event=query.completed queryName=group.summary rows={} durationMs={}",
       rows.size,
       (System.nanoTime() - start) / 1_000_000,
     )
-    return GroupReadSnapshot(rows, counts)
+    return GroupReadSnapshot(rows)
   }
 
   @Transactional(readOnly = true)

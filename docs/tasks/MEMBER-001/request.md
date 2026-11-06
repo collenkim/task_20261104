@@ -8,13 +8,15 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 목적 | 멤버 조회 API를 다중 소속·교체 가능한 공급자·엄격한 계약으로 선행 구현한다 |
+| 목적 | 멤버 조회 API를 단일 소속·교체 가능한 공급자·엄격한 계약으로 선행 구현한다 |
 | 당시 상태 | 2026-11-05 확정 요청. 구현·완료 상태는 통합 계획과 단계별 검증 기록이 관리하며 이 문서는 요구사항 기준 |
 | 범위 | 멤버 서비스 코드·공통 정책/검증 문서. 그룹은 계약 문서만 변경 가능 |
-| 정본 | 저장소의 이 파일. 이전 Temp 단일 소속 요청서를 대체 |
+| 당시 작업 기준 | 저장소의 이 파일. 이전 Temp 요청서를 대체 |
 | 전체 계획 | [member-query-plan](plan.md) |
 
-> 후속 변경: 그룹 제공자·단일 소속·시각·permissionName 제거·Swagger 중계는 [GROUP-001 요청서](../GROUP-001/request.md)가 대체한다. 아래는 MEMBER-001 당시 요구를 보존한다.
+> 현재 계약은 [멤버 API](../../../services/member-service/docs/api.md)와 [그룹 API](../../../services/group-service/docs/api.md)가 소유한다. 소속은 멤버당 0~1개다. 시각·permissionName·감사 필드·그룹 제공자·Swagger 중계의 후속 변경은 위 두 문서를 따른다. 아래는 MEMBER-001 당시 요구다.
+
+> **REVIEW-002 재검토:** 아래 2~4절의 감사 필드·UTC RFC 3339·임시 그룹 경로·fixture 선행 개발은 후속 계약으로 대체되었다. 현재는 `members`+`page`(번호 1 시작), 단일 `group`, 감사 필드/표시명 미노출, Asia/Seoul 분 단위 문자열, 실제 그룹 `/api/groups/summary`·`/api/group/{memberId}`, JWT, application/json이다. 당시 절차를 다시 구현하지 않는다. [요구 재검증](../../verification/REVIEW-002/requirements-audit.md)을 따른다.
 
 ## 0. 시작 조건과 문서 우선순위
 
@@ -26,29 +28,29 @@
 
 ## 1. 포함·제외와 검증 범위
 
-- 포함: member V2, 공개 GET 2개, 다중 그룹 소속, local fixture/HTTP 출력 포트 구현, local 시드, 지수 백오프·Full Jitter, OpenAPI 스냅샷, 계층·트랜잭션·계약·실행 검증.
+- 포함: member V2, 공개 GET 2개, 단일 그룹 소속 결합, local fixture/HTTP 출력 포트 구현, local 시드, 지수 백오프·Full Jitter, OpenAPI 스냅샷, 계층·트랜잭션·계약·실행 검증.
 - 제외: 그룹 서비스의 Controller/엔티티/DB/시드/실제 업무 OpenAPI 생성, 사용자 인증·인가, 쓰기 API, 공유 런타임 모듈.
 - 그룹 제공자 완성 전에도 fixture 모드의 실제 멤버 목록·상세는 200으로 실행되어야 한다. fixture 성공, 테스트 HTTP 어댑터 성공, 실제 그룹 통합 성공을 구분한다. 마지막 항목은 이번 완료 기준에서 미검증이다.
 
 ## 2. 공개 API
 
-- `GET /api/members`: `members` + `page`, 각 멤버는 `id`, `name`, `groups[]`다.
-- `GET /api/member/{id}`: 기본 정보·등록/생성 시각·생성자 + `groups[]`다. 상세는 no-store.
-- 다중 소속을 오류로 처리하지 않는다. 미소속은 빈 배열. 그룹 핵심 필드는 목록/상세 모두 `id`, `name`, `permission`, `permissionName`. 상세만 선택 `joinedAt`, `pricing`을 추가한다.
+- `GET /api/members`: `members` + `page`, 각 멤버는 `id`, `name`, `group`(그룹 이름), `permission`이다(미소속은 null).
+- `GET /api/member/{id}`: 기본 정보·등록/생성 시각·생성자 + `group`이다. 상세는 no-store.
+- 멤버당 소속은 0~1개다. 상세 `group`은 단일 객체(`id`, `name`, `registeredDate`, `pricing`, `permission`)이며 미소속은 null이다. `registeredDate`, `pricing`은 선택 정보다.
 - 정확한 요청/응답 JSON과 타입·필수/null·오류 예시는 [멤버 API](../../../services/member-service/docs/api.md#get-apimembers)가 소유한다. 요청서에서 별도의 JSON 복사본을 관리하지 않는다.
 - page/size 원시 문자열의 공백·빈 값·음수·소수·숫자 외 문자·Int 범위 초과는 거부한다. page/size/sort 반복은 값이 같아도 400이며 중복을 제거해 처리하지 않는다. 생략에만 기본값을 쓴다.
 - size 범위 검증 후 최대 100을 적용하고 Long으로 offset을 계산해 Integer.MAX_VALUE 이하인지 검증한다. 정렬은 이름 ASC/DESC만 허용하며 ID ASC를 내부 보조 정렬로 고정한다.
 - **기존 pageable 설정 블록과 CommonPolicyTests는 유지한다.** 신규 요청 DTO와 별개다.
-- 시각은 UTC RFC 3339, 마이크로초 보존. 그룹 소속은 joinedAt으로 구분한다. KST 분 단위 표시는 소비자 책임이다.
+- 시각은 UTC RFC 3339, 마이크로초 보존. 그룹 가입 시각은 멤버 가입 시각과 구분한다. KST 분 단위 표시는 소비자 책임이다.
 - 과금 정보는 선택이다. 새로운 코드·추가 필드는 수용하고 그룹 enum은 복제하지 않는다.
 
 ## 3. 그룹 공급자
 
 - application 소유 `GroupMembershipReader`를 fixture/HTTP로 구현한다. Controller·QueryHandler에 공급자 분기나 멤버별 임시 데이터를 넣지 않는다.
 - `task.group-membership.source`: 기본 http, local fixture. fixture는 local 외 기동 실패, 정확히 한 구현만 등록한다. HTTP 실패 시 자동 fallback은 없다.
-- 임시 데이터 파일은 계획된 local 자원에서 로드한다. 시드 ID마다 명시적인 소속 배열이 필요하다. fixture 누락을 실제 미소속으로 꾸미지 않는다.
+- 임시 데이터 파일은 계획된 local 자원에서 로드한다. 시드 ID마다 소속 또는 미소속을 명시한다. fixture 누락을 실제 미소속으로 꾸미지 않는다.
 - HTTP는 기존 groupRestClient·숫자 IP:포트·서버 내부 키를 재사용한다. `/internal/group-memberships`의 반복 memberIds는 1~100개의 중복 없는 ID다. 공개 page/size 중복 금지와 다른 계약이다.
-- 소속 0/1/N은 정상, 요청 ID 누락/추가/중복·같은 멤버의 중복 group ID·필수 필드 오류는 계약 위반이다. 선택 정보 누락은 허용한다.
+- 소속 0/1개는 정상, 요청 ID 누락/추가/중복·같은 멤버의 복수 소속·필수 필드 오류는 계약 위반이다. 선택 정보 누락은 허용한다.
 - 기존 그룹 명세 프록시는 실제 HTTP를 유지한다. fixture로 가짜 제공자 명세를 공개하지 않는다.
 
 ## 4. 낮은 결합도와 처리 순서
@@ -56,7 +58,7 @@
 - Controller → 입력 포트 → QueryHandler → 출력 포트 순서다. 입력은 Query, 결과는 View다. DB·외부 HTTP·공개 API DTO를 각각 분리한다.
 - application에 infrastructure/presentation/JPA/Spring Data/HTTP/Servlet/RestClient/Jackson/OpenAPI 참조를 넣지 않는다.
 - 목록 DB 페이지 → 내부 모델 변환 → 읽기 트랜잭션 종료 → 소속 논리 일괄 조회 1회 → ID 결합 → Response 변환. 상세는 멤버 존재 확인 후 같은 그룹 계약을 ID 하나로 호출한다.
-- 빈 목록·입력 오류·없는 멤버에서는 그룹 포트를 호출하지 않는다. 그룹 배열은 group ID 순으로 정렬한다.
+- 빈 목록·입력 오류·없는 멤버에서는 그룹 포트를 호출하지 않는다.
 - 읽기 트랜잭션은 Spring 프록시를 거치는 저장소 어댑터에만 둔다. HTTP 호출 때 DB 트랜잭션이 살아 있으면 완료로 처리하지 않는다.
 - 경계 인터페이스와 작은 순수 변환으로 재사용한다. 범용 기반 클래스나 서비스 간 DTO 모듈을 추가하지 않는다.
 
@@ -79,7 +81,7 @@
 
 필수 매트릭스는 [POL-TEST-005~008](../../common/testing.md#pol-test-005-계층과-트랜잭션)을 따른다. 특히 아래를 빠뜨리지 않는다.
 
-- 공백/범위/중복/offset 입력, 고정 데이터의 정렬·페이지 건수, 미소속/다중 소속, 그룹별 다른 권한.
+- 공백/범위/중복/offset 입력, 고정 데이터의 정렬·페이지 건수, 미소속/단일 소속.
 - 두 어댑터 교체와 동일 유스케이스 재사용, 알 수 없는 코드/필드 허용, 선택 정보 부재.
 - 실제 호출 스레드의 트랜잭션 종료, 금지 계층 의존, 엔티티·외부 DTO 비노출.
 - 지수 증가·cap·지터 경계·재시도 종료·인터럽트·기존 명세 조회 회귀.
@@ -90,7 +92,7 @@
 ## 8. 실행 확인과 완료 기준
 
 - `./gradlew.bat spotlessApply` 후 `./gradlew.bat build --no-daemon --console=plain`을 수행한다(Docker 필요).
-- 구현 후 루트 Compose에서 실제 멤버 API의 정상 목록/상세·다중 소속·잘못된 입력·없는 멤버·빈 페이지를 검증한다. Swagger도 실제 업무 명세로 실행한다.
+- 구현 후 루트 Compose에서 실제 멤버 API의 정상 목록/상세·미소속·잘못된 입력·없는 멤버·빈 페이지를 검증한다. Swagger도 실제 업무 명세로 실행한다.
 - 그룹이 중지되거나 업무 API가 없어도 fixture 멤버 조회는 성공해야 한다. 실제 그룹 명세 실패와 혼동하지 않는다.
 - 명세 갱신/검사 목표 명령은 테스트 문서가 소유하며, 구현 전에는 실행 가능한 명령이라고 안내하지 않는다.
 - 전체 빌드 실패/건너뜀 0, 목표 기능·격리·계약 검증 통과, 문서와 실제 결과 일치가 단계 완료 기준이다. 실제 그룹 업무 통합은 미검증으로 남긴다.

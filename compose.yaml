@@ -1,5 +1,6 @@
 # 로컬 일괄 실행 진입점. 앱·DB·네트워크·볼륨 정의는 각 서비스가 소유한다.
-# 최초 한 번: ./gradlew.bat generateLocalSecrets
+# 최초 실행·재실행: ./gradlew.bat startLocal (없는 비밀 파일 생성 후 Compose 실행)
+# Compose 직접 실행 전: ./gradlew.bat generateLocalSecrets
 # 실행: docker compose up -d --build --wait
 # 종료: docker compose down (데이터 볼륨 유지)
 name: task-local

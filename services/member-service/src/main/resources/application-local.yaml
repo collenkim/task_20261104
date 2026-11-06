@@ -5,6 +5,12 @@ spring:
       - classpath:db/migration/mariadb
       - classpath:db/seed/local
 task:
+  security:
+    # Swagger 자동 인증 토큰(POL-SEC-005). 서명 키는 configtree 파일 task.security.local-token.signing-key.
+    local-token:
+      ttl: 30m
+  group-proxy:
+    enabled: true
   group-membership:
     source: ${TASK_GROUP_MEMBERSHIP_SOURCE:fixture}
   group-client:

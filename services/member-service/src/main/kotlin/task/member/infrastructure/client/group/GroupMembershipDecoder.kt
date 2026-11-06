@@ -63,7 +63,7 @@ class GroupMembershipDecoder(mapper: JsonMapper) {
           total == null ||
           !total.isIntegralNumber ||
           !total.canConvertToLong() ||
-          total.longValue() < members.size
+          total.longValue() != members.size.toLong()
       )
         fail()
       for (rawMember in members) {
@@ -99,10 +99,11 @@ class GroupMembershipDecoder(mapper: JsonMapper) {
     )
   }
 
-  /** 경로 404와 구분되는 정상 미소속만 허용한다(POL-COMM-004). */
+  /** 경로 404와 구분되는 정상 미소속만 허용한다. 세부 원인은 RFC 9457 type으로 구분한다(POL-COMM-004). */
   fun isMembershipNotFound(bytes: ByteArray): Boolean {
     val node = root(bytes)
-    return text(node, "code") == "GROUP_MEMBERSHIP_NOT_FOUND" &&
+    return text(node, "code") == NOT_FOUND_CODE &&
+      text(node, "type") == MEMBERSHIP_NOT_FOUND_TYPE &&
       node.get("status")?.let {
         it.isIntegralNumber && it.canConvertToInt() && it.intValue() == 404
       } == true
@@ -140,6 +141,9 @@ class GroupMembershipDecoder(mapper: JsonMapper) {
   private fun fail(): Nothing = throw GroupServiceConfigurationException()
 
   private companion object {
+    /** 그룹 API 계약(group docs/api.md)의 미소속 404. 그룹 코드를 직접 참조하지 않고 공유 계약 값으로 둔다. */
+    const val NOT_FOUND_CODE = "RESOURCE_NOT_FOUND"
+    const val MEMBERSHIP_NOT_FOUND_TYPE = "urn:problem-type:group-membership-not-found"
     val ID = Regex("[a-z0-9]{10}")
     val MINUTE_PATTERN = Regex("[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}")
     val MINUTE_FORMAT =

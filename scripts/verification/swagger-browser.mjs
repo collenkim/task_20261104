@@ -1,4 +1,4 @@
-// Windows Edge에서 실제 Swagger 화면 전환을 검사한다. 비밀 파일은 읽지 않는다.
+// Windows Edge에서 실제 Swagger 화면 전환·local 자동 토큰을 검사한다. 비밀 파일을 읽거나 토큰 값을 출력하지 않는다.
 // 실행: node scripts/verification/swagger-browser.mjs
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -48,13 +48,21 @@ try {
   const requests = [];
   const responses = [];
   let internalHeaderSent = false;
+  const apiCalls = [];
   socket.addEventListener('message', event => {
     const message = JSON.parse(event.data);
     if (message.method === 'Network.requestWillBeSent') {
       // 값이나 헤더는 보관하지 않는다.
       requests.push(message.params.request.url);
-      internalHeaderSent ||= Object.keys(message.params.request.headers || {})
+      const headers = message.params.request.headers || {};
+      internalHeaderSent ||= Object.keys(headers)
         .some(name => name.toLowerCase() === 'x-internal-service-key');
+      const url = new URL(message.params.request.url, origin);
+      if (url.origin === origin && /^\/(api|internal-api)\//.test(url.pathname)) {
+        // 토큰 값은 보관하지 않고 Bearer 형식으로 보냈는지만 기록한다.
+        apiCalls.push(Object.entries(headers).some(([name, value]) =>
+          name.toLowerCase() === 'authorization' && /^Bearer [^.\s]+\.[^.\s]+\.[^.\s]+$/.test(value)));
+      }
     }
     if (message.method === 'Network.responseReceived') {
       responses.push({ id: message.params.requestId, url: message.params.response.url,
@@ -86,7 +94,11 @@ try {
   await waitFor(() => evaluate('!!window.ui && window.ui.specSelectors.specJson().get("openapi")'));
   assert.equal(await evaluate('window.ui.getConfigs().supportedSubmitMethods.includes("get")'), true);
   assert.deepEqual(await evaluate('Object.keys(window.ui.specSelectors.specJson().toJS().paths).sort()'),
-    ['/api/member/{id}', '/api/members']);
+    ['/api/member/{memberId}', '/api/members']);
+  assert.deepEqual(await evaluate('window.ui.specSelectors.specJson().toJS().security'), [{ bearerAuth: [] }]);
+  assert.equal(await evaluate('/local 접근 토큰 자동 적용/.test(document.getElementById("local-token-notice")?.textContent || "")'), true);
+  assert.equal(await evaluate('window.taskSwaggerSettings.accessTokenExpiresAt * 1000 > Date.now()'), true);
+  await waitFor(() => evaluate('!!window.ui.authSelectors.authorized().toJS().bearerAuth'));
   const block = apiPath => `Array.from(document.querySelectorAll('.opblock')).find(node =>
     node.querySelector('.opblock-summary-path')?.getAttribute('data-path') === ${JSON.stringify(apiPath)})`;
   async function execute(apiPath, memberId, paramName = 'id', prefix = '', expectedStatus = 200) {
@@ -131,19 +143,23 @@ try {
   }
   const summaries = await execute('/api/members');
   assert.equal(summaries.members.length, 5);
-  assert.equal(summaries.members[0].groups.length, 1);
+  assert.equal(typeof summaries.members[0].group, 'string');
+  assert.deepEqual(Object.keys(summaries.members[0]).sort(), ['group', 'id', 'name', 'permission']);
   assert.equal(summaries.page.totalElements, 5);
-  const detail = await execute('/api/member/{id}', 'tu3fgxd45k');
+  assert.equal(summaries.page.number, 1);
+  const detail = await execute('/api/member/{memberId}', 'tu3fgxd45k', 'memberId');
   assert.equal(detail.id, 'tu3fgxd45k');
-  assert.equal(detail.groups.length, 1);
-  assert.equal(detail.groups[0].joinedAt, "2026-08-15 13:00");
-  assert.equal(detail.groups[0].permission, "Editor");
-  assert.equal("permissionName" in detail.groups[0], false);
+  assert.deepEqual(Object.keys(detail).sort(), ['address', 'email', 'group', 'id', 'name', 'registeredDate']);
+  assert.deepEqual(Object.keys(detail.group).sort(), ['id', 'name', 'permission', 'pricing', 'registeredDate']);
+  assert.equal(detail.group.registeredDate, "2026-08-15 13:00");
+  assert.equal(detail.group.permission, "Editor");
   await evaluate('document.getElementById("service-specification").value="1"; document.getElementById("service-specification").dispatchEvent(new Event("change"))');
   await waitFor(() => evaluate('window.ui.getConfigs().url === "/internal-docs/group" && !!window.ui.specSelectors.specJson().get("openapi")'));
   assert.deepEqual(await evaluate('window.ui.getConfigs().supportedSubmitMethods'), ['get']);
   assert.equal(await evaluate('window.ui.specSelectors.specJson().getIn(["servers",0,"url"])'), '/internal-api/group');
-  assert.equal(await evaluate('!!window.ui.specSelectors.specJson().get("security")'), false);
+  assert.deepEqual(await evaluate('window.ui.specSelectors.specJson().toJS().security'), [{ bearerAuth: [] }]);
+  assert.deepEqual(await evaluate('Object.keys(window.ui.specSelectors.specJson().toJS().components.securitySchemes)'), ['bearerAuth']);
+  await waitFor(() => evaluate('!!window.ui.authSelectors.authorized().toJS().bearerAuth'));
   assert.equal(await evaluate('window.ui.specSelectors.specJson().getIn(["info","title"])'), '그룹 서비스 API');
   assert.deepEqual(await evaluate('Object.keys(window.ui.specSelectors.specJson().toJS().paths).sort()'),
     ['/api/group/{memberId}', '/api/groups/summary']);
@@ -152,7 +168,8 @@ try {
     catch { return true; }
   })()`), true);
   const groupSummary = await execute('/api/groups/summary', 'tu3fgxd45k', 'memberIds', '/internal-api/group');
-  assert.equal(groupSummary.group[0].totalMemberCount, 2);
+  assert.equal(groupSummary.group[0].totalMemberCount, 1);
+  assert.equal(groupSummary.group[0].members.length, 1);
   assert.deepEqual(groupSummary.group[0].members, [{memberId:'tu3fgxd45k', permission:'Editor'}]);
   const groupDetail = await execute('/api/group/{memberId}', 'tu3fgxd45k', 'memberId', '/internal-api/group');
   assert.deepEqual(Object.keys(groupDetail).sort(), ['groupId','groupName','memberId','permission','pricing','registeredDate']);
@@ -164,7 +181,10 @@ try {
   assert.equal(requests.some(url => url.startsWith(origin + '/internal-docs/group')), true);
   assert.equal(requests.some(url => /^https?:/.test(url) && new URL(url).origin !== origin), false);
   assert.equal(internalHeaderSent, false);
+  assert.equal(apiCalls.length, 4);
+  assert.equal(apiCalls.every(Boolean), true);
   console.log('통과: 실제 Edge Swagger 멤버·그룹 목록과 상세 Try it out 200·단일 소속·멤버 복귀');
+  console.log('통과: local 자동 토큰 표시·두 명세 bearerAuth 자동 인증·Try it out 4건 모두 Bearer 전송');
   console.log('통과: 테스트 명세 주입 없음·외부 직접 요청 없음·브라우저 내부 키 헤더 없음');
   console.log('범위: 루트 Compose의 멤버 → 그룹 실제 HTTP 업무 연동');
   await command('Browser.close').catch(() => {});

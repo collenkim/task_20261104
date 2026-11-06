@@ -48,7 +48,7 @@
 | GroupRetryConfigurationTests | 3 | 실제 YAML 기본값·마지막 단일 인터셉터·기동 시 설정 경계 거부 |
 | GroupRetryHttpTests | 5 | 실제 JDK HTTP 시간 초과·복구·최종 실패·HEAD·매 전송 키 한 개·상태 오류 재시도 없음 |
 | GroupApiDocsTests | 8 | 기존 명세 전달 5개 + 본문 시간 초과·JSON/자료형·매체 유형 회귀 3개 |
-| 나머지 멤버 검사 | 85 | DB·입력·다중 소속·시드·계층/트랜잭션·공통 pageable·소속 HTTP/fixture 회귀 |
+| 나머지 멤버 검사 | 85 | DB·입력·소속 결합·시드·계층/트랜잭션·공통 pageable·소속 HTTP/fixture 회귀 |
 
 ## 4단계 완료 시점의 증거 범위와 후속 작업
 

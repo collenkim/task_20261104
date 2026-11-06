@@ -11,12 +11,15 @@
 ## 기본 실행: 두 앱과 DB를 함께
 
 ```powershell
-./gradlew.bat generateLocalSecrets
-docker compose up -d --build --wait
+./gradlew.bat startLocal
 docker compose ps
 ```
 
 두 앱과 전용 MariaDB 두 개를 실행한다. Dockerfile이 소스부터 빌드하므로 사전 bootJar가 필요 없다. 이미지 빌드는 테스트를 대신하지 않는다. 검사 명령은 `./gradlew.bat build`다.
+
+Git에는 `secrets/`가 없다. `startLocal`은 없는 내부 호출 키·DB 비밀번호·멤버 JWT 키 쌍(검증 공개키, local Swagger 토큰 서명 키)을 `generateLocalSecrets`로 먼저 만든 뒤 `docker compose up -d --build --wait`를 실행한다. 생성이 실패하면 기동 단계도 실행되지 않는다. 기존 비밀 파일은 유지한다. 호스트 JDK 21과 실행 중인 Docker가 필요하다.
+
+기존 DB 볼륨의 비밀번호 파일을 잃은 경우 새 비밀번호 생성만으로 기존 DB에 연결할 수 없다. 기존 파일을 복원하거나 별도 개발 환경을 사용한다. 자동화는 기존 볼륨을 삭제하거나 DB 비밀번호를 강제로 바꾸지 않는다.
 
 - 멤버 Swagger: http://127.0.0.1:8081/swagger-ui.html (멤버·그룹 명세 선택)
 - 멤버 상태: http://127.0.0.1:8081/actuator/health/readiness
@@ -92,7 +95,8 @@ IntelliJ에서 Application 클래스를 직접 실행할 때는 다음 환경변
 
 - 키 생성: `./gradlew.bat generateLocalSecrets`. 이미 있는 키와 DB 비밀번호는 유지한다.
 - 키 교체: `./gradlew.bat rotateInternalServiceKey` 후 두 앱 재시작. Compose는 `docker compose up -d --force-recreate --wait member-service group-service`로 파일을 다시 마운트한다.
-- JWT 생성·교체 작업은 사용하지 않는다. 이전 로컬 JWT 파일은 자동 삭제하지 않고 현재 인증 설정에서 사용하지 않는다.
+- JWT 키 쌍은 `secrets/member-service/config/task.security.jwt.public-key`와 `task.security.local-token.signing-key`다. 하나라도 없으면 둘 다 새로 만든다. 키를 바꾸면 멤버 앱을 재시작하고 Swagger를 새로 고친다([POL-SEC-004](security.md#pol-sec-004-키비밀번호)).
+- local 프로필은 Swagger 자동 토큰과 그룹 중계(`task.group-proxy.enabled=true`)를 켠다. 기본 프로필로 멤버를 실행하면 토큰을 넣지 않고 그룹 중계 경로도 없다. 터미널에서 API를 호출할 때는 Swagger 초기화 스크립트의 토큰을 쓴다([루트 README](../../README.md#swagger와-api-확인)).
 - DB 비밀번호 파일 변경만으로 기존 DB 계정이 변경되지 않는다. 데이터 유지 시 관리자 절차로 계정과 파일을 함께 변경한다.
 - AI는 secrets/를 열지 않는다. 비밀값을 명령줄·환경변수·로그·이미지에 넣지 않는다.
 
@@ -113,7 +117,7 @@ source 선택·소속 fixture, 공개 멤버 API와 local 시드를 구현했다
 
 - local 프로필은 `task.group-membership.source=fixture`로 멤버 내부 합성 소속 데이터를 사용한다. 기본 프로필은 http다. fixture는 local 외에서 선택할 수 없다.
 - 루트 Compose는 TASK_GROUP_MEMBERSHIP_SOURCE=http를 명시한다. 멤버 단독 Compose는 생략 시 fixture이며 http 지정 시 외부 그룹 주소가 필요하다. 프로필·설정 바인딩과 두 실행 방식의 실제 fixture 업무 API를 검증했다.
-- 기존 `docker compose up -d --build --wait`로 local 시드와 실제 그룹 HTTP를 적용한 멤버 API를 실행한다. 목록은 `/api/members?page=0&size=20&sort=name,asc`, 상세 예시는 `/api/member/tu3fgxd45k`다. Swagger에서 실제 목록·상세 Try it out을 검증했다. 그룹이 중단돼도 멤버 자기 명세·readiness는 정상이며 그룹이 필요한 업무 조회만 503이다.
+- 기존 `docker compose up -d --build --wait`로 local 시드와 실제 그룹 HTTP를 적용한 멤버 API를 실행한다. 목록은 `/api/members?page=1&size=20&sort=name,asc`, 상세 예시는 `/api/member/tu3fgxd45k`다. Swagger에서 실제 목록·상세 Try it out을 검증했다. 그룹이 중단돼도 멤버 자기 명세·readiness는 정상이며 그룹이 필요한 업무 조회만 503이다.
 - http 선택 시 실제 그룹 주소·키를 사용한다. 실패하면 500/503을 반환하며 fixture로 대체하지 않는다. 제공자 실제 연동과 테스트 대역의 증거는 구분한다.
 - 기존 그룹 명세 전달은 실제 HTTP를 유지한다. 그룹 정지 시 루트 http 업무 조회·그룹 명세는 503, 멤버 단독 fixture 조회는 200이다.
 - local Flyway 경로는 `db/migration/mariadb` + `db/seed/local`이다. 기본 프로필은 migration 경로만 적용한다. 시드 재실행 조건·보호 규칙은 [POL-DATA-004](data-conventions.md#pol-data-004-local-시드), ID·소속 예시는 [멤버 엔티티](../../services/member-service/docs/entities.md#local-시드-m-06-적용)를 따른다.

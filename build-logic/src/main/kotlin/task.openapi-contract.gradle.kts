@@ -1,4 +1,5 @@
 import task.buildlogic.CheckOpenApiSnapshot
+import task.buildlogic.UpdateOpenApiSnapshot
 
 plugins { java }
 
@@ -37,12 +38,15 @@ val checkOpenApiSnapshot by
     snapshot.set(committedOpenApi)
   }
 
-tasks.register<Copy>("updateOpenApiSnapshot") {
-  group = "documentation"
-  description = "검증한 계약으로 공유 OpenAPI를 갱신합니다."
-  dependsOn(generateOpenApiSnapshot)
-  from(generatedOpenApi)
-  into(committedOpenApi.asFile.parentFile)
-}
+val updateOpenApiSnapshot =
+  tasks.register<UpdateOpenApiSnapshot>("updateOpenApiSnapshot") {
+    group = "documentation"
+    description = "검증한 계약으로 공유 OpenAPI를 갱신합니다."
+    dependsOn(generateOpenApiSnapshot)
+    generated.set(generatedOpenApi)
+    snapshot.set(committedOpenApi)
+  }
+
+checkOpenApiSnapshot { mustRunAfter(updateOpenApiSnapshot) }
 
 tasks.named("check") { dependsOn(checkOpenApiSnapshot) }

@@ -11,7 +11,8 @@
 | 목적 | 그룹 조회 API와 멤버의 실제 연동, 단일 소속 정합성, 멤버 경유 Swagger 실행 구현 |
 | 당시 상태 | 2026-11-05 사용자 확정 요구. 실제 완료 여부는 검증 기록에서 관리 |
 | 범위 | 그룹·멤버 서비스 코드, 소유 문서, 공통 정책·검증·실행 구성 |
-| 정본 | 저장소의 이 파일. Temp 계획·구두 변경 사항을 통합 |
+| 당시 작업 기준 | 저장소의 이 파일. Temp 계획·구두 변경 사항을 통합 |
+| 현재 계약 | [멤버 API](../../../services/member-service/docs/api.md), [그룹 API](../../../services/group-service/docs/api.md). 소속은 멤버당 0~1개 |
 | 전체 계획 | [그룹 조회 계획](plan.md) |
 | 실제 결과 | [구현·검증 기록](../../verification/GROUP-001/group-query-verification.md) |
 
@@ -21,7 +22,7 @@
 - [AGENTS.md](../../../AGENTS.md)를 따른다. AI 턴 중 Git 변경을 직접 실행하지 않고 커밋은 예약한다. develop은 통합 검증용, master에는 검증된 feature만 사용자가 병합한다.
 - secrets/·.env·인증 파일을 읽지 않으며 AI 원본·스냅샷을 직접 편집하거나 스테이징하지 않는다.
 - 최신 사용자 결정 → 이 요청서·[계획](plan.md) → 소유 API/정책 문서 순서다. 승인된 변경은 코드와 기준 문서를 함께 맞춘다.
-- [MEMBER-001 요청서](../MEMBER-001/request.md)의 다중 소속 허용·permissionName·UTC 응답·이전 그룹 경로는 이 요청서로 대체한다. 과거 실행 증거는 고쳐 쓰지 않는다.
+- [MEMBER-001 요청서](../MEMBER-001/request.md)의 permissionName·UTC 응답·이전 그룹 경로는 이 요청서로 대체한다. 과거 실행 증거의 수치·명령은 고쳐 쓰지 않는다.
 
 ## 1. 포함·제외와 책임
 
@@ -49,11 +50,11 @@
 
 - 현재 멤버당 0~1개 소속만 허용한다. group_membership.member_id에 NOT NULL + UNIQUE, (group_id, member_id)에도 UNIQUE를 둔다.
 - 동시 입력도 DB가 차단해야 한다. 조회 방어 로직은 UNIQUE와 별도로 유지한다. 상세/summary의 다건을 첫 행 선택이나 대표 그룹으로 숨기지 않는다.
-- 향후 다중 소속은 제약 제거, 상세 API·멤버 소비자·문서·테스트를 함께 변경하는 별도 작업이다.
+- 멤버당 한 그룹은 필수 요건이다. 공개 계약에 다중 소속 표현(`groups[]`)을 두지 않는다([POL-API-005](../../common/api-conventions.md#pol-api-005-시각코드-계약)).
 
 ## 4. 멤버 연동과 오류
 
-- [멤버 API](../../../services/member-service/docs/api.md)의 경로·페이징·이름 정렬·groups 배열은 유지하며 현재 최대 소속 수만 1로 제한한다.
+- [멤버 API](../../../services/member-service/docs/api.md)의 경로·페이징·이름 정렬은 유지한다. 멤버당 소속은 최대 1개이며 미소속은 null이다.
 - 목록은 DB 페이지의 ID를 summary에 한 번 전달한다. 페이지 크기가 1이어도 summary를 사용한다.
 - 상세는 멤버 존재를 확인한 뒤 그룹 detail을 한 번 호출한다. 표시명 획득을 위한 추가 호출은 없다.
 - 정상 sparse summary에 없는 요청 ID와 상세의 정확한 404 GROUP_MEMBERSHIP_NOT_FOUND만 미소속으로 변환한다.
@@ -94,7 +95,7 @@
 - 그룹 원본 경로와 응답 스키마는 변경하지 않는다. 전달 명세의 서버 주소를 /internal-api/group으로 바꾸고 내부 주소·보안 스킴을 제거한다.
 - 중계는 /internal-api/group/api/groups/summary와 /internal-api/group/api/group/{memberId} 두 조회만 제공한다. 사용자 URL·임의 경로·변경 메서드를 전달하는 범용 프록시는 만들지 않는다.
 - 멤버 서버가 호출자 ID·키·추적 정보를 붙인다. 사용자 헤더로 내부 키를 덮어쓰지 못하며 브라우저에 키 입력을 요구하지 않는다.
-- 그룹 API 검증 목적이므로 이 중계는 그룹의 정상 JSON과 표준 ProblemDetail 상태/본문을 그대로 돌려준다. 멤버 업무 API의 404→빈 groups 또는 5xx→503 변환과 구분한다.
+- 그룹 API 검증 목적이므로 이 중계는 그룹의 정상 JSON과 표준 ProblemDetail 상태/본문을 그대로 돌려준다. 멤버 업무 API의 404→group null 또는 5xx→503 변환과 구분한다.
 - 연결 장애는 멤버의 503 GROUP_SERVICE_UNAVAILABLE, 손상된 JSON/비JSON/리다이렉트/비표준 오류 본문은 500 INTERNAL_ERROR다. 내부 응답 헤더는 복사하지 않고 no-store를 적용한다.
 - 기술 중계 컨트롤러는 @Hidden으로 멤버 업무 OpenAPI와 분리한다. 그룹 Swagger UI나 그룹 호스트 포트를 별도로 공개하지 않는다.
 - 사용자 인증을 두지 않은 현재 범위에서 두 그룹 조회는 멤버 주소를 통한 HTTP 요청으로도 실행 가능하다. Swagger 버튼 자체를 접근 제어로 취급하지 않는다.

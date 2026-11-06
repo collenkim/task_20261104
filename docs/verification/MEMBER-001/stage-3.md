@@ -16,7 +16,7 @@
 
 ## 구현 내용
 
-- `GET /api/members`: 멤버 기준 목록·페이지 메타데이터, 이름 ASC/DESC와 ID ASC 보조 정렬, 다중 그룹 소속.
+- `GET /api/members`: 멤버 기준 목록·페이지 메타데이터, 이름 ASC/DESC와 ID ASC 보조 정렬, 멤버당 0~1개 그룹 소속.
 - `GET /api/member/{id}`: 기본 정보·가입 시각·생성 감사 정보·소속, `Cache-Control: no-store`.
 - Controller → 입력 포트 → QueryHandler → 출력 포트로 분리했다. Query/View와 공개 DTO를 나누고 application에서 JPA·HTTP·OpenAPI에 의존하지 않는다.
 - 원시 파라미터의 반복·공백·부호·소수·비ASCII 숫자·정수 범위·offset 초과를 DB 진입 전에 거부한다. 유효한 size를 최대 100으로 적용한다. 기존 pageable 설정과 공통 오류 처리는 유지한다.
@@ -34,7 +34,7 @@
 | 신규 테스트 | 개수 | 검증 내용 |
 | --- | ---: | --- |
 | MemberQueryRequestTests | 4 | 파라미터 생략·정수/offset 경계·반복·형식·정렬·상세 ID |
-| MemberQueryApiTests | 10 | 실제 MariaDB + fixture, 공개 목록/상세·정렬·미소속/다중 소속·마이크로초·오류·호출 생략·OpenAPI |
+| MemberQueryApiTests | 10 | 실제 MariaDB + fixture, 공개 목록/상세·정렬·미소속/단일 소속·마이크로초·오류·호출 생략·OpenAPI |
 | MemberQueryHttpIntegrationTests | 2 | 실제 HTTP 소비자 + 테스트 HTTP 서버, 같은 유스케이스 재사용·일괄 조회·오류 분류·호출 스레드 트랜잭션 |
 | MemberLocalSeedTests | 1 | 실제 MariaDB에서 기본 위치 시드 미실행·최초/무변경/체크섬 변경·감사/비시드 보존·충돌 식별 |
 | MemberSeedProfileTests | 2 | 실제 application/application-local 설정에서 시드 자동 적용·재기동·기본 프로필 격리 |

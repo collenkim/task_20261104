@@ -53,6 +53,10 @@ services:
         target: spring.datasource.password
       - source: member_internal_key
         target: task.internal-service.key
+      - source: member_jwt_public_key
+        target: task.security.jwt.public-key
+      - source: member_local_token_signing_key
+        target: task.security.local-token.signing-key
     ports:
       - "127.0.0.1:8081:8081"
     networks:
@@ -82,3 +86,8 @@ secrets:
     file: ../../../secrets/member-service/config/spring.datasource.password
   member_internal_key:
     file: ../../../secrets/internal/task.internal-service.key
+  # JWT 검증 공개키와 local Swagger 토큰 서명 키(generateLocalSecrets가 한 쌍으로 생성). 서명 키는 local 실행에만 둔다.
+  member_jwt_public_key:
+    file: ../../../secrets/member-service/config/task.security.jwt.public-key
+  member_local_token_signing_key:
+    file: ../../../secrets/member-service/config/task.security.local-token.signing-key

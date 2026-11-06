@@ -12,7 +12,7 @@ import org.springframework.util.MultiValueMap
 import org.springframework.web.client.ResourceAccessException
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientException
-import task.member.application.exception.GroupServiceConfigurationException
+import task.member.application.exception.*
 import task.member.application.exception.GroupServiceUnavailableException
 import tools.jackson.core.JacksonException
 import tools.jackson.databind.DeserializationFeature
@@ -32,6 +32,7 @@ class GroupApiProxyClient(
       .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
       .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
       .build()
+  private val contract = GroupProxyContract(json)
 
   fun summaries(parameters: MultiValueMap<String, String>): ResponseEntity<ObjectNode> =
     read(
@@ -40,42 +41,32 @@ class GroupApiProxyClient(
         val ids = parameters["memberIds"].orEmpty()
         ids.indices.forEach { builder.queryParam("memberIds", "{memberId$it}") }
         builder.build(*ids.toTypedArray())
-      }
+      },
+      contract::summary,
     )
 
   fun detail(memberId: String): ResponseEntity<ObjectNode> =
-    read(client.get().uri("/api/group/{memberId}", memberId))
+    read(client.get().uri("/api/group/{memberId}", memberId), contract::detail)
 
-  private fun read(request: RestClient.RequestHeadersSpec<*>): ResponseEntity<ObjectNode> =
+  private fun read(
+    request: RestClient.RequestHeadersSpec<*>,
+    project: (ObjectNode) -> ObjectNode,
+  ): ResponseEntity<ObjectNode> =
     try {
-      request.accept(MediaType.APPLICATION_JSON, MediaType.APPLICATION_PROBLEM_JSON).exchange {
-        _,
-        response ->
+      request.accept(MediaType.APPLICATION_JSON).exchange { _, response ->
         val status = response.statusCode.value()
-        if (status != 200 && status !in 400..599) throw GroupServiceConfigurationException()
-        val media =
-          if (status == 200) MediaType.APPLICATION_JSON else MediaType.APPLICATION_PROBLEM_JSON
+        if (status == 504) throw GroupServiceTimeoutException()
+        if (status == 503) throw GroupServiceUnavailableException()
+        if (status != 200 && status !in 400..499) throw GroupUpstreamFailureException()
+        val media = MediaType.APPLICATION_JSON
         val contentType = response.headers.contentType
         if (contentType == null || !media.isCompatibleWith(contentType))
-          throw GroupServiceConfigurationException()
+          throw GroupResponseMediaException()
         val bytes = response.body.readNBytes(MAX_RESPONSE_BYTES + 1)
-        if (bytes.size > MAX_RESPONSE_BYTES) throw GroupServiceConfigurationException()
-        val body = json.readTree(bytes) as? ObjectNode ?: throw GroupServiceConfigurationException()
+        if (bytes.size > MAX_RESPONSE_BYTES) throw GroupResponseSizeException()
+        val source = json.readTree(bytes) as? ObjectNode ?: throw GroupResponseContractException()
+        val body = if (status == 200) project(source) else contract.problem(source, status)
         if (status != 200) {
-          val actualStatus = body.get("status")
-          if (
-            actualStatus == null ||
-              !actualStatus.isIntegralNumber ||
-              !actualStatus.canConvertToInt() ||
-              actualStatus.intValue() != status ||
-              listOf("type", "title", "detail", "instance", "code").any {
-                body.get(it)?.isString != true
-              } ||
-              !body.path("code").stringValue().matches(Regex("[A-Z][A-Z0-9_]{0,63}")) ||
-              body.propertyNames().toSet() !=
-                setOf("type", "title", "detail", "instance", "code", "status")
-          )
-            throw GroupServiceConfigurationException()
           log.error(
             "event=remote.proxy.completed status={} code={}",
             status,
@@ -90,16 +81,16 @@ class GroupApiProxyClient(
           .cacheControl(CacheControl.noStore())
           .body(body)
       }
-    } catch (_: ResourceAccessException) {
-      throw GroupServiceUnavailableException()
-    } catch (_: IOException) {
-      throw GroupServiceUnavailableException()
+    } catch (error: ResourceAccessException) {
+      throw GroupProxyTransport.failure(error)
+    } catch (error: IOException) {
+      throw GroupProxyTransport.failure(error)
     } catch (_: JacksonException) {
-      throw GroupServiceConfigurationException()
+      throw GroupResponseJsonException()
     } catch (_: InvalidMediaTypeException) {
-      throw GroupServiceConfigurationException()
+      throw GroupResponseMediaException()
     } catch (_: RestClientException) {
-      throw GroupServiceConfigurationException()
+      throw GroupUpstreamFailureException()
     }
 
   companion object {
