@@ -23,12 +23,12 @@
 
 ## 적용 내용
 
-- application의 `GroupMembershipReader`와 `GroupMembership`은 JPA·HTTP·Jackson·공개 DTO에 의존하지 않는다. ID 1~100개의 소속을 일괄 조회하며 반환 값은 각 ID의 0~N개 소속이다.
+- application의 `GroupMembershipReader`와 `GroupMembership`은 JPA·HTTP·Jackson·공개 DTO에 의존하지 않는다. ID 1~100개의 소속을 일괄 조회하며 반환 값은 각 ID의 0~1개 소속이다.
 - HTTP와 fixture는 동일한 JSON 디코더·전송 DTO·순수 계약 검사를 사용한다. 필수 필드의 누락·null·잘못된 타입·ID 중복·동일 멤버의 그룹 중복을 거부한다. 숫자나 불리언을 문자열로 강제 변환하지 않는다.
-- 다중 소속, 서로 다른 멤버의 같은 그룹, 새로운 권한/과금 코드와 추가 필드는 허용한다. 선택 필드 부재는 null, 공백뿐인 과금 코드는 null로 정규화한다. 선택 시각도 UTC·실제 날짜·최대 마이크로초 정밀도를 검사한다.
+- 서로 다른 멤버의 같은 그룹, 새로운 권한/과금 코드와 추가 필드는 허용한다. 선택 필드 부재는 null, 공백뿐인 과금 코드는 null로 정규화한다. 선택 시각도 UTC·실제 날짜·최대 마이크로초 정밀도를 검사한다.
 - HTTP는 기존 groupRestClient의 숫자 IP·포트·서버 내부 키·재시도를 사용한다. GET 반복 memberIds, 본문 없음, 응답 200 application/json을 검증한다. 요청과 응답 ID 집합은 정확히 일치해야 한다.
 - 연결·시간 초과·5xx는 GroupServiceUnavailableException, 4xx·리다이렉트·본문/계약 오류는 GroupServiceConfigurationException이다. 기존 오류 처리기의 503/500 매핑을 재사용한다. 예외에 원문·주소·키·원인 예외를 담지 않는다.
-- fixture 파일은 계획된 다섯 멤버 ID를 모두 포함한다. 명시적 미소속과 데이터 누락을 구분하며, 없는 ID를 빈 소속으로 추정하지 않는다. 반환된 소속 목록으로 저장된 임시 데이터를 변경할 수 없다.
+- fixture 파일은 계획된 다섯 멤버 ID를 모두 포함한다. 명시적 미소속과 데이터 누락을 구분하며, 없는 ID를 미소속으로 추정하지 않는다. 반환된 소속 정보로 저장된 임시 데이터를 변경할 수 없다.
 - `task.group-membership.source`는 기본 http, local fixture다. 알 수 없는 값·local 외 fixture·중복 공급자는 기동 실패다. HTTP 장애 후 fixture로 바꾸지 않는다.
 - 루트·멤버 단독 Compose에 TASK_GROUP_MEMBERSHIP_SOURCE 전달을 연결했다. 기존 실제 그룹 명세 프록시는 변경하지 않았다.
 
@@ -52,7 +52,7 @@
 | 기동 거부 | local 외 fixture, 알 수 없는/빈 source, 공급자 중복 |
 | HTTP 요청 | 내부 키 한 개, ID 반복 파라미터, GET 본문 없음, 정상 일괄 1회, 100개 경계 |
 | 계약 실패 | ID 누락/추가/중복, 필수 필드 부재·타입·중복 JSON 키·후행 JSON·잘못된 날짜/정밀도 거부 |
-| 확장 허용 | 다중 소속·새 코드·알 수 없는 필드·선택 메타데이터 부재 |
+| 확장 허용 | 새 코드·알 수 없는 필드·선택 메타데이터 부재 |
 | 전송 실패 | 연결 실패·응답 전 시간 초과는 이용 불가, 응답 전 시간 초과 기본 최대 2회 전송 |
 | 본문 시간 초과 | 헤더·본문 일부 수신 후 지연 → 이용 불가, 실제 전송 1회 |
 | 상태 실패 | 4xx·3xx·계약 오류는 설정 오류, 5xx는 이용 불가. 재시도·리다이렉트 추적·fixture 대체 없음 |

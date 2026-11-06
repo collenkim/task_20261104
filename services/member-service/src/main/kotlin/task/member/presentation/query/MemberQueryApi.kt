@@ -5,18 +5,18 @@ import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.Parameters
 import io.swagger.v3.oas.annotations.enums.ParameterIn
 import io.swagger.v3.oas.annotations.media.Content
-import io.swagger.v3.oas.annotations.media.ExampleObject
 import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.responses.ApiResponse
-import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.http.ResponseEntity
 import org.springframework.util.MultiValueMap
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestParam
+import task.member.presentation.error.ErrorCode
+import task.member.presentation.error.ProblemResponses
+import task.member.presentation.error.ProblemType
 import task.member.presentation.query.response.MemberDetailResponse
-import task.member.presentation.query.response.MemberProblemResponse
 import task.member.presentation.query.response.MemberSummaryPageResponse
 
 /** HTTP 계약을 컨트롤러 처리와 분리한다. 소비자는 생성 OpenAPI를 공유한다(POL-API-004). */
@@ -26,13 +26,13 @@ interface MemberQueryApi {
     operationId = "getMemberSummaries",
     summary = "멤버 요약 목록 조회",
     description =
-      "이름 정렬과 멤버 기준 페이지. page/size/sort는 같은 값이어도 반복 불가. 공백·부호·소수 불가. size 범위 확인 후 최대 100 적용, page × 적용 크기는 2147483647 이하.",
+      "이름 정렬과 멤버 기준 페이지. 형식 위반(반복·공백·부호·소수·int32 초과)은 400 INVALID_PARAMETER, 형식은 맞지만 처리할 수 없는 값(size 0, page × 적용 크기 2147483647 초과, 허용하지 않는 sort)은 422 VALIDATION_FAILED. size는 범위 확인 후 최대 100 적용.",
   )
   @Parameters(
     Parameter(
       name = "page",
       `in` = ParameterIn.QUERY,
-      description = "0부터 시작. ASCII 숫자만 허용",
+      description = "0부터 시작. ASCII 숫자만 허용(부호·공백 400)",
       schema =
         Schema(
           type = "integer",
@@ -45,7 +45,7 @@ interface MemberQueryApi {
     Parameter(
       name = "size",
       `in` = ParameterIn.QUERY,
-      description = "정수 검증 후 최대 100 적용. ASCII 숫자만 허용",
+      description = "ASCII 숫자만 허용. 0은 422, 100 초과는 100으로 적용(page.size에 표시)",
       schema =
         Schema(
           type = "integer",
@@ -58,7 +58,7 @@ interface MemberQueryApi {
     Parameter(
       name = "sort",
       `in` = ParameterIn.QUERY,
-      description = "동명이인은 항상 ID 오름차순",
+      description = "허용 값 외에는 422. 동명이인은 항상 ID 오름차순",
       schema =
         Schema(
           type = "string",
@@ -67,54 +67,31 @@ interface MemberQueryApi {
         ),
     ),
   )
-  @ApiResponses(
-    ApiResponse(
-      responseCode = "200",
-      description = "멤버 요약 페이지",
-      content =
-        [
-          Content(
-            mediaType = "application/json",
-            schema = Schema(implementation = MemberSummaryPageResponse::class),
-          )
-        ],
-    ),
-    ApiResponse(
-      responseCode = "400",
-      description = "VALIDATION_FAILED: 조회 입력 위반",
-      content =
-        [
-          Content(
-            mediaType = "application/problem+json",
-            schema = Schema(implementation = MemberProblemResponse::class),
-            examples = [ExampleObject(value = MemberQueryExamples.INVALID_SUMMARY)],
-          )
-        ],
-    ),
-    ApiResponse(
-      responseCode = "500",
-      description = "INTERNAL_ERROR: 내부 설정·계약 오류",
-      content =
-        [
-          Content(
-            mediaType = "application/problem+json",
-            schema = Schema(implementation = MemberProblemResponse::class),
-            examples = [ExampleObject(value = MemberQueryExamples.INTERNAL_ERROR)],
-          )
-        ],
-    ),
-    ApiResponse(
-      responseCode = "503",
-      description = "GROUP_SERVICE_UNAVAILABLE: 그룹 일시 장애",
-      content =
-        [
-          Content(
-            mediaType = "application/problem+json",
-            schema = Schema(implementation = MemberProblemResponse::class),
-            examples = [ExampleObject(value = MemberQueryExamples.GROUP_UNAVAILABLE)],
-          )
-        ],
-    ),
+  @ApiResponse(
+    responseCode = "200",
+    description = "멤버 요약 페이지",
+    content =
+      [
+        Content(
+          mediaType = "application/json",
+          schema = Schema(implementation = MemberSummaryPageResponse::class),
+        )
+      ],
+  )
+  @ProblemResponses(
+    [
+      ErrorCode.INVALID_PARAMETER,
+      ErrorCode.UNAUTHORIZED,
+      ErrorCode.FORBIDDEN,
+      ErrorCode.METHOD_NOT_ALLOWED,
+      ErrorCode.NOT_ACCEPTABLE,
+      ErrorCode.VALIDATION_FAILED,
+      ErrorCode.TOO_MANY_REQUESTS,
+      ErrorCode.INTERNAL_SERVER_ERROR,
+      ErrorCode.SERVICE_UNAVAILABLE,
+    ],
+    types = [ProblemType.GROUP_SERVICE_UNAVAILABLE],
+    instance = "/api/members",
   )
   @GetMapping("/api/members", produces = ["application/json"])
   fun summaries(
@@ -125,77 +102,42 @@ interface MemberQueryApi {
     operationId = "getMemberDetail",
     summary = "멤버 상세 조회",
     description =
-      "기본 정보·생성 감사 정보·현재 최대 한 그룹 소속. 응답은 no-store, 시각은 한국 시간(Asia/Seoul) yyyy-MM-dd HH:mm입니다.",
+      "기본 정보와 단일 그룹 소속(미소속 null). 감사 정보는 응답에서 제외합니다. 응답은 no-store, 시각은 한국 시간(Asia/Seoul) yyyy-MM-dd HH:mm입니다.",
   )
-  @ApiResponses(
-    ApiResponse(
-      responseCode = "200",
-      description = "멤버 상세",
-      content =
-        [
-          Content(
-            mediaType = "application/json",
-            schema = Schema(implementation = MemberDetailResponse::class),
-          )
-        ],
-    ),
-    ApiResponse(
-      responseCode = "400",
-      description = "VALIDATION_FAILED: 식별자 형식 오류",
-      content =
-        [
-          Content(
-            mediaType = "application/problem+json",
-            schema = Schema(implementation = MemberProblemResponse::class),
-            examples = [ExampleObject(value = MemberQueryExamples.INVALID_DETAIL)],
-          )
-        ],
-    ),
-    ApiResponse(
-      responseCode = "404",
-      description = "NOT_FOUND: 멤버 없음",
-      content =
-        [
-          Content(
-            mediaType = "application/problem+json",
-            schema = Schema(implementation = MemberProblemResponse::class),
-            examples = [ExampleObject(value = MemberQueryExamples.NOT_FOUND)],
-          )
-        ],
-    ),
-    ApiResponse(
-      responseCode = "500",
-      description = "INTERNAL_ERROR: 내부 설정·계약 오류",
-      content =
-        [
-          Content(
-            mediaType = "application/problem+json",
-            schema = Schema(implementation = MemberProblemResponse::class),
-            examples = [ExampleObject(value = MemberQueryExamples.INTERNAL_ERROR)],
-          )
-        ],
-    ),
-    ApiResponse(
-      responseCode = "503",
-      description = "GROUP_SERVICE_UNAVAILABLE: 그룹 일시 장애",
-      content =
-        [
-          Content(
-            mediaType = "application/problem+json",
-            schema = Schema(implementation = MemberProblemResponse::class),
-            examples = [ExampleObject(value = MemberQueryExamples.GROUP_UNAVAILABLE)],
-          )
-        ],
-    ),
+  @ApiResponse(
+    responseCode = "200",
+    description = "멤버 상세",
+    content =
+      [
+        Content(
+          mediaType = "application/json",
+          schema = Schema(implementation = MemberDetailResponse::class),
+        )
+      ],
   )
-  @GetMapping("/api/member/{id}", produces = ["application/json"])
+  @ProblemResponses(
+    [
+      ErrorCode.INVALID_PARAMETER,
+      ErrorCode.UNAUTHORIZED,
+      ErrorCode.FORBIDDEN,
+      ErrorCode.RESOURCE_NOT_FOUND,
+      ErrorCode.METHOD_NOT_ALLOWED,
+      ErrorCode.NOT_ACCEPTABLE,
+      ErrorCode.TOO_MANY_REQUESTS,
+      ErrorCode.INTERNAL_SERVER_ERROR,
+      ErrorCode.SERVICE_UNAVAILABLE,
+    ],
+    types = [ProblemType.MEMBER_NOT_FOUND, ProblemType.GROUP_SERVICE_UNAVAILABLE],
+    instance = "/api/member/missing001",
+  )
+  @GetMapping("/api/member/{memberId}", produces = ["application/json"])
   fun detail(
     @Parameter(
       required = true,
-      description = "소문자 영숫자 10자리 멤버 ID",
+      description = "소문자 영숫자 10자리 멤버 ID. 형식 위반은 400",
       schema = Schema(pattern = "^[a-z0-9]{10}$"),
     )
-    @PathVariable("id")
-    id: String
+    @PathVariable("memberId")
+    memberId: String
   ): ResponseEntity<MemberDetailResponse>
 }

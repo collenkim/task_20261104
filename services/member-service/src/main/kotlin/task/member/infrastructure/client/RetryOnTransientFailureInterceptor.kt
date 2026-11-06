@@ -5,6 +5,7 @@ import java.io.InterruptedIOException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.http.HttpTimeoutException
+import java.time.Duration
 import org.slf4j.LoggerFactory
 import org.slf4j.MDC
 import org.springframework.http.HttpMethod
@@ -24,6 +25,7 @@ class RetryOnTransientFailureInterceptor(
   private val backoff: ExponentialRetryBackoff,
   private val jitter: RetryJitter,
   private val sleeper: RetrySleeper,
+  private val readTimeout: Duration? = null,
 ) : ClientHttpRequestInterceptor {
   private val log = LoggerFactory.getLogger(javaClass)
 
@@ -45,7 +47,9 @@ class RetryOnTransientFailureInterceptor(
         MDC.put("attempt", (retries + 1).toString())
         log.info("event=remote.attempt.started attempt={}", retries + 1)
         try {
-          return execution.execute(request, body).also {
+          val started = System.nanoTime()
+          val response = execution.execute(request, body)
+          return (readTimeout?.let { ReadDeadline.wrap(response, started, it) } ?: response).also {
             log.info(
               "event=remote.attempt.completed attempt={} status={}",
               retries + 1,

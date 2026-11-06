@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 | --- | --- |
 | 분류 | 서비스 계약 검토 |
-| 상태 | 기존 응답 유지 확정, 중복 입력·중계 오류 방식은 확인 대기. 검증 보완 미구현 |
+| 상태 | 기존 응답 유지·중계 필드 선별 적용. 2차(0.2.0): 중복 ID 제외+로그, 오류 코드표, GET 전용 적용 |
 | 현재 계약 | [api.md](api.md), [소속 정책](policies.md) |
 | 결정·구현 | [D1·D15](../../../docs/tasks/REVIEW-001/decisions.md), [REVIEW-002](../../../docs/tasks/REVIEW-002/plan.md) |
 
@@ -31,15 +31,15 @@
 
 ## 입력과 실패의 변경 범위
 
-D1 승인 전 summary 중복 ID는 기존 400이다. 제거 후 성공을 선택한다면 원래 요청 수 1~100 → 모든 ID 형식 확인 → 중복 제거 순서로 처리하고 반복 정보의 로그 표현도 확정한다. 그룹 전체 인원·정렬·조회 최대 2회·REPEATABLE_READ 일관성은 유지한다.
+D1은 REVIEW-002에서 사용자가 확정했다: 중복 ID는 응답에서 제외하고 중복된 ID 원문을 로그로 남긴다. 처리 순서는 모든 ID 형식 확인(400) → 원래 요청 수 100 초과(422) → 처음 나온 순서로 중복 제거 → WARN `event=input.duplicate_ids`다. 그룹 전체 인원·정렬·조회 최대 2회·REPEATABLE_READ 일관성은 유지한다.
 
-오류는 type/title/status/detail/instance/code만 반환한다. 400 VALIDATION_FAILED, 403 INTERNAL_ACCESS_DENIED, 404 GROUP_MEMBERSHIP_NOT_FOUND/NOT_FOUND, 500 GROUP_MEMBERSHIP_AMBIGUOUS/INTERNAL_ERROR, 503 SERVICE_UNAVAILABLE는 현행대로다. 오류 상세에 내부 키·원문·ID 목록을 포함하지 않는다.
+오류는 type/title/status/detail/instance/code만 반환한다. 2차 개정에서 `code`를 상태별 코드표로 바꾸고 원인은 `type`으로 구분한다: 400 `INVALID_PARAMETER`, 403 `FORBIDDEN`(type `internal-access-denied`), 404 `RESOURCE_NOT_FOUND`(미소속은 type `group-membership-not-found`, 경로는 `about:blank`), 405 `METHOD_NOT_ALLOWED`, 422 `VALIDATION_FAILED`, 500 `INTERNAL_SERVER_ERROR`(다건은 type `group-membership-ambiguous`), 503 `SERVICE_UNAVAILABLE`. 현재 표는 [API 정의](api.md#오류와-기타-경로)가 소유한다. 오류 본문에 내부 키·원문·ID 목록을 포함하지 않는다.
 
 ## 멤버 경유 Swagger와 추가 필드 차단
 
-그룹의 포트는 호스트에 공개하지 않는다. 멤버의 고정 두 GET 중계로 명세와 실행을 제공하고 내부 호출 키는 서버에서만 추가한다. 사용자 JWT나 local 한정은 별도 결정 전 도입하지 않는다.
+그룹의 포트는 호스트에 공개하지 않는다. 멤버의 고정 두 GET 중계로 명세와 실행을 제공하고 내부 호출 키는 서버에서만 추가한다. REVIEW-002 결정으로 중계는 local 프로필에서만 등록하고 멤버 JWT scope `group.read`를 요구한다([ADR-006](../../../docs/common/decisions/ADR-006-member-jwt-authentication.md)). 그룹 서비스는 사용자 토큰을 받지 않는다.
 
-제공자 DTO와 중계 성공 응답 모두 정확한 키 집합을 검사한다. 중계는 현재 성공 JSON이 객체인지만 검사하므로 중첩 필드를 포함한 계약 검사가 필요하다. 미정의 키·필수 누락·타입 위반을 발견하면 원문을 반환하지 않고 500 INTERNAL_ERROR로 처리하는 안을 제안한다. 승인된 오류 본문과 HTTP 상태 보존, 1MiB 상한·no-store·헤더 차단은 유지한다.
+제공자 DTO와 중계 성공 응답 모두 정확한 키 집합을 검사한다. 중계는 모든 깊이에서 정의된 필드만 새 응답으로 구성한다. 추가 필드는 제거하고 필수 누락·타입 위반은 502 `BAD_GATEWAY`(type `group-response-contract-violation`)로 처리한다. 다른 중계 오류는 [승인 계약](../../../docs/tasks/REVIEW-002/approved-contract.md)을 따른다. 승인된 오류 본문과 HTTP 상태 보존, 1MiB 상한·no-store·헤더 차단은 유지한다.
 
 ## 필수 검증 인계
 

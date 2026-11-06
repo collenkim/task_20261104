@@ -57,6 +57,20 @@ springdoc:
     path: /swagger-ui.html
 
 task:
+  security:
+    # 접근 토큰 검증(POL-SEC-001). 공개키는 configtree 파일 task.security.jwt.public-key(generateLocalSecrets 생성)로 받는다.
+    jwt:
+      issuer: ${TASK_JWT_ISSUER:task-local}
+      audience: member-service
+      clock-skew: 30s
+  # 인증된 호출자(sub)별 토큰 버킷(POL-SEC-007)
+  rate-limit:
+    enabled: true
+    capacity: 100
+    refill-per-second: 50
+  # 그룹 API Swagger 실행 중계(POL-SEC-006). 운영 기본은 꺼짐, local 프로필에서만 켠다.
+  group-proxy:
+    enabled: false
   group-membership:
     source: ${TASK_GROUP_MEMBERSHIP_SOURCE:http}
   group-client:

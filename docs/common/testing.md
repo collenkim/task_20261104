@@ -66,13 +66,16 @@ MemberPersistenceTests의 저장소 경계 검사에 MemberQueryApiTests·Member
 
 | 영역 | 필수 사례 |
 | --- | --- |
-| 입력 | 생략 기본값; 빈/공백/앞뒤 공백/음수/소수/문자/정수 범위 초과; page/size/sort 동일값·다른값 반복 모두 400 |
-| 범위 | size 101→100; size 2147483648→400(보정 전 검증); offset 경계 안/밖; 허용 범위 내 마지막 페이지 초과→빈 배열·그룹 호출 0회 |
+| 입력 | 생략 기본값; 빈/공백/앞뒤 공백/음수/소수/문자/정수 범위 초과·빈 sort; page/size/sort 동일값·다른값 반복 모두 400 `INVALID_PARAMETER` |
+| 범위 | size 101→100; size 2147483648→400(보정 전 검증); size 0·offset 경계 밖·허용하지 않는 정렬→422 `VALIDATION_FAILED`; 허용 범위 내 마지막 페이지 초과→빈 배열·그룹 호출 0회 |
 | 정렬 | 이름 ASC/DESC, 고정 ID 보조 정렬, 고정 DB 데이터셋의 동명이인 페이지 중복·누락 없음, 전체 건수는 멤버 수 |
 | 결합 | 미소속·단일 소속·다건 계약 위반, 소속별 권한, 멤버·그룹 응답 순서 변경, 정상 논리 호출 1회, 중복 없는 요청 ID |
 | 소속 계약 | 요청 ID 누락/추가/중복, 같은 멤버의 중복 group ID, 필수 필드 null/누락/공백, 잘못된 JSON/시각은 오류; 다중 소속은 계약 위반 |
 | 확장성 | 소비자에서 새로운 권한/과금 code·무시 가능한 확장 필드 수용; 공개 출력은 정의된 필드만 반환; fixture 선택 정보와 실제 그룹 필수 정보 구분; 필수 값 부재를 정상 미소속으로 숨기지 않음 |
-| 상세 | 정상·미소속·단일 소속·다건 오류·감사 정보·no-store; ID 형식 400/미존재 404에서 그룹 포트 미호출 |
+| 상세 | 정상·미소속·단일 소속·다건 오류·감사 정보·no-store; ID 형식 400/미존재 404(type member-not-found)에서 그룹 포트 미호출 |
+| 인증 | 토큰 없음·다른 키 서명·발급자/대상 불일치·누락·만료(허용 오차 초과)·nbf 미래·sub 없음·exp 없음·형식 오류→401; scope 부족→403; 허용 오차 안 만료 통과; 401·403 본문에 토큰 미포함; local Swagger 토큰이 실제 API를 통과 |
+| 메서드 | HEAD·OPTIONS·POST·PUT·PATCH·DELETE·TRACE × 업무·상태·명세·Swagger·테스트 경로 → 인증 전 405 + `Allow: GET`; HEAD·OPTIONS에서 조회·그룹 호출 없음 |
+| 요청 제한 | 토큰 버킷 허용·거부·보충·용량 상한·호출자 분리·추적 상한 축출; HTTP 429 + `Retry-After`; 다른 subject·업무 외 경로 영향 없음; 인증 실패가 먼저 401 |
 | 시각 | DB UTC TIMESTAMP(6)의 마이크로초 보존, 응답 Asia/Seoul yyyy-MM-dd HH:mm 변환, 멤버 가입일·그룹 가입일 분리, 잘못된 원격 형식 거부 |
 | 공급자 | local fixture 실제 200, 기본 프로필 fixture 거부, 알 수 없는 source 거부, 포트 구현 정확히 1개, fixture 중복/미등록 ID 오류, HTTP 실패 시 fixture 미호출 |
 | HTTP 실패 | 연결/응답 전 시간 초과 재시도, 본문 수신 중 시간 초과 분류, 5xx→503 재시도 없음, 4xx/리다이렉트/계약 오류→500, 내부 키·주소·본문 비노출 |
@@ -81,7 +84,7 @@ MemberPersistenceTests의 저장소 경계 검사에 MemberQueryApiTests·Member
 
 재시도 검사는 ExponentialRetryBackoffTests·RetryOnTransientFailureTests·GroupRetryConfigurationTests·GroupRetryHttpTests가 담당한다. 지터·대기를 고정 대역으로 바꾸어 순서·범위·횟수를 검사하고 실제 JDK HTTP 시간 초과·복구·최종 실패도 별도로 관찰한다. 실제 sleep 경과 시간으로 지터 알고리즘을 판정하지 않는다. 기존 명세 전달·본문 시간 초과 회귀도 유지한다.
 
-기존 CommonPolicyTests의 Pageable 최대 100과 일반 BAD_REQUEST 동작을 유지한다. 새 업무 API의 엄격한 입력과 기존 테스트 API를 혼동하지 않는다. 기대 DB 순서는 Kotlin 정렬로 계산하지 않고 고정 데이터의 명시된 순서를 사용한다. 정상 호출 1회와 재시도 포함 실제 HTTP 전송 최대 2회(기본값)를 구분한다.
+기존 CommonPolicyTests의 Pageable 최대 100을 유지하고, 테스트 API의 타입 불일치·필수 누락은 400 `INVALID_PARAMETER`, 메서드 검증 실패는 422 `VALIDATION_FAILED`로 확인한다. 새 업무 API의 엄격한 입력과 기존 테스트 API를 혼동하지 않는다. 기대 DB 순서는 Kotlin 정렬로 계산하지 않고 고정 데이터의 명시된 순서를 사용한다. 정상 호출 1회와 재시도 포함 실제 HTTP 전송 최대 2회(기본값)를 구분한다.
 
 ## POL-TEST-007 OpenAPI 스냅샷과 계약
 
@@ -90,8 +93,8 @@ MemberPersistenceTests의 저장소 경계 검사에 MemberQueryApiTests·Member
 - 읽기 전용 검사 명령: `./gradlew.bat :member-service:checkOpenApiSnapshot --no-daemon --console=plain`; 일반 `check`/`build`에도 연결했다. 일반 테스트나 build에서 스냅샷을 갱신하지 않는다.
 - `generateOpenApiSnapshot`의 별도 생성 문맥은 실제 운영 Controller·DTO를 로드하고 `/test-probe/**` 같은 테스트 Controller는 스캔에서 제외한다. `/internal-docs/group`도 기존 Hidden 정책에 따라 제외한다. 허용 업무 경로 두 개를 명시적으로 검증한다.
 - servers는 생성/검사에 동일한 기준 상대 주소(`/`)로 정규화한다. 객체 키만 재귀 정렬하고 설명·필수값·스키마·배열 순서를 무차별 제거하지 않는다. UTF-8/LF로 기록한다. 같은 입력으로 두 번 생성한 결과가 같아야 한다.
-- 명세 JSON 자체의 유효성·operationId 중복·필수/nullable·요청 범위·오류 예제를 검사한다. 실제 MockMvc 응답과 JSON 예제들을 같은 OpenAPI 스키마로 검증한다. 400·404·500·503도 검사한다.
-- 일반 `test`는 기존 멤버 검사를 실행하고 별도 `generateOpenApiSnapshot`이 계약 검사 8개를 실행한다. 생성 결과는 build에만 쓰고 `updateOpenApiSnapshot`만 검증 후 docs로 복사한다.
+- 명세 JSON 자체의 유효성·operationId 중복·필수/nullable·요청 범위·오류 예제를 검사한다. 실제 MockMvc 응답과 JSON 예제들을 같은 OpenAPI 스키마로 검증한다. 멤버는 400·401·403·404·405·422·500·503, 그룹은 400·403·404·405·422·500·503을 검사한다. 선언한 오류 상태마다 ProblemDetail 예제가 하나씩 있는지도 검사한다(멤버 18개, 그룹 14개).
+- 일반 `test`는 기존 멤버 검사를 실행하고 별도 `generateOpenApiSnapshot`이 계약 검사(멤버 9개, 그룹 1개)를 실행한다. 생성 결과는 build에만 쓰고 `updateOpenApiSnapshot`만 검증 후 docs로 복사한다.
 - 실제 응답을 자동 복사한 기대값만으로 검증하지 않는다. 요청/응답 소유 계약의 의미를 독립된 기대값으로 확인한다. 갱신 시 필드 삭제·타입/필수 여부 변경은 소비자 영향과 함께 리뷰한다.
 - 멤버 소비자 fixture/테스트 HTTP 서버의 성공은 실제 그룹 제공자의 적합성 증거가 아니다. 그룹 원본 명세·소비자 계약 검사·실제 연동의 증거를 구분한다. GROUP-001의 실제 연동 결과가 이후 변경의 자동 통과를 뜻하지 않는다.
 
@@ -105,6 +108,8 @@ MemberPersistenceTests의 저장소 경계 검사에 MemberQueryApiTests·Member
 - 그룹 중지/단독 실행에서도 fixture 기반 멤버 업무 API가 동작해야 한다. 실제 그룹 명세 조회는 실패할 수 있으며 그 검증을 섞지 않는다. 현재 동작 중인 다른 프로젝트·볼륨은 변경하지 않는다.
 - 단계별로 커밋 SHA, 실행 명령, 성공/실패/건너뜀 수를 기록한다. 최종 작업 폴더 검사만으로 모든 중간 커밋이 통과했다고 하지 않는다.
 
-## REVIEW-002 적용 예정 검증
+## REVIEW-002 응답 경계 검증
 
-정의 외 응답 필드 차단은 [POL-API-007](api-conventions.md#pol-api-007-정의된-응답만-노출)의 사용자 확정 요구다. 현재 futureField 허용 테스트와 중계 성공 JSON 검사는 아직 변경하지 않았다. 목록·상세·page·중첩 그룹의 정확한 필드 집합과 추가 필드 삽입 실패를 REVIEW-002에서 검증한다.
+정의 외 응답 필드 차단은 [POL-API-007](api-conventions.md#pol-api-007-정의된-응답만-노출)의 사용자 확정 요구다. 목록·상세·page·중첩 그룹의 정확한 필드 집합과 추가 필드 삽입 실패를 검사한다. 중계는 추가 필드를 제거하고 필수·타입·값 위반을 502로 구분한다. 연결 불가 503, 헤더·본문 시간 초과 504, 원격 서버 실패 502와 멤버 자체 오류 500을 구분한다. 재시도 후 본문의 시간 제한도 검사한다.
+
+문서 검사는 `python -X utf8 -I scripts/verification/docs-check.py`로 실행한다. 저장소 내부 파일·Markdown/HTML 앵커, 현재 문서의 분류·상태, 정책 정의·참조를 검사한다. 코드 블록·외부 URL·과거 작업의 정책 참조는 구별한다. 자연어 계약의 의미 일치와 외부 URL의 응답까지 자동으로 증명하지는 않는다. 검사기 회귀 테스트는 `python -X utf8 -I -m unittest discover -s tests -p test_docs_check.py`다.

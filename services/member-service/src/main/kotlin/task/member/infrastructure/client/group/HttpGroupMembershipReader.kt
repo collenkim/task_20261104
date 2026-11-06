@@ -54,7 +54,9 @@ class HttpGroupMembershipReader(
         val contentType = response.headers.contentType
         if (contentType == null || !media.isCompatibleWith(contentType))
           throw GroupServiceConfigurationException()
-        Payload(status, response.body.readAllBytes())
+        val bytes = response.body.readNBytes(MAX_RESPONSE_BYTES + 1)
+        if (bytes.size > MAX_RESPONSE_BYTES) throw GroupServiceConfigurationException()
+        Payload(status, bytes)
       }
     } catch (_: ResourceAccessException) {
       throw GroupServiceUnavailableException()
@@ -67,4 +69,8 @@ class HttpGroupMembershipReader(
     }
 
   private data class Payload(val status: Int, val body: ByteArray)
+
+  private companion object {
+    const val MAX_RESPONSE_BYTES = 1024 * 1024
+  }
 }

@@ -4,7 +4,6 @@ import task.member.application.model.PageResult
 import task.member.application.query.detail.MemberDetailView
 import task.member.application.query.summary.MemberSummaryView
 import task.member.presentation.query.response.GroupMembershipDetailResponse
-import task.member.presentation.query.response.GroupMembershipSummaryResponse
 import task.member.presentation.query.response.MemberDetailResponse
 import task.member.presentation.query.response.MemberPageResponse
 import task.member.presentation.query.response.MemberSummaryPageResponse
@@ -15,27 +14,27 @@ object MemberResponseMapper {
   fun summaries(view: PageResult<MemberSummaryView>) =
     MemberSummaryPageResponse(
       view.items.map { member ->
+        check(member.groups.size <= 1) { "멤버의 단일 소속 계약 위반" }
+        val group = member.groups.singleOrNull()
         MemberSummaryResponse(
           member.id,
           member.name,
-          member.groups.map {
-            GroupMembershipSummaryResponse(it.id, it.name, it.permission)
-          },
+          group?.name,
+          group?.permission,
         )
       },
       MemberPageResponse(view.size, view.number, view.totalElements, view.totalPages),
     )
 
-  fun detail(view: MemberDetailView) =
-    MemberDetailResponse(
+  fun detail(view: MemberDetailView): MemberDetailResponse {
+    check(view.groups.size <= 1) { "멤버의 단일 소속 계약 위반" }
+    return MemberDetailResponse(
       view.id,
       view.name,
       view.email,
       view.address,
       ApiTime.format(view.registeredDate),
-      ApiTime.format(view.createdAt),
-      view.createdBy,
-      view.groups.map {
+      view.groups.singleOrNull()?.let {
         GroupMembershipDetailResponse(
           it.id,
           it.name,
@@ -45,4 +44,5 @@ object MemberResponseMapper {
         )
       },
     )
+  }
 }

@@ -21,8 +21,8 @@ class MemberQueryController(
       summariesUseCase.execute(MemberSummaryRequest.from(parameters).toQuery())
     )
 
-  override fun detail(id: String) =
+  override fun detail(memberId: String) =
     ResponseEntity.ok()
       .cacheControl(CacheControl.noStore())
-      .body(MemberResponseMapper.detail(detailUseCase.execute(MemberDetailQuery(id))))
+      .body(MemberResponseMapper.detail(detailUseCase.execute(MemberDetailQuery(memberId))))
 }

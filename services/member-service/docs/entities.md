@@ -30,8 +30,8 @@ Spring Data JPA 스타터, Hibernate, Kotlin JPA 기본 생성자·프록시 지
 | email | VARCHAR(254) | 불가 | 이메일, 이번 범위 고유 제약 없음 / email |
 | address | VARCHAR(255) | 불가 | 주소 / address |
 | registered_at | TIMESTAMP(6) | 불가 | 가입 시각 UTC / registeredDate |
-| created_at | TIMESTAMP(6) | 불가 | 생성 시각 UTC / createdAt |
-| created_by | VARCHAR(50) | 불가 | 생성 주체 / createdBy |
+| created_at | TIMESTAMP(6) | 불가 | 생성 시각 UTC / 내부 감사용, 공개 응답 제외 |
+| created_by | VARCHAR(50) | 불가 | 생성 주체 / 내부 감사용, 공개 응답 제외 |
 
 - `ix_member_name_id(name, id)`를 적용했다. 검증 데이터셋에서 ASC는 Using index, DESC·ID ASC는 Using index; Using filesort였다. 대량 데이터 성능 보장으로 해석하지 않는다.
 - 기본 문자열 비교는 `utf8mb4_unicode_ci`, ID는 `ascii_bin`이다. 형식·공백·길이는 입력/데이터 검증에서 따로 보장한다.
@@ -46,9 +46,11 @@ Spring Data JPA 스타터, Hibernate, Kotlin JPA 기본 생성자·프록시 지
 | --- | --- | --- | --- |
 | tu3fgxd45k | user1 | arutjf9348/Editor | 단일 소속 |
 | dj8fy4bewk | user2 | arutjf9348/Viewer | 단일 소속 |
-| k2m9x0p1q3 | user3 | 빈 배열 | 명시적 미소속 |
-| j0n8k2m4p6 | 동명이인 | 빈 배열 | 이름 동률·ID 보조 정렬 |
+| k2m9x0p1q3 | user3 | 없음(`memberships: []`) | 명시적 미소속 |
+| j0n8k2m4p6 | 동명이인 | 없음(`memberships: []`) | 이름 동률·ID 보조 정렬 |
 | q1w2e3r4t5 | 동명이인 | demo000002/Admin | 이름 동률·소속 조합 |
+
+fixture의 `memberships`는 내부 입력 형식이며 멤버당 0~1개만 허용한다. 2개 이상이면 fixture를 읽을 때 설정 오류로 거부한다. 공개 응답은 단일 `group`이다([POL-API-005](../../../docs/common/api-conventions.md#pol-api-005-시각코드-계약)).
 
 `arutjf9348`은 Test1, `demo000002`는 프로젝트팀으로 둔다. 이메일은 `<멤버ID>@example.invalid`, 주소는 가상 문자열이다. 시드의 등록/생성 시각은 명시적인 UTC 고정값, 생성자는 `seed`다. fixture에는 다섯 ID가 모두 존재해야 하며 실제 그룹 데이터를 복제하지 않는다. 그룹 시드와 동일 합성 ID를 사용하되 DB 사이 자동 동기화를 가정하지 않는다.
 

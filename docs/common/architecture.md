@@ -14,7 +14,7 @@
 
 ```mermaid
 flowchart LR
-    U["사용자"] -->|"HTTP API (사용자 인증 없음)"| M["멤버 서비스 :8081<br/>공개 진입점"]
+    U["사용자"] -->|"HTTP GET (JWT Bearer)"| M["멤버 서비스 :8081<br/>공개 진입점"]
     M -->|"HTTP API (내부 시크릿 헤더)"| G["그룹 서비스 :8082<br/>내부 전용"]
     M -->|"member-db-net"| MD[("member_service DB")]
     G -->|"group-db-net"| GD[("group_service DB")]

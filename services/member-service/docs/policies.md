@@ -10,8 +10,8 @@
 
 - 소유 데이터: 멤버 정보.
 - 자기 MariaDB와 계정만 사용하며 타 서비스 코드·DTO·엔티티·DB를 직접 참조하지 않는다.
-- 사용자 인증·인가는 이번 범위에서 제외한다. 멤버가 사용자 진입점이다.
-- 그룹 클라이언트가 서버 내부 키를 첨부한다. 사용자 헤더를 그룹으로 그대로 전달하지 않는다.
+- 멤버가 사용자 진입점이다. 사용자 요청은 JWT Bearer로 인증하고 경로별 scope로 인가한다([POL-SEC-001](../../../docs/common/security.md#pol-sec-001), [ADR-006](../../../docs/common/decisions/ADR-006-member-jwt-authentication.md)). 인증된 subject별로 요청 수를 제한한다([POL-SEC-007](../../../docs/common/security.md#pol-sec-007)).
+- 그룹 클라이언트가 서버 내부 키를 첨부한다. 사용자 토큰·헤더를 그룹으로 전달하지 않는다. 그룹 Swagger 중계는 local 프로필에서만 등록한다([POL-SEC-006](../../../docs/common/security.md#pol-sec-006)).
 - 그룹 장애가 멤버 기동·readiness·자기 명세를 막지 않는다. 현재 그룹 명세 요청은 장애 시 503으로 실패한다.
 - [보안](../../../docs/common/security.md), [통신](../../../docs/common/service-communication.md), [API](../../../docs/common/api-conventions.md), [CQRS](../../../docs/common/cqrs.md)를 따른다.
 - 업무 식별자·조회 조건·공개 필드는 [API 정의](api.md)와 [엔티티](entities.md)에 기록한다. MEMBER-001은 저장소·소속 공급자·공개 조회 API 결합을 구현했다.
@@ -22,11 +22,11 @@
 
 저장소·소속 계약·공개 응답 결합을 구현했다. fixture와 테스트 HTTP 공급자로 같은 공개 API를 실행하고 실제 호출 스레드의 트랜잭션 종료를 검증한다([3단계 기록](../../../docs/verification/MEMBER-001/stage-3.md)).
 
-- 현재 멤버당 소속은 0~1개이며 그룹 DB UNIQUE와 조회 방어 로직이 이를 보장한다. 공개 계약은 항상 `groups[]`다.
+- 현재 멤버당 소속은 0~1개이며 그룹 DB UNIQUE와 조회 방어 로직이 이를 보장한다. 공개 목록은 그룹 이름·권한 코드, 상세는 단일 group 객체다. 미소속은 null이다.
 - 멤버 DB에서 정렬·페이지를 먼저 결정하고, 해당 ID만 그룹 포트로 일괄 조회한다. 전체 건수는 멤버 수, 멤버 순서는 DB 결과를 유지한다.
-- 각 멤버의 그룹 배열은 ID 오름차순이다. 동일 멤버 안에서 중복 group ID는 계약 오류다. 같은 group ID가 서로 다른 멤버에 있는 것은 정상이다.
+- 내부 소속 모델은 멤버당 0~1개다. 한 멤버에 소속이 둘 이상이거나 같은 group ID가 반복되면 계약 오류다. 같은 group ID가 서로 다른 멤버에 있는 것은 정상이다.
 - 요청 ID마다 정확히 한 소속 목록이 필요하다. 누락·추가 member ID·중복 member ID, 비어 있는 필수 코드/그룹명은 오류다. 원격 sparse summary의 미포함 요청 ID만 미소속으로 변환하며 내부 모델의 누락·복수 소속은 오류다.
-- 알 수 없는 비어 있지 않은 권한 코드는 허용한다. 권한 enum을 멤버에 복제하지 않는다. 현행 공개 상세 joinedAt·pricing은 nullable이며 실제 그룹 상세의 6개 필드는 필수다. permissionName은 반환하지 않는다. 내부 HTTP 소비자가 모르는 원격 필드를 무시하는 것과, 공개 응답에 정의되지 않은 필드를 추가하는 것은 별개다. 공개 필드 제한의 강화는 [개정안](api-review.md)과 REVIEW-002 검증 대상이다.
+- 알 수 없는 비어 있지 않은 권한 코드는 허용한다. 권한 enum을 멤버에 복제하지 않는다. 현행 공개 상세 group.registeredDate·pricing은 nullable이며 실제 그룹 상세의 6개 필드는 필수다. permissionName은 반환하지 않는다. 내부 HTTP 소비자가 모르는 원격 필드를 무시하는 것과, 공개 응답에 정의되지 않은 필드를 추가하는 것은 별개다. 정의된 필드만 공개 DTO로 투영하며 그룹 중계도 같은 원칙을 적용한다. [승인 계약](../../../docs/tasks/REVIEW-002/approved-contract.md)을 따른다.
 - 조회 트랜잭션은 저장소 경계에서 종료한다. fixture/HTTP 선택과 무관하게 그룹 포트 호출 시 활성 트랜잭션이 없어야 한다.
 
 ## POL-MEMBER-002 임시 그룹 공급자
@@ -43,4 +43,4 @@ source 설정·HTTP/fixture 구현과 local 격리를 적용했다. 공개 멤�
 - 기존 `/internal-docs/group`은 실제 그룹 명세 HTTP 조회를 유지한다. fixture로 가짜 그룹 업무 명세를 생성하거나 그룹 내부 API가 구현된 것처럼 표시하지 않는다.
 - local 시드·공개 API를 구현했으며 시드는 local 프로필에서만 적용한다. 현재 실행 방법과 후속 확인 항목은 [로컬 실행](../../../docs/common/local-development.md)에 있다.
 
-목록은 bulk 조회, 상세는 단건 포트를 사용한다. 전용 미소속 404만 빈 groups로 바꾸며 다른 오류는 공통 통신 정책을 따른다. DB 조회를 끝낸 뒤 HTTP 호출하므로 응답 대기·재시도 동안 트랜잭션을 유지하지 않는다.
+목록은 bulk 조회, 상세는 단건 포트를 사용한다. 전용 미소속 404만 group:null로 바꾸며 다른 오류는 공통 통신 정책을 따른다. DB 조회를 끝낸 뒤 HTTP 호출하므로 응답 대기·재시도 동안 트랜잭션을 유지하지 않는다.
