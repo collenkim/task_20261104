@@ -3,14 +3,16 @@
 | 항목 | 내용 |
 | --- | --- |
 | 분류 | 후속 구현 인계 |
-| 상태 | 문서 작성, 핵심 응답 승인과 REVIEW-001 master 반영 대기 |
+| 상태 | REVIEW-001 master 반영·REVIEW-002 착수·핵심 응답 후속 승인 확인 |
 | 코드 기준 | bc3ec02be37ae61d72be897280090e59ea81352d |
-| 문서 기준 SHA | 미커밋. REVIEW-001 master 반영 후 실제 SHA 기록 |
+| 문서 기준 SHA | aaf0005990fa6dfd8c4e661935472dbe3aebc18a (REVIEW-002 시작 master) |
 | 관련 | [결정표](decisions.md), [검토 결과](../../verification/REVIEW-001/findings.md), [구현 계획](../REVIEW-002/plan.md) |
+
+후속 확정: 사용자가 D2·D3 단일 group·감사 필드 제외·가입일 분리와 D15 정의 필드 선별을 승인했다. 일괄 500 제안은 폐기하고 원인별 502/503/504로 구분한다. [최종 승인 계약](../REVIEW-002/approved-contract.md)이 이전 확인 대기·제안 문구보다 우선한다.
 
 ## 브랜치 진입 조건
 
-REVIEW-001 문서를 develop에서 검토하고 사용자 절차로 feature를 master에 병합·push한 뒤 master에서 feature/REVIEW-002를 만든다. 두 feature를 동시에 운용하거나 REVIEW-001을 부모로 만들지 않는다. 코드 착수 전에 D2·D3와 D15의 구체적 오류 방식을 확인한다. JWT·DNS·중복 제거·회로 차단은 승인 없으면 현행 유지로 범위를 잠근다.
+REVIEW-001 문서를 develop에서 검토하고 사용자 절차로 feature를 master에 병합·push한 뒤 master에서 feature/REVIEW-002를 만든다. 두 feature를 동시에 운용하거나 REVIEW-001을 부모로 만들지 않는다. D2·D3와 D15는 후속 승인 계약으로 확정했다. JWT·DNS·중복 제거·회로 차단은 승인 없으면 현행 유지로 범위를 잠근다.
 
 ## 변경과 필수 검사
 

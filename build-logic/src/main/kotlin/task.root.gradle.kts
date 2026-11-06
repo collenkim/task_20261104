@@ -1,4 +1,4 @@
-// 루트 규칙: 빌드 스크립트·build-logic 포맷 검사, 로컬 비밀값(내부 호출 키·DB 비밀번호) 생성 작업.
+// 루트 규칙: 빌드 스크립트·build-logic 포맷 검사, 로컬 비밀값(내부 호출 키·DB 비밀번호·멤버 JWT 키 쌍) 생성 작업.
 // 포맷 대상에 ai-logs/·scripts/는 넣지 않는다(AI 세션 로그와 로깅 도구는 포맷 작업이 바꾸지 않는다).
 import task.buildlogic.LocalSecretsTask
 
@@ -22,9 +22,17 @@ val secretsDir = layout.projectDirectory.dir("secrets")
 
 tasks.register<LocalSecretsTask>("generateLocalSecrets") {
   group = "local setup"
-  description = "secrets/에 없는 로컬 내부 호출 키·DB 비밀번호만 만든다(값은 출력하지 않음)."
+  description = "secrets/에 없는 로컬 내부 호출 키·DB 비밀번호·멤버 JWT 키 쌍만 만든다(값은 출력하지 않음)."
   outputDir = secretsDir
   rotateInternalKey = false
+}
+
+tasks.register<Exec>("startLocal") {
+  group = "local setup"
+  description = "없는 로컬 비밀 파일을 생성한 뒤 두 서비스와 DB를 Compose로 실행한다."
+  dependsOn("generateLocalSecrets")
+  workingDir(layout.projectDirectory)
+  commandLine("docker", "compose", "up", "-d", "--build", "--wait")
 }
 
 tasks.register<LocalSecretsTask>("rotateInternalServiceKey") {

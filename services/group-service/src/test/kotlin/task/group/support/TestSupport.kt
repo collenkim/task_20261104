@@ -1,15 +1,12 @@
 package task.group.support
 
-import jakarta.validation.Valid
-import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Min
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
 import org.springframework.context.annotation.Bean
 import org.springframework.data.domain.Pageable
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.PostMapping
-import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
@@ -48,7 +45,7 @@ object TestProperties {
   }
 }
 
-/** 공통 정책(인증·오류 응답·페이지네이션) 확인용 테스트 전용 API. 운영 코드에는 없다. */
+/** 공통 정책(인증·오류 응답·페이지네이션) 확인용 테스트 전용 GET API. 운영 코드에는 없다. */
 @RestController
 @RequestMapping("/test-probe")
 class ProbeController {
@@ -57,9 +54,9 @@ class ProbeController {
 
   @GetMapping("/number") fun number(@RequestParam value: Int) = mapOf("value" to value)
 
-  @PostMapping("/validated") fun validated(@Valid @RequestBody body: ProbeBody) = body
+  /** 형식은 맞지만 제약을 어긴 값(0 이하)은 메서드 검증 실패(422)다. */
+  @GetMapping("/validated")
+  fun validated(@RequestParam @Min(1) value: Int) = mapOf("value" to value)
 
   @GetMapping("/boom") fun boom(): Map<String, Any> = error("내부 상세 정보")
-
-  data class ProbeBody(@field:NotBlank val name: String?)
 }

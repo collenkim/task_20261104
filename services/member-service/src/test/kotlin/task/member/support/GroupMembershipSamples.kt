@@ -13,7 +13,7 @@ object GroupMembershipSamples {
   {"memberId":"member0001","memberships":[{"groupId":"group00002","groupName":"두 번째 그룹","permission":"FutureOwner","joinedAt":"2026-11-04T23:59:59.123456Z","pricing":"NewPlan"}]}
  ]}"""
   const val SUMMARY =
-    """{"group":[{"groupId":"group00002","groupName":"두 번째 그룹","totalMemberCount":2,"members":[{"memberId":"member0001","permission":"FutureOwner"}]}]}"""
+    """{"group":[{"groupId":"group00002","groupName":"두 번째 그룹","totalMemberCount":1,"members":[{"memberId":"member0001","permission":"FutureOwner"}]}]}"""
   const val DETAIL =
     """{"memberId":"member0001","groupId":"group00002","groupName":"두 번째 그룹","registeredDate":"2026-11-05 08:59","pricing":"NewPlan","permission":"FutureOwner"}"""
   private val json = JsonMapper.builder().build()
@@ -31,7 +31,7 @@ object GroupMembershipSamples {
           mapOf(
             "groupId" to id,
             "groupName" to members.first().second.path("groupName").stringValue(),
-            "totalMemberCount" to rows.count { it.second.path("groupId").stringValue() == id },
+            "totalMemberCount" to members.size,
             "members" to
               members.map {
                 mapOf(

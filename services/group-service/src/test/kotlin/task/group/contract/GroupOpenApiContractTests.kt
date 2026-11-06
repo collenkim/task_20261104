@@ -80,19 +80,69 @@ class GroupOpenApiContractTests {
       listOf(
         Triple("/api/groups/summary?memberIds=tu3fgxd45k", "/api/groups/summary", 200),
         Triple("/api/group/tu3fgxd45k", "/api/group/{memberId}", 200),
+        Triple(
+          "/api/groups/summary?memberIds=tu3fgxd45k&memberIds=tu3fgxd45k",
+          "/api/groups/summary",
+          200,
+        ),
         Triple("/api/groups/summary?memberIds=%20", "/api/groups/summary", 400),
+        Triple("/api/groups/summary?memberIds=a,b", "/api/groups/summary", 400),
+        Triple(
+          "/api/groups/summary?" +
+            (1..101).joinToString("&") { "memberIds=m" + it.toString().padStart(9, '0') },
+          "/api/groups/summary",
+          422,
+        ),
+        Triple("/api/group/BAD", "/api/group/{memberId}", 400),
         Triple("/api/group/k2m9x0p1q3", "/api/group/{memberId}", 404),
       )) {
       val response = get(url)
-      assertEquals(expected, response.status)
-      val media = if (expected == 200) "application/json" else "application/problem+json"
-      assertTrue(contract.errors(path, expected, media, response.contentAsString).isEmpty())
+      assertEquals(expected, response.status, url)
+      val media = if (expected == 200) "application/json" else "application/json"
+      assertTrue(contract.errors(path, expected, media, response.contentAsString).isEmpty(), url)
     }
-    val forbidden = get("/api/group/tu3fgxd45k", false)
-    assertEquals(403, forbidden.status)
+    val notAllowed =
+      mvc
+        .perform(
+          org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
+            "/api/group/tu3fgxd45k"
+          )
+        )
+        .andReturn()
+        .response
+    assertEquals(405, notAllowed.status)
     assertTrue(
       contract
-        .errors("/api/group/{memberId}", 403, "application/problem+json", forbidden.contentAsString)
+        .errors(
+          "/api/group/{memberId}",
+          405,
+          "application/json",
+          notAllowed.contentAsString,
+        )
+        .isEmpty()
+    )
+    var errorResponses = 0
+    for ((_, pathItem) in spec.path("paths").properties()) {
+      for ((status, response) in pathItem.path("get").path("responses").properties()) {
+        if (status == "200") continue
+        errorResponses++
+        val examples = response.path("content").path("application/json").path("examples")
+        assertEquals(1, examples.size(), status)
+        for (example in examples) {
+          assertEquals(status.toInt(), example.path("value").path("status").intValue())
+        }
+      }
+    }
+    assertEquals(14, errorResponses)
+    val forbidden = get("/api/group/tu3fgxd45k", false)
+    assertEquals(403, forbidden.status)
+    assertEquals(
+      "urn:problem-type:internal-access-denied",
+      json.readTree(forbidden.contentAsByteArray).path("type").stringValue(),
+    )
+    assertTrue(
+      contract
+        .errors("/api/group/{memberId}", 403, "application/json", forbidden.contentAsString)
         .isEmpty()
     )
     val rows = reader.findByMemberId("tu3fgxd45k")
@@ -105,7 +155,7 @@ class GroupOpenApiContractTests {
           .errors(
             "/api/group/{memberId}",
             500,
-            "application/problem+json",
+            "application/json",
             ambiguous.contentAsString,
           )
           .isEmpty()
@@ -127,7 +177,7 @@ class GroupOpenApiContractTests {
           .errors(
             "/api/group/{memberId}",
             503,
-            "application/problem+json",
+            "application/json",
             unavailable.contentAsString,
           )
           .isEmpty()

@@ -3,7 +3,7 @@ package task.group.application.port.output
 import task.group.application.model.GroupMembershipRecord
 import task.group.application.model.GroupReadSnapshot
 
-/** 여러 멤버의 소속과 그룹 인원을 한 읽기 트랜잭션에서 조회한다(POL-GROUP-002). */
+/** 요청 멤버의 소속을 한 읽기 트랜잭션에서 조회한다. 인원은 반환 행에서 계산한다(POL-GROUP-002). */
 fun interface GroupSummaryReader {
   fun findSummaries(memberIds: List<String>): GroupReadSnapshot
 }

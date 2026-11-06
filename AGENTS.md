@@ -5,7 +5,7 @@
 - 작업 전 `docs/README.md`에서 현재 공통 정책·서비스 정의와 작업별 기록을 구분한다. 현재 스펙은 `docs/common/technology-stack.md`, 검증 결과는 `docs/verification/<작업ID>/`를 기준으로 한다. 적용 예정 계약은 서비스의 `docs/api-review.md`와 작업 결정표에서 승인 상태를 확인한다.
 - 코드 작성은 `docs/common/code-conventions.md`와 CQRS·API·데이터 정책을 따른다. 코드·상태 enum에는 `code`, `status`, `codeName`, `description`을 명시한다(POL-CODE-005). 외부 계약에 enum의 순번이나 상수 이름을 그대로 사용하지 않는다.
 - 업무 정책·엔티티·API 정의는 해당 서비스의 `docs/`에 갱신한다. 공통 규칙은 서비스 문서마다 복제하지 않고 공통 문서로 연결한다.
-- 로컬 기본 실행은 루트 `docker compose up -d --build --wait`다. 서비스별 Compose와 DB·네트워크·볼륨의 소유권을 유지한다. 일괄/단독 실행의 포트·볼륨 차이는 `docs/common/local-development.md`를 확인한다.
+- 로컬 기본 실행은 루트 `./gradlew.bat startLocal`이다. 누락된 비밀 파일을 생성한 뒤 `docker compose up -d --build --wait`를 실행한다. 서비스별 Compose와 DB·네트워크·볼륨의 소유권을 유지한다. 일괄/단독 실행의 포트·볼륨 차이는 `docs/common/local-development.md`를 확인한다.
 - 미구현 기능과 미검증 항목을 완료로 표시하지 않는다. 소스·설정 변경 시 관련 문서와 실제 검증 결과를 함께 갱신한다.
 
 ## 커밋 메시지

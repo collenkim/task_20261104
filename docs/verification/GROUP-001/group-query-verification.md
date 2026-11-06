@@ -6,7 +6,7 @@
 | 상태 | 이력 · 당시 요청·계획·검증 내용을 보존. 현재 구현 완료 선언이 아님 |
 | 현재 기준 | [문서 색인](../../README.md)의 공통·서비스 정의를 따른다 |
 
-현재 Swagger 실행 기준은 마지막의 **Swagger 중계 보완 검증** 절과 [구현 요청서](../../tasks/GROUP-001/request.md)다. 초기 159건 검증과 당시 읽기 전용 화면 결과는 이력으로 보존한다.
+현재 계약은 [멤버 API](../../../services/member-service/docs/api.md)와 [그룹 API](../../../services/group-service/docs/api.md)가 소유한다. 소속은 멤버당 0~1개다. 당시 Swagger 실행 기준은 마지막의 **Swagger 중계 보완 검증** 절과 [구현 요청서](../../tasks/GROUP-001/request.md)다. 초기 159건 검증과 당시 읽기 전용 화면 결과는 이력으로 보존한다.
 
 | 항목 | 결과 |
 | --- | --- |
@@ -21,8 +21,8 @@
 - 상세는 memberId/groupId/groupName/registeredDate/pricing/permission의 단일 객체다. permission·pricing은 code이며 표시명은 내부 enum에만 있다.
 - NOT NULL + UNIQUE(member_id), UNIQUE(group_id,member_id)로 중복 입력을 차단한다. 조회 다건은 명시적 예외와 500 GROUP_MEMBERSHIP_AMBIGUOUS·ERROR 로그다.
 - summary의 요청 멤버 목록과 전체 그룹 인원을 분리하고 REPEATABLE READ에서 최대 두 쿼리를 사용한다. 같은 그룹의 서로 다른 멤버는 허용한다.
-- 멤버 목록은 summary, 상세는 단건 그룹 API를 각각 한 번 호출한다. 정상 sparse summary만 미소속으로 채우며 단건의 전용 404만 빈 groups로 변환한다. 5xx는 멤버 503, 다른 4xx·계약 오류는 500이다.
-- 멤버의 groups 배열·페이징 설정 블록·엄격한 입력·정렬·offset 검증은 유지한다. permissionName 삭제와 시각 문자열 변경은 멤버 계약 0.2.0의 소비자 변경 사항이다.
+- 멤버 목록은 summary, 상세는 단건 그룹 API를 각각 한 번 호출한다. 정상 sparse summary만 미소속으로 채우며 단건의 전용 404만 미소속(group null)으로 변환한다. 5xx는 멤버 503, 다른 4xx·계약 오류는 500이다.
+- 멤버의 페이징 설정 블록·엄격한 입력·정렬·offset 검증은 유지한다. 소속은 멤버당 최대 1개다. permissionName 삭제와 시각 문자열 변경은 멤버 계약 0.2.0의 소비자 변경 사항이다.
 - 기존 멤버 V2를 수정하지 않고 V3로 TIMESTAMP(6)을 적용한다. UTC·마이크로초 보존, 범위 밖 값의 DDL 전 중단을 검증했다. 업무 응답에서만 Asia/Seoul yyyy-MM-dd HH:mm을 사용한다.
 - 호출자 ID + 호출자별 키, 선택 CIDR, 기존 local 키 파일 매핑을 적용했다. 사용자 인증은 도입하지 않았다.
 - 요청·업무·조회·원격 호출·재시도를 INFO로, 예외를 ERROR로 남긴다. requestId/callId/attempt를 전파하고 실제 식별자·본문·키·예외 메시지는 출력하지 않는다.

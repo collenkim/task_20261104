@@ -31,7 +31,7 @@
 | created_at | TIMESTAMP(6) | NOT NULL, UTC 생성 시각 |
 | created_by | VARCHAR(50) | NOT NULL, 생성 주체 |
 
-UNIQUE(member_id)는 한 멤버의 다른 그룹 가입도 차단한다. UNIQUE(group_id, member_id)는 같은 그룹의 중복 소속을 제한한다. 두 인덱스로 멤버별 조회와 그룹 인원 집계를 지원한다. 다른 서비스 DB에 FK나 JPA 관계를 만들지 않는다.
+UNIQUE(member_id)는 한 멤버의 다른 그룹 가입도 차단한다. UNIQUE(group_id, member_id)는 같은 그룹의 중복 소속을 제한한다. 두 인덱스로 멤버별 조회와 그룹별 소속 검색을 지원한다. summary의 인원은 별도 전체 집계 없이 실제 반환 행에서 계산한다. 다른 서비스 DB에 FK나 JPA 관계를 만들지 않는다.
 
 ## local 시드
 

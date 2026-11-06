@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 | --- | --- |
 | 분류 | 서비스 계약 검토 |
-| 상태 | 기존 응답 유지 확정, 중복 입력·중계 오류 방식은 확인 대기. 검증 보완 미구현 |
+| 상태 | 기존 필드 유지·중계 선별 적용. 2차(0.2.0): 중복 ID·오류 코드표·GET 전용. 3차(0.3.0): JSON. 4차(0.4.0): 요청 범위의 실제 반환 멤버 수 집계·매핑 없는 ID 제외 |
 | 현재 계약 | [api.md](api.md), [소속 정책](policies.md) |
 | 결정·구현 | [D1·D15](../../../docs/tasks/REVIEW-001/decisions.md), [REVIEW-002](../../../docs/tasks/REVIEW-002/plan.md) |
 
@@ -16,7 +16,7 @@
 | summary: group | 배열 | 미소속만 요청하면 [] |
 | group[].groupId | 문자열 | 소문자 영숫자 10자리 그룹 ID |
 | group[].groupName | 문자열 | 그룹 이름 |
-| group[].totalMemberCount | 정수(int64) | 요청 범위와 별개인 그룹 전체 인원 |
+| group[].totalMemberCount | 정수(int64) | 요청 ID 중 매핑이 조회되어 실제 반환된 members의 개수 |
 | group[].members | 배열 | 요청된 ID에 해당하는 소속만 포함 |
 | group[].members[].memberId | 문자열 | 소문자 영숫자 10자리 멤버 ID |
 | group[].members[].permission | 문자열 | 권한 code |
@@ -31,16 +31,16 @@
 
 ## 입력과 실패의 변경 범위
 
-D1 승인 전 summary 중복 ID는 기존 400이다. 제거 후 성공을 선택한다면 원래 요청 수 1~100 → 모든 ID 형식 확인 → 중복 제거 순서로 처리하고 반복 정보의 로그 표현도 확정한다. 그룹 전체 인원·정렬·조회 최대 2회·REPEATABLE_READ 일관성은 유지한다.
+D1은 REVIEW-002에서 사용자가 확정했다: 중복 ID는 응답에서 제외하고 중복된 ID 원문을 로그로 남긴다. 처리 순서는 모든 ID 형식 확인(400) → 원래 요청 수 100 초과(422) → 처음 나온 순서로 중복 제거 → WARN `event=input.duplicate_ids`다. 후속 수정(0.4.0)에서 전체 그룹 집계를 제거하고 실제 반환 members의 개수로 바꿨다. 정렬과 읽기 트랜잭션을 유지하며 조회는 1회다.
 
-오류는 type/title/status/detail/instance/code만 반환한다. 400 VALIDATION_FAILED, 403 INTERNAL_ACCESS_DENIED, 404 GROUP_MEMBERSHIP_NOT_FOUND/NOT_FOUND, 500 GROUP_MEMBERSHIP_AMBIGUOUS/INTERNAL_ERROR, 503 SERVICE_UNAVAILABLE는 현행대로다. 오류 상세에 내부 키·원문·ID 목록을 포함하지 않는다.
+오류는 type/title/status/detail/instance/code만 반환한다. 2차 개정에서 `code`를 상태별 코드표로 바꾸고 원인은 `type`으로 구분한다: 400 `INVALID_PARAMETER`, 403 `FORBIDDEN`(type `internal-access-denied`), 404 `RESOURCE_NOT_FOUND`(미소속은 type `group-membership-not-found`, 경로는 `about:blank`), 405 `METHOD_NOT_ALLOWED`, 422 `VALIDATION_FAILED`, 500 `INTERNAL_SERVER_ERROR`(다건은 type `group-membership-ambiguous`), 503 `SERVICE_UNAVAILABLE`. 현재 표는 [API 정의](api.md#오류와-기타-경로)가 소유한다. 오류 본문에 내부 키·원문·ID 목록을 포함하지 않는다.
 
 ## 멤버 경유 Swagger와 추가 필드 차단
 
-그룹의 포트는 호스트에 공개하지 않는다. 멤버의 고정 두 GET 중계로 명세와 실행을 제공하고 내부 호출 키는 서버에서만 추가한다. 사용자 JWT나 local 한정은 별도 결정 전 도입하지 않는다.
+그룹의 포트는 호스트에 공개하지 않는다. 멤버의 고정 두 GET 중계로 명세와 실행을 제공하고 내부 호출 키는 서버에서만 추가한다. REVIEW-002 결정으로 중계는 local 프로필에서만 등록하고 멤버 JWT scope `group.read`를 요구한다([ADR-006](../../../docs/common/decisions/ADR-006-member-jwt-authentication.md)). 그룹 서비스는 사용자 토큰을 받지 않는다.
 
-제공자 DTO와 중계 성공 응답 모두 정확한 키 집합을 검사한다. 중계는 현재 성공 JSON이 객체인지만 검사하므로 중첩 필드를 포함한 계약 검사가 필요하다. 미정의 키·필수 누락·타입 위반을 발견하면 원문을 반환하지 않고 500 INTERNAL_ERROR로 처리하는 안을 제안한다. 승인된 오류 본문과 HTTP 상태 보존, 1MiB 상한·no-store·헤더 차단은 유지한다.
+제공자 DTO와 중계 성공 응답 모두 정확한 키 집합을 검사한다. 중계는 모든 깊이에서 정의된 필드만 새 응답으로 구성한다. 추가 필드는 제거하고 필수 누락·타입 위반은 502 `BAD_GATEWAY`(type `group-response-contract-violation`)로 처리한다. 다른 중계 오류는 [승인 계약](../../../docs/tasks/REVIEW-002/approved-contract.md)을 따른다. 승인된 오류 본문과 HTTP 상태 보존, 1MiB 상한·no-store·헤더 차단은 유지한다.
 
 ## 필수 검증 인계
 
-기존 상세 500·503 검사를 재사용한다. 잘못된 상세 ID 400, 빈 summary 200, 입력의 각 오류, 같은 멤버의 동시 중복 입력, 다건 방어, 요청 멤버 범위와 전체 인원, 두 조회의 같은 DB 스냅샷을 검사한다. 원본 그룹 응답과 멤버 중계 양쪽에 추가 필드가 없음을 별도로 검증한다. 멤버 소비자 단독 테스트는 다른 서비스 소스 트리를 직접 읽지 않도록 한다.
+기존 상세 500·503 검사를 재사용한다. 잘못된 상세 ID 400, 빈 summary 200, 입력의 각 오류, 같은 멤버의 동시 중복 입력, 다건 방어, 반환 members 수와 count의 일치, 요청 밖 소속 추가 시 응답 유지, 쿼리 1회를 검사한다. 원본 그룹 응답과 멤버 중계 양쪽에 추가 필드가 없음을 별도로 검증한다. 멤버 소비자 단독 테스트는 다른 서비스 소스 트리를 직접 읽지 않도록 한다.

@@ -25,13 +25,14 @@ task.<서비스>
 └─ infrastructure/
    ├─ persistence/      JPA 엔티티·저장소 구현(port 구현)
    ├─ client/           다른 서비스 HTTP 호출 구현(port 구현)
+   ├─ web/              업무 조회와 분리된 고정 경로 기술 중계 Controller
    └─ configuration/    기술 설정(보안·OpenAPI 등)
 ```
 
 - 의존 방향: `presentation → application → domain`.
   - `infrastructure`는 `application/port`를 구현한다.
   - `application`은 `infrastructure`를 직접 참조하지 않는다.
-- OpenAPI 전달·Swagger 초기화는 업무 조회가 아닌 기술 기능으로 `infrastructure/configuration`에서 처리한다.
+- OpenAPI·Swagger 설정은 `infrastructure/configuration`, 그룹 명세 전달·실행 중계 Controller는 `infrastructure/web`, 원격 호출·필드 선별은 `infrastructure/client`가 담당한다. 업무 Controller는 `presentation/query`에 둔다. 기술 중계가 DB·업무 출력 포트·QueryHandler에 의존하지 못하도록 계층 검사에 포함한다.
 - 패키지는 필요한 시점에 만든다. 빈 패키지를 미리 두지 않는다.
 
 ## POL-CQRS-002 조회 경로
@@ -43,7 +44,7 @@ task.<서비스>
 - 다른 서비스 데이터가 필요하면 `application/port`의 계약으로 받는다.
   - 구현은 `infrastructure/client`에 둔다.
   - QueryHandler가 순서를 조정하되 DB 트랜잭션과 외부 호출의 실행 경계를 나눈다. JPA 엔티티·지연 로딩 참조를 포트 밖으로 반환하지 않는다.
-- 목록 조회는 페이지네이션 규칙([POL-API-003](api-conventions.md#pol-api-003-페이지네이션))을 따른다.
+- 목록 조회는 페이지네이션 규칙([POL-API-003](api-conventions.md#pol-api-003))을 따른다.
 
 ## POL-CQRS-004 교체 가능한 경계
 

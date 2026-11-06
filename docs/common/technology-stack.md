@@ -24,7 +24,7 @@
 | springdoc-openapi | 3.2.0 | `libs.versions.toml`(`springdoc`) | Spring Boot 4 대응 버전대 |
 | Spotless | 8.9.0 | `libs.versions.toml`(`spotless`) | |
 | ktfmt | 0.64 | `libs.versions.toml`(`ktfmt`) | Google 스타일 |
-| ArchUnit | 1.4.2 | `libs.versions.toml`(`archunit`) | 멤버 테스트 전용 계층 의존 검사. 운영 jar에는 없음 |
+| ArchUnit | 1.4.2 | `libs.versions.toml`(`archunit`) | 두 서비스 테스트 전용 계층 의존 검사. 운영 jar에는 없음 |
 | NetworkNT JSON Schema Validator | 3.0.6 | `libs.versions.toml`(`json-schema-validator`) | OpenAPI 3.1·응답 검사 전용. 운영 jar에는 없음 |
 
 Spring Boot BOM이 관리하는 버전(직접 고정하지 않음, 4.1.2 기준). 런타임 라이브러리는 이번 bootJar의 `BOOT-INF/lib/`에서도 확인했다.
@@ -89,5 +89,5 @@ MEMBER-001의 계층 검사는 ArchUnit 1.4.2를 고정하고 JDK 21·Kotlin 2.3
 - Dockerfile은 빌드/실행 단계를 분리한다. Gradle 캐시는 BuildKit의 잠금된 캐시 마운트를 공유하며 실행 이미지에는 포함하지 않는다. 서비스 런타임끼리 캐시·코드를 공유하지 않는다.
 - Dockerfile별 허용 목록과 루트 기본 허용 목록으로 빌드 입력을 제한한다([Docker 빌드 컨텍스트](https://docs.docker.com/build/concepts/context/)).
 
-- 사용자 JWT 의존성은 제거했다. 그룹은 springdoc webmvc-api, 멤버는 webmvc-ui·RestClient를 사용한다. 내부 호출 키는 JDK SecureRandom으로 생성한다.
+- 멤버는 Spring Security OAuth2 Resource Server로 JWT(RS256)를 검증한다. local에서만 개발용 토큰을 발급하며 그룹은 호출 서비스별 내부 키로 인증한다([보안 정책](security.md)). 그룹은 springdoc webmvc-api, 멤버는 webmvc-ui·RestClient를 사용한다. 내부 호출 키는 JDK SecureRandom으로 생성한다.
 - 앱 통신 네트워크는 루트 compose.override.yaml에서 추가한다. 숫자 IP·포트 기준은 서비스 통신 문서를 따른다.

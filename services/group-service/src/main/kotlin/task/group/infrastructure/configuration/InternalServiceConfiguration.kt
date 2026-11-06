@@ -4,7 +4,6 @@ import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import java.net.InetAddress
-import java.net.URI
 import java.security.MessageDigest
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.properties.ConfigurationProperties
@@ -13,12 +12,10 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.Ordered
-import org.springframework.http.HttpStatusCode
-import org.springframework.http.MediaType
-import org.springframework.http.ProblemDetail
 import org.springframework.web.filter.OncePerRequestFilter
 import task.group.presentation.error.ErrorCode
-import task.group.presentation.error.GroupProblemDetail
+import task.group.presentation.error.ProblemResponseWriter
+import task.group.presentation.error.ProblemType
 import tools.jackson.databind.json.JsonMapper
 
 /** 서비스 ID와 해당 호출자의 키를 함께 검증한다(POL-SEC-003). */
@@ -87,11 +84,14 @@ internal class NumericCidr(value: String) {
   }
 }
 
-/** 중복 헤더·다른 호출자의 키를 거부하며 인증 실패도 같은 응답으로 반환한다(POL-SEC-003). */
+/**
+ * 중복 헤더·다른 호출자의 키를 거부하며 모든 거부를 같은 403 FORBIDDEN(type internal-access-denied)으로 반환한다(POL-SEC-003).
+ */
 class InternalServiceFilter(
   clients: Map<String, InternalCallerProperties>,
-  private val mapper: JsonMapper,
+  mapper: JsonMapper,
 ) : OncePerRequestFilter() {
+  private val writer = ProblemResponseWriter(mapper)
   private val log = LoggerFactory.getLogger(javaClass)
   private val keys = clients.mapValues { digest(it.value.key) }
   private val networks = clients.mapValues { it.value.allowedCidrs.map(::NumericCidr) }
@@ -100,7 +100,7 @@ class InternalServiceFilter(
     val path = request.servletPath.ifEmpty { request.requestURI.removePrefix(request.contextPath) }
     if (path.split('/').any { it == "." || it == ".." }) return false
     return path == "/error" ||
-      (request.method in setOf("GET", "HEAD") &&
+      (request.method == "GET" &&
         (path == "/actuator/health" || path.startsWith("/actuator/health/")))
   }
 
@@ -133,21 +133,7 @@ class InternalServiceFilter(
       chain.doFilter(request, response)
       return
     }
-    val code = ErrorCode.INTERNAL_ACCESS_DENIED
-    request.setAttribute("errorCode", code.code)
-    val problem =
-      GroupProblemDetail(
-        ProblemDetail.forStatusAndDetail(HttpStatusCode.valueOf(code.status), code.description)
-          .apply {
-            title = code.codeName
-            instance = URI.create(request.requestURI)
-            setProperty("code", code.code)
-          }
-      )
-    response.status = code.status
-    response.contentType = MediaType.APPLICATION_PROBLEM_JSON_VALUE
-    response.characterEncoding = "UTF-8"
-    response.writer.write(mapper.writeValueAsString(problem))
+    writer.write(request, response, ErrorCode.FORBIDDEN, ProblemType.INTERNAL_ACCESS_DENIED)
   }
 
   companion object {
